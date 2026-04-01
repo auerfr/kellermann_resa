@@ -1,0 +1,23 @@
+from django.urls import path
+from . import views
+app_name = "administration"
+urlpatterns = [
+    path("", views.tableau_de_bord, name="tableau_de_bord"),
+    path("valider/<int:pk>/", views.valider_reservation, name="valider_reservation"),
+    path("valider-salle/<int:pk>/", views.valider_reservation_salle, name="valider_reservation_salle"),
+    path("import/", views.import_excel, name="import_excel"),
+    path("template-excel/", views.telecharger_template_excel, name="template_excel"),
+    path("regles/", views.regles_liste, name="regles_liste"),
+    path("regles/ajouter/", views.regle_form, name="regle_ajouter"),
+    path("regles/<int:pk>/modifier/", views.regle_form, name="regle_modifier"),
+    path("regles/<int:pk>/supprimer/", views.regle_supprimer, name="regle_supprimer"),
+    path("regenerer/", views.regenerer_intelligent, name="regenerer"),
+    path("salles/", views.salles_liste, name="salles_liste"),
+    path("salles/ajouter/", views.salle_form, name="salle_ajouter"),
+    path("salles/<int:pk>/modifier/", views.salle_form, name="salle_modifier"),
+    path("salles/<int:pk>/supprimer/", views.salle_supprimer, name="salle_supprimer"),
+    path("parametres/", views.parametres, name="parametres"),
+    path("saison/", views.gestion_saison, name="gestion_saison"),
+    path("backup/", views.telecharger_backup, name="backup"),
+    path("restaurer/", views.restaurer_backup, name="restaurer_backup"),
+]

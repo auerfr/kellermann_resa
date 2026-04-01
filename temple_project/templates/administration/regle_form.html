@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}{% if regle %}Modifier la règle{% else %}Ajouter une règle{% endif %}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="mb-4">
+      <h1 class="h3" style="color:#0F2137;">
+        {% if regle %}✏️ Modifier la règle{% else %}➕ Ajouter une règle{% endif %}
+      </h1>
+      <p class="text-muted small">Une règle définit la fréquence habituelle d'une loge dans un temple.</p>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Loge <span class="text-danger">*</span></label>
+              <select name="loge" class="form-select" required>
+                <option value="">Sélectionnez une loge</option>
+                {% for l in loges %}
+                <option value="{{ l.pk }}" {% if regle and regle.loge_id == l.pk %}selected{% endif %}>
+                  {{ l.abreviation }} — {{ l.nom }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Temple <span class="text-danger">*</span></label>
+              <select name="temple" class="form-select" required>
+                <option value="">Sélectionnez un temple</option>
+                {% for t in temples %}
+                <option value="{{ t.pk }}" {% if regle and regle.temple_id == t.pk %}selected{% endif %}>
+                  {{ t }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Jour de la semaine <span class="text-danger">*</span></label>
+              <select name="jour_semaine" class="form-select" required>
+                {% for val, label in jours %}
+                <option value="{{ val }}" {% if regle and regle.jour_semaine == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Semaine du mois <span class="text-danger">*</span></label>
+              <select name="numero_semaine" class="form-select" required>
+                {% for val, label in semaines %}
+                <option value="{{ val }}" {% if regle and regle.numero_semaine == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Heure de début</label>
+              <select name="heure_debut" class="form-select">
+                {% for val, label in horaires %}
+                <option value="{{ val }}" {% if regle and regle.heure_debut|time:"H:i" == val %}selected{% elif not regle and val == "19:30" %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Heure de fin</label>
+              <select name="heure_fin" class="form-select">
+                {% for val, label in horaires %}
+                <option value="{{ val }}" {% if regle and regle.heure_fin|time:"H:i" == val %}selected{% elif not regle and val == "22:30" %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Début de validité</label>
+              <input type="date" name="date_debut" class="form-control"
+                value="{% if regle and regle.date_debut %}{{ regle.date_debut|date:'Y-m-d' }}{% endif %}">
+              <div class="form-text">Laisser vide = début de saison (septembre)</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Fin de validité</label>
+              <input type="date" name="date_fin" class="form-control"
+                value="{% if regle and regle.date_fin %}{{ regle.date_fin|date:'Y-m-d' }}{% endif %}">
+              <div class="form-text">Laisser vide = fin de saison (juin)</div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <div class="form-check">
+              <input type="checkbox" name="actif" class="form-check-input" id="actif"
+                {% if not regle or regle.actif %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="actif">Règle active</label>
+              <div class="form-text">Décochez pour désactiver sans supprimer la règle</div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-3">
+            <button type="submit" class="btn px-4" style="background:#0F2137;color:white;">
+              {% if regle %}Enregistrer les modifications{% else %}Ajouter la règle{% endif %}
+            </button>
+            <a href="{% url 'administration:regles_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

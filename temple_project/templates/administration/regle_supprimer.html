@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Supprimer la règle{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-danger">
+      <div class="card-body p-4 text-center">
+        <div style="font-size:48px;">🗑️</div>
+        <h4 class="mt-3" style="color:#0F2137;">Supprimer cette règle ?</h4>
+        <p class="text-muted mt-3">
+          <strong>{{ regle.loge }}</strong><br>
+          {{ regle.get_numero_semaine_display }} {{ regle.get_jour_semaine_display }} — {{ regle.temple }}
+        </p>
+        <div class="alert alert-warning text-start mt-3">
+          <strong>⚠️ Attention</strong> — Les réservations déjà générées depuis cette règle seront conservées.
+          Seule la règle sera supprimée (les futures tenues ne seront plus générées automatiquement).
+        </div>
+        <div class="d-flex gap-3 justify-content-center mt-4">
+          <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger px-4">Confirmer la suppression</button>
+          </form>
+          <a href="{% url 'administration:regles_liste' %}" class="btn btn-outline-secondary px-4">Annuler</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

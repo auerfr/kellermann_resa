@@ -1,0 +1,175 @@
+﻿{% extends "base.html" %}
+{% block title %}Demande de reservation de temple{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="mb-4">
+      <h1 class="h3" style="color:#0F2137;">Demande de reservation de temple</h1>
+      <p class="text-muted">Remplissez ce formulaire pour demander un creneau. Vous recevrez une confirmation par email.</p>
+    </div>
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre loge</label>
+              {{ form.loge }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Temple souhaite</label>
+              {{ form.temple }}
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Date</label>
+              {{ form.date }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Heure debut</label>
+              {{ form.heure_debut }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Heure fin</label>
+              {{ form.heure_fin }}
+            </div>
+          </div>
+          <div id="conflit-message" class="mb-3" style="display: none;"></div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Type de tenue</label>
+              {{ form.sous_type }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Cabinets de reflexion</label>
+              {{ form.cabinets }}
+              <p id="cabinets-count" class="text-muted small mt-1">0 cabinet(s) sélectionné(s)</p>
+            </div>
+          </div>
+          <div id="profanes-admis-container" class="mb-3" style="display: none;">
+            <div class="form-check">
+              {{ form.profanes_admis }}
+              <label class="form-check-label fw-semibold">Profanes admis</label>
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre nom</label>
+              {{ form.nom_demandeur }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre email</label>
+              {{ form.email_demandeur }}
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-3">
+              <div class="form-check mt-4">
+                {{ form.besoin_agapes }}
+                <label class="form-check-label">Agapes prevues</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Nombre de couverts</label>
+              {{ form.nombre_repas }}
+            </div>
+            <div class="col-md-3">
+              <div class="form-check mt-4">
+                {{ form.besoin_micro }}
+                <label class="form-check-label">Micro</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check mt-4">
+                {{ form.besoin_enceintes }}
+                <label class="form-check-label">Enceintes</label>
+              </div>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Commentaire</label>
+            {{ form.commentaire }}
+          </div>
+          <div class="d-flex gap-3">
+            <button type="submit" class="btn btn-lg px-4" style="background:#0F2137;color:white;">
+              Soumettre la demande
+            </button>
+            <a href="{% url 'calendrier:principal' %}" class="btn btn-outline-secondary btn-lg">Annuler</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sousTypeSelect = document.querySelector('[name="sous_type"]');
+    const profanesContainer = document.getElementById('profanes-admis-container');
+    const cabinetsCheckboxes = document.querySelectorAll('input[name="cabinets"]');
+    const cabinetsCount = document.getElementById('cabinets-count');
+    const conflitMessage = document.getElementById('conflit-message');
+    const templeSelect = document.querySelector('[name="temple"]');
+    const dateInput = document.querySelector('[name="date"]');
+    const heureDebutInput = document.querySelector('[name="heure_debut"]');
+    const heureFinInput = document.querySelector('[name="heure_fin"]');
+
+    function toggleProfanesAdmis() {
+        const selectedValue = sousTypeSelect.value;
+        if (selectedValue === 'tbf' || selectedValue === 'tbo' || selectedValue === 'funebre') {
+            profanesContainer.style.display = 'block';
+        } else {
+            profanesContainer.style.display = 'none';
+        }
+    }
+
+    function updateCabinetsCount() {
+        const checked = document.querySelectorAll('input[name="cabinets"]:checked').length;
+        cabinetsCount.textContent = checked + ' cabinet(s) sélectionné(s)';
+    }
+
+    function verifierConflit() {
+        const temple = templeSelect.value;
+        const date = dateInput.value;
+        const heureDebut = heureDebutInput.value;
+        const heureFin = heureFinInput.value;
+
+        // Masquer le message si les champs sont vides
+        if (!temple || !date || !heureDebut || !heureFin) {
+            conflitMessage.style.display = 'none';
+            return;
+        }
+
+        // Appeler l'API
+        fetch(`/reservations/api/verifier-conflit/?temple=${encodeURIComponent(temple)}&date=${encodeURIComponent(date)}&heure_debut=${encodeURIComponent(heureDebut)}&heure_fin=${encodeURIComponent(heureFin)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.conflit) {
+                    conflitMessage.innerHTML = `<div class="alert alert-warning" role="alert">${data.message}</div>`;
+                    conflitMessage.style.display = 'block';
+                } else {
+                    conflitMessage.innerHTML = `<div class="alert alert-success" role="alert">${data.message}</div>`;
+                    conflitMessage.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la vérification:', error);
+                conflitMessage.style.display = 'none';
+            });
+    }
+
+    // Écouteurs d'événements pour la vérification de conflit
+    templeSelect.addEventListener('change', verifierConflit);
+    dateInput.addEventListener('change', verifierConflit);
+    heureDebutInput.addEventListener('change', verifierConflit);
+    heureFinInput.addEventListener('change', verifierConflit);
+
+    sousTypeSelect.addEventListener('change', toggleProfanesAdmis);
+    toggleProfanesAdmis(); // Initial check
+
+    cabinetsCheckboxes.forEach(cb => cb.addEventListener('change', updateCabinetsCount));
+    updateCabinetsCount(); // Initial count
+});
+</script>
+{% endblock %}

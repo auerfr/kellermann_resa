@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Supprimer la salle{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="mb-4">
+      <h1 class="h3" style="color:#0F2137;">🗑️ Supprimer la salle</h1>
+      <p class="text-muted small">Confirmez la suppression de la salle.</p>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <div class="alert alert-warning">
+          <h6 class="alert-heading">Attention !</h6>
+          <p class="mb-0">Êtes-vous sûr de vouloir supprimer la salle <strong>{{ salle.nom }}</strong> ? Cette action est irréversible.</p>
+        </div>
+
+        <form method="post">
+          {% csrf_token %}
+          <div class="d-flex gap-3">
+            <button type="submit" class="btn btn-danger px-4">Supprimer</button>
+            <a href="{% url 'administration:salles_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

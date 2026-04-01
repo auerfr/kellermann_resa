@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Regénérer les tenues{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="mb-4">
+      <h1 class="h3" style="color:#0F2137;">🔄 Regénérer les tenues</h1>
+      <p class="text-muted">Génère les tenues depuis les règles de récurrence sans toucher aux réservations manuelles.</p>
+    </div>
+
+    <div class="alert alert-info">
+      <strong>ℹ️ Comment ça fonctionne :</strong>
+      <ul class="mb-0 mt-2">
+        <li>Seules les tenues <strong>générées automatiquement</strong> peuvent être remplacées</li>
+        <li>Les réservations <strong>saisies manuellement</strong> ne sont jamais touchées</li>
+        <li>Les <strong>conflits</strong> (même temple, même créneau) sont détectés et signalés</li>
+        <li>Juillet et août sont toujours exclus</li>
+      </ul>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Année <span class="text-danger">*</span></label>
+              <select name="annee" class="form-select" required>
+                {% for a in annees %}
+                <option value="{{ a }}">{{ a }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Loge (optionnel)</label>
+              <select name="loge" class="form-select">
+                <option value="">Toutes les loges</option>
+                {% for l in loges %}
+                <option value="{{ l.pk }}">{{ l.abreviation }} — {{ l.nom }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Temple (optionnel)</label>
+              <select name="temple" class="form-select">
+                <option value="">Tous les temples</option>
+                {% for t in temples %}
+                <option value="{{ t.pk }}">{{ t }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Mode de génération</label>
+            <div class="form-check">
+              <input type="radio" name="mode" value="ajouter" id="mode_ajouter" class="form-check-input" checked>
+              <label class="form-check-label" for="mode_ajouter">
+                <strong>Ajouter uniquement</strong> — crée les tenues manquantes sans rien supprimer
+              </label>
+            </div>
+            <div class="form-check mt-2">
+              <input type="radio" name="mode" value="remplacer" id="mode_remplacer" class="form-check-input">
+              <label class="form-check-label" for="mode_remplacer">
+                <strong>Remplacer</strong> — supprime et recrée les tenues automatiques existantes
+              </label>
+            </div>
+          </div>
+
+          <div class="d-flex gap-3">
+            <button type="submit" class="btn btn-warning px-4 fw-semibold">
+              🔄 Lancer la regénération
+            </button>
+            <a href="{% url 'administration:regles_liste' %}" class="btn btn-outline-secondary">
+              ← Retour aux règles
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

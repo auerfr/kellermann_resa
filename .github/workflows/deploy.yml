@@ -1,0 +1,53 @@
+# GitHub Actions – Déploiement automatique Temple Réservations
+# À configurer quand l'hébergement sera en place
+
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  # ── Tests avant déploiement ──────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Django checks
+        env:
+          DJANGO_SECRET_KEY: test-secret-key-for-ci
+          DJANGO_DEBUG: "True"
+        run: |
+          python manage.py check
+          python manage.py migrate --run-syncdb
+
+  # ── Déploiement (à activer quand serveur prêt) ───────────────────────────
+  # deploy:
+  #   needs: test
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - name: Deploy via SSH
+  #       uses: appleboy/ssh-action@v1.0.0
+  #       with:
+  #         host: ${{ secrets.SERVER_HOST }}
+  #         username: ${{ secrets.SERVER_USER }}
+  #         key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #         script: |
+  #           cd /var/www/temple-reservations
+  #           git pull origin main
+  #           source venv/bin/activate
+  #           pip install -r requirements.txt
+  #           python manage.py migrate
+  #           python manage.py collectstatic --noinput
+  #           sudo systemctl restart gunicorn

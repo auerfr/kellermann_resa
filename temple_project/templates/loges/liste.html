@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Liste des loges{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">🏛 Loges & Hauts grades</h1>
+    <p class="text-muted small mb-0">{{ nb_total }} entités · saison {{ annee }}</p>
+  </div>
+</div>
+
+{# Filtres #}
+<form method="get" class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-center">
+      <div class="col-md-4">
+        <input type="text" name="q" value="{{ filtre_search }}" placeholder="Rechercher une loge..."
+          class="form-control form-control-sm">
+      </div>
+      <div class="col-auto">
+        <select name="obedience" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Toutes les obédiences</option>
+          {% for ob in obediences %}
+          <option value="{{ ob.nom }}" {% if filtre_obd == ob.nom %}selected{% endif %}>{{ ob.nom }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Tous types</option>
+          <option value="loge" {% if filtre_type == 'loge' %}selected{% endif %}>Loges bleues</option>
+          <option value="haut_grade" {% if filtre_type == 'haut_grade' %}selected{% endif %}>Hauts grades</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <select name="rite" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Tous rites</option>
+          <option value="reaa" {% if filtre_rite == 'reaa' %}selected{% endif %}>REAA</option>
+          <option value="rer" {% if filtre_rite == 'rer' %}selected{% endif %}>RER</option>
+          <option value="rf" {% if filtre_rite == 'rf' %}selected{% endif %}>RF</option>
+          <option value="rem" {% if filtre_rite == 'rem' %}selected{% endif %}>REM</option>
+          <option value="dh" {% if filtre_rite == 'dh' %}selected{% endif %}>DH</option>
+          <option value="mem" {% if filtre_rite == 'mem' %}selected{% endif %}>MEM</option>
+          <option value="autre" {% if filtre_rite == 'autre' %}selected{% endif %}>Autre</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <select name="tri" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="nom" {% if tri == 'nom' %}selected{% endif %}>Nom</option>
+          <option value="abreviation" {% if tri == 'abreviation' %}selected{% endif %}>Abréviation</option>
+          <option value="obedience__nom" {% if tri == 'obedience__nom' %}selected{% endif %}>Obédience</option>
+        </select>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-dark">Filtrer</button>
+        {% if filtre_obd or filtre_type or filtre_search or filtre_rite or tri != 'nom' %}
+        <a href="{% url 'loges:liste' %}" class="btn btn-sm btn-outline-secondary ms-1">✕ Effacer</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead style="background:#0F2137;">
+        <tr>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">ABRÉV.</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">NOM COMPLET</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">OBÉDIENCE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">RITE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TYPE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TENUES {{ annee }}</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for loge in loges %}
+        <tr>
+          <td>
+            <span class="badge" style="background:#0F2137;font-size:12px;">{{ loge.abreviation }}</span>
+          </td>
+          <td>
+            <a href="{% url 'loges:detail' loge.pk %}" class="fw-semibold text-decoration-none" style="color:#0F2137;">
+              {{ loge.nom }}
+            </a>
+          </td>
+          <td class="text-muted small">{{ loge.obedience }}</td>
+              <td class="text-muted small">{{ loge.get_rite_display|default:"—" }}</td>
+          <td>
+            {% if loge.type_loge == 'haut_grade' %}
+            <span class="badge bg-success">Haut grade</span>
+            {% else %}
+            <span class="badge bg-primary">Loge</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div style="width:60px;background:#F1F5F9;border-radius:4px;height:6px;">
+                <div style="width:{% widthratio loge.nb_tenues 25 100 %}%;background:#0F2137;height:6px;border-radius:4px;"></div>
+              </div>
+              <span class="small text-muted">{{ loge.nb_tenues }}</span>
+            </div>
+          </td>
+          <td>
+            <a href="{% url 'loges:detail' loge.pk %}" class="btn btn-sm btn-outline-primary">Fiche</a>
+            {% if user.is_staff %}
+            <a href="{% url 'loges:modifier' loge.pk %}" class="btn btn-sm btn-outline-secondary">✏️</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Aucune loge trouvée.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}{{ loge.nom }} — Fiche loge{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    nav, .btn, .no-print, footer { display: none !important; }
+    .card { box-shadow: none !important; border: 1px solid #ccc !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# En-tête #}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <div class="d-flex align-items-center gap-3 mb-2">
+      <span class="badge fs-6 px-3 py-2" style="background:#0F2137;">{{ loge.abreviation }}</span>
+      <h1 class="h3 mb-0" style="color:#0F2137;">{{ loge.nom }}</h1>
+    </div>
+    <div class="d-flex gap-3 text-muted small">
+      <span>{{ loge.obedience }}</span>
+      <span>·</span>
+      <span>{% if loge.type_loge == 'haut_grade' %}Haut grade{% else %}Loge bleue{% endif %}</span>
+      {% if loge.email %}<span>·</span><a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2 no-print">
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨️ Imprimer</button>
+    {% if user.is_staff %}
+    <a href="{% url 'loges:modifier' loge.pk %}" class="btn btn-outline-primary btn-sm">✏️ Modifier</a>
+    <a href="{% url 'loges:supprimer' loge.pk %}" class="btn btn-outline-danger btn-sm">🗑 Désactiver</a>
+    {% endif %}
+    <a href="{% url 'loges:liste' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  {# Colonne gauche — Stats #}
+  <div class="col-md-4">
+
+    {# Infos générales #}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+        Informations
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-borderless table-sm mb-0">
+          <tr><td class="text-muted small ps-3">Rite</td><td class="fw-semibold">{{ loge.get_rite_display|default:"—" }}</td></tr>
+          <tr><td class="text-muted small ps-3">Effectif total</td><td class="fw-semibold">{{ loge.effectif_total|default:"—" }}</td></tr>
+          <tr><td class="text-muted small ps-3">Moy. agapes</td><td class="fw-semibold">{{ loge.effectif_moyen_agapes|default:"—" }}</td></tr>
+          <tr><td class="text-muted small ps-3">Email</td><td class="small">{{ loge.email|default:"—" }}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    {# Stats par temple #}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+        Tenues par temple — {{ annee }}
+      </div>
+      <div class="card-body">
+        {% if stats_temples %}
+          {% for temple, nb in stats_temples.items %}
+          <div class="mb-2">
+            <div class="d-flex justify-content-between small mb-1">
+              <span>{{ temple }}</span>
+              <span class="fw-semibold">{{ nb }}</span>
+            </div>
+            <div style="background:#F1F5F9;border-radius:4px;height:6px;">
+              <div style="width:{% widthratio nb nb_tenues 100 %}%;background:#0F2137;height:6px;border-radius:4px;"></div>
+            </div>
+          </div>
+          {% endfor %}
+          <div class="text-muted small mt-3 border-top pt-2">
+            Total : <strong>{{ nb_tenues }}</strong> tenues
+          </div>
+        {% else %}
+          <p class="text-muted small mb-0">Aucune tenue en {{ annee }}/{{ annee|add:1 }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Prochaine tenue #}
+    {% if prochaine %}
+    <div class="card border-0 mb-4" style="background:#F0FDF4;border-left:4px solid #16A34A !important;">
+      <div class="card-body py-3">
+        <div class="small text-muted text-uppercase" style="letter-spacing:.06em;">Prochaine tenue</div>
+        <div class="fw-semibold mt-1" style="color:#0F2137;">{{ prochaine.date|date:"l d F Y" }}</div>
+        <div class="small text-muted">{{ prochaine.temple }} · {{ prochaine.heure_debut|time:"H:i" }} – {{ prochaine.heure_fin|time:"H:i" }}</div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {# Colonne droite — Planning #}
+  <div class="col-md-8">
+
+    {# Sélecteur d'année #}
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+      <h5 class="mb-0" style="color:#0F2137;">Saison {{ annee }}/{{ annee|add:1 }}</h5>
+      <div class="btn-group btn-group-sm">
+        {% for a in annees %}
+        <a href="?annee={{ a }}" class="btn {% if a == annee %}btn-dark{% else %}btn-outline-secondary{% endif %}">{{ a }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead style="background:#0F2137;">
+            <tr>
+              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">DATE</th>
+              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">JOUR</th>
+              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TEMPLE</th>
+              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">HORAIRES</th>
+              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TYPE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in tenues %}
+            <tr {% if t.date < today %}style="opacity:.5"{% endif %}>
+              <td class="fw-semibold" style="color:#0F2137;">{{ t.date|date:"d/m/Y" }}</td>
+              <td class="text-muted small">{{ t.date|date:"l" }}</td>
+              <td>
+                <span class="badge" style="
+                  {% if 'Lafayette' in t.temple.get_nom_display %}background:#1a3a5c;
+                  {% elif 'galit' in t.temple.get_nom_display %}background:#0d6e6e;
+                  {% elif 'raternit' in t.temple.get_nom_display %}background:#92400E;
+                  {% else %}background:#5B21B6;{% endif %}
+                ">{{ t.temple }}</span>
+              </td>
+              <td class="text-muted small">{{ t.heure_debut|time:"H:i" }} – {{ t.heure_fin|time:"H:i" }}</td>
+              <td>
+                {% if t.type_reservation == 'reguliere' %}
+                <span class="badge bg-light text-dark border">Régulière</span>
+                {% else %}
+                <span class="badge bg-warning text-dark">Exceptionnelle</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-muted py-4">Aucune tenue en {{ annee }}/{{ annee|add:1 }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# Historique demandes exceptionnelles #}
+    {% if demandes %}
+    <h6 class="mt-4 mb-3" style="color:#0F2137;">Historique des demandes exceptionnelles</h6>
+    <div class="card shadow-sm border-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>Date</th><th>Temple</th><th>Demandeur</th><th>Statut</th></tr>
+          </thead>
+          <tbody>
+            {% for d in demandes %}
+            <tr>
+              <td class="small">{{ d.date|date:"d/m/Y" }}</td>
+              <td class="small">{{ d.temple }}</td>
+              <td class="small text-muted">
+                {% if user.is_staff %}{{ d.nom_demandeur }}{% else %}—{% endif %}
+              </td>
+              <td>
+                {% if d.statut == 'validee' %}<span class="badge bg-success">Validée</span>
+                {% elif d.statut == 'attente' %}<span class="badge bg-warning text-dark">Attente</span>
+                {% else %}<span class="badge bg-danger">Refusée</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

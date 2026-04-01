@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Modifier {{ loge.nom }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="mb-4">
+      <h1 class="h3" style="color:#0F2137;">Modifier la loge</h1>
+      <p class="text-muted small">{{ loge.abreviation }} -- {{ loge.nom }}</p>
+    </div>
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Abreviation</label>
+              <input type="text" name="abreviation" value="{{ loge.abreviation }}" class="form-control" required>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">Nom complet</label>
+              <input type="text" name="nom" value="{{ loge.nom }}" class="form-control" required>
+            </div>
+          </div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Obedience</label>
+              <select name="obedience" class="form-select">
+                {% for ob in obediences %}
+                <option value="{{ ob.nom }}" {% if loge.obedience == ob %}selected{% endif %}>{{ ob.nom }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Type</label>
+              <select name="type_loge" class="form-select">
+                <option value="loge" {% if loge.type_loge == 'loge' %}selected{% endif %}>Loge bleue</option>
+                <option value="haut_grade" {% if loge.type_loge == 'haut_grade' %}selected{% endif %}>Haut grade</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Rite</label>
+            <select name="rite" class="form-select">
+              <option value="">-- Non renseigne --</option>
+              <option value="reaa" {% if loge.rite == 'reaa' %}selected{% endif %}>REAA -- Rite Ecossais Ancien et Accepte</option>
+              <option value="rer" {% if loge.rite == 'rer' %}selected{% endif %}>RER -- Rite Ecossais Rectifie</option>
+              <option value="rf" {% if loge.rite == 'rf' %}selected{% endif %}>RF -- Rite Francais</option>
+              <option value="rem" {% if loge.rite == 'rem' %}selected{% endif %}>REM -- Rite Ecossais Moderne</option>
+              <option value="dh" {% if loge.rite == 'dh' %}selected{% endif %}>DH -- Droit Humain</option>
+              <option value="mem" {% if loge.rite == 'mem' %}selected{% endif %}>MEM -- Memphis-Misraim</option>
+              <option value="autre" {% if loge.rite == 'autre' %}selected{% endif %}>Autre</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Email de contact</label>
+            <input type="email" name="email" value="{{ loge.email }}" class="form-control" placeholder="contact@loge.fr">
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Effectif total</label>
+              <input type="number" name="effectif_total" value="{{ loge.effectif_total }}" class="form-control" min="0">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Moy. couverts agapes</label>
+              <input type="number" name="effectif_moyen_agapes" value="{{ loge.effectif_moyen_agapes }}" class="form-control" min="0">
+            </div>
+          </div>
+          <div class="d-flex gap-3">
+            <button type="submit" class="btn px-4" style="background:#0F2137;color:white;">Enregistrer</button>
+            <a href="{% url 'loges:detail' loge.pk %}" class="btn btn-outline-secondary">Annuler</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

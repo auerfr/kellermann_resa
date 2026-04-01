@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Gestion saison{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📅 Gestion saison</h1>
+    <p class="text-muted small mb-0">Administration des saisons maçonniques</p>
+  </div>
+  <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+</div>
+
+<!-- Statistiques -->
+<div class="row g-3 mb-4">
+  {% for saison in saisons %}
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 shadow-sm h-100">
+      <div class="card-body py-3">
+        <div class="fs-4 fw-bold text-primary">{{ saison.auto }}</div>
+        <div class="text-muted small">Auto {{ saison.annee }}-{{ saison.annee|add:1 }}</div>
+        <div class="fs-6 fw-bold text-secondary">{{ saison.manuel }}</div>
+        <div class="text-muted small">Manuel</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="row g-4">
+  <!-- Supprimer une saison -->
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-warning text-white">
+        <h5 class="mb-0">🗑 Supprimer une saison</h5>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Supprime uniquement les réservations automatiques (générées par les règles) de la saison maçonnique sélectionnée.<br>
+          <strong>Les réservations manuelles sont conservées.</strong>
+        </p>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="supprimer_saison">
+          <div class="mb-3">
+            <label class="form-label">Année de début de saison</label>
+            <select name="annee" class="form-select" required>
+              {% for annee in annees %}
+              <option value="{{ annee }}" {% if annee == current_year %}selected{% endif %}>{{ annee }}-{{ annee|add:1 }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-warning" onclick="return confirm('Confirmer la suppression des réservations automatiques de cette saison ?')">
+            Supprimer saison
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Générer une nouvelle saison -->
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-success text-white">
+        <h5 class="mb-0">🔄 Générer une nouvelle saison</h5>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Régénère intelligemment toutes les tenues selon les règles actives.<br>
+          Remplace les anciennes réservations automatiques et évite les conflits avec les manuelles.
+        </p>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="generer_saison">
+          <div class="mb-3">
+            <label class="form-label">Année cible</label>
+            <select name="annee_cible" class="form-select" required>
+              {% for annee in annees %}
+              <option value="{{ annee }}" {% if annee == current_year|add:1 %}selected{% endif %}>{{ annee }}-{{ annee|add:1 }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-success" onclick="return confirm('Confirmer la génération de la saison ? Les anciennes réservations automatiques seront remplacées.')">
+            Générer saison
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Reset complet -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card border-danger">
+      <div class="card-header bg-danger text-white">
+        <h5 class="mb-0">⚠️ Reset complet</h5>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-danger">
+          <strong>Attention :</strong> Cette action supprime <strong>TOUTES</strong> les réservations automatiques de <strong>TOUTES</strong> les saisons.<br>
+          Les réservations manuelles sont conservées. Cette action est irréversible.
+        </div>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="reset_complet">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-8">
+              <label class="form-label">Tapez "CONFIRMER" pour valider</label>
+              <input type="text" name="confirmation" class="form-control" placeholder="CONFIRMER" required>
+            </div>
+            <div class="col-md-4">
+              <button type="submit" class="btn btn-danger w-100">
+                Reset complet
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sauvegarde -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-info text-white">
+        <h5 class="mb-0">💾 Sauvegarde</h5>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Téléchargez une copie de la base de données. Conservez ce fichier en lieu sûr.
+        </p>
+        <div class="row g-3 align-items-center">
+          <div class="col-md-6">
+            <p class="mb-1"><strong>Dernière modification :</strong></p>
+            <p class="text-muted small mb-0">{{ db_last_modified }}</p>
+          </div>
+          <div class="col-md-3">
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="backup">
+              <button type="submit" class="btn btn-info w-100">
+                📥 Télécharger
+              </button>
+            </form>
+          </div>
+          <div class="col-md-3">
+            <a href="{% url 'administration:restaurer_backup' %}" class="btn btn-warning w-100">
+              📤 Restaurer
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
