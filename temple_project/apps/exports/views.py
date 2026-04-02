@@ -96,61 +96,73 @@ def export_excel(request):
 @login_required
 def reporting(request):
     """Page de reporting et statistiques"""
-    year = int(request.GET.get("annee", date.today().year))
-    reservations = Reservation.objects.filter(date__year=year)
+    from django.db.models import Count, Sum
+    from datetime import datetime
+
+    # Saison : sept. annee → juin annee+1
+    current_year = date.today().year
+    # Déduire la saison courante : si on est avant septembre, la saison a démarré l'année précédente
+    default_saison = current_year if date.today().month >= 9 else current_year - 1
+    annee_saison = int(request.GET.get("annee", default_saison))
+
+    saison_debut = date(annee_saison, 9, 1)
+    saison_fin   = date(annee_saison + 1, 6, 30)
+
+    reservations = Reservation.objects.filter(date__gte=saison_debut, date__lte=saison_fin)
+
+    total      = reservations.count()
+    validees   = reservations.filter(statut="validee").count()
+    attente    = reservations.filter(statut="attente").count()
+    refusees   = reservations.filter(statut="refusee").count()
+    total_repas = reservations.filter(besoin_agapes=True, statut="validee").aggregate(
+        s=Sum("nombre_repas")
+    )["s"] or 0
 
     stats = {
-        "total": reservations.count(),
-        "validees": reservations.filter(statut="validee").count(),
-        "attente": reservations.filter(statut="attente").count(),
-        "refusees": reservations.filter(statut="refusee").count(),
-        "total_repas": sum(r.nombre_repas for r in reservations.filter(besoin_agapes=True, statut="validee")),
-        "taux_validation": round(reservations.filter(statut="validee").count() / reservations.count() * 100, 1) if reservations.count() > 0 else 0,
+        "total": total,
+        "validees": validees,
+        "attente": attente,
+        "refusees": refusees,
+        "total_repas": total_repas,
+        "taux_validation": round(validees / total * 100, 1) if total > 0 else 0,
     }
 
-    # Réservations par obédience
-    from django.db.models import Count
-    reservations_par_obedience = Reservation.objects.filter(date__year=year).values(
+    # Réservations par obédience (toute la saison, tous statuts)
+    reservations_par_obedience = reservations.values(
         'loge__obedience__nom'
     ).annotate(
         nb_reservations=Count('id')
     ).order_by('-nb_reservations')[:10]
 
-    # Réservations par mois (12 derniers mois)
-    from datetime import datetime, timedelta
-    today = datetime.now()
+    # Graphique mensuel : mois de la saison (sept → juin), tous statuts
     reservations_par_mois = []
-    for i in range(11, -1, -1):
-        date_check = today - timedelta(days=30*i)
-        mois = date_check.strftime('%Y-%m')
-        count = Reservation.objects.filter(
-            date__year=date_check.year,
-            date__month=date_check.month,
-            statut='validee'
-        ).count()
+    mois_saison = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
+    for m in mois_saison:
+        annee_mois = annee_saison if m >= 9 else annee_saison + 1
+        count = reservations.filter(date__year=annee_mois, date__month=m).count()
         reservations_par_mois.append({
-            'mois': mois,
-            'count': count
+            'mois': f'{annee_mois}-{m:02d}',
+            'count': count,
         })
 
-    # Réservations par temple
-    reservations_par_temple = Reservation.objects.filter(date__year=year).values(
+    # Réservations par temple (tous statuts)
+    reservations_par_temple = reservations.values(
         'temple__nom'
     ).annotate(
         nb_reservations=Count('id')
     ).order_by('-nb_reservations')
 
-    # Convertir en JSON sérialisable
     reservations_par_mois_json = json.dumps(reservations_par_mois)
     reservations_par_temple_json = json.dumps([
-        {'nom': t['temple__nom'], 'nb_reservations': t['nb_reservations']}
+        {'nom': t['temple__nom'] or 'Non renseigné', 'nb_reservations': t['nb_reservations']}
         for t in reservations_par_temple
     ])
 
     context = {
         "stats": stats,
-        "annee": year,
-        "annee_courante": date.today().year,
+        "annee": annee_saison,
+        "annee_courante": default_saison,
+        "saison_label": f"{annee_saison}–{annee_saison + 1}",
         "reservations_par_obedience": reservations_par_obedience,
         "reservations_par_mois": reservations_par_mois_json,
         "reservations_par_temple": reservations_par_temple_json,
