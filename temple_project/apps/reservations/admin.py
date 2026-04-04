@@ -97,7 +97,7 @@ class MoisActifsField(forms.Field):
 
 
 class RegleRecurrenceForm(forms.ModelForm):
-    tranche_horaire = TrancheHoraireField(label="Raccourci horaire")
+    tranche_horaire = TrancheHoraireField(label="Raccourci horaire", required=False)
     mois_actifs     = MoisActifsField(required=False, label="Mois actifs")
 
     class Meta:
