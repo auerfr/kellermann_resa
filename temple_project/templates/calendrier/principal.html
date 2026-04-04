@@ -50,6 +50,7 @@
     <button class="btn btn-outline-secondary btn-sm" onclick="toggleDispo()">🔍 Dispo</button>
     <a href="{% url 'reservations:demande' %}" class="btn btn-sm" style="background:#0F2137;color:white;">+ Temple</a>
     <a href="{% url 'reservations:demande_salle' %}" class="btn btn-sm btn-outline-primary">+ Salle</a>
+    <a href="{% url 'reservations:demande_recurrence' %}" class="btn btn-sm btn-outline-secondary" title="Demander une réservation récurrente">+ Récurrence</a>
   </div>
 </div>
 
@@ -83,6 +84,14 @@
       <span class="small"><span class="legend-dot" style="background:#9333EA;"></span>Salle</span>
       <span class="small"><span class="legend-dot" style="background:#F59E0B;"></span>En attente</span>
       <span class="small"><span class="legend-dot" style="background:#FB7185;"></span>Refusée</span>
+      <span class="small"><span class="legend-dot" style="background:#CA8A04;border-radius:2px;"></span>Férié</span>
+      <span class="small"><span class="legend-dot" style="background:#16A34A;border-radius:2px;"></span>Vacances sco.</span>
+    </div>
+    <div class="mt-1">
+      <div class="form-check form-check-inline form-switch mb-0">
+        <input class="form-check-input" type="checkbox" id="toggle-conges" checked onchange="refreshCalendar()">
+        <label class="form-check-label small" for="toggle-conges">Vacances &amp; jours fériés</label>
+      </div>
     </div>
   </div>
 </div>
@@ -92,7 +101,7 @@
     <h6 class="mb-0" style="color:#0F2137;">🔍 Vérifier les disponibilités</h6>
     <button class="btn-close" onclick="toggleDispo()"></button>
   </div>
-  <div class="row g-2 align-items-end mb-3">
+  <div class="row g-2 align-items-end mb-2">
     <div class="col-6 col-md-auto">
       <label class="form-label small mb-1">Du</label>
       <input type="date" id="dispo-date-debut" class="form-control form-control-sm">
@@ -113,7 +122,13 @@
       <button class="btn btn-sm btn-dark w-100" onclick="checkDispo()">Vérifier</button>
     </div>
   </div>
-  <div id="dispo-result" class="table-responsive"></div>
+  <div class="mb-3 d-flex gap-1 flex-wrap" id="dispo-type-btns">
+    <button class="btn btn-sm active" style="background:#0F2137;color:white;border:none;" onclick="setDispoType('all',this)">Tout</button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="setDispoType('temple',this)">🏛 Temples</button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="setDispoType('salle',this)">🪑 Salles</button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="setDispoType('cabinet',this)">🚪 Cabinets</button>
+  </div>
+  <div id="dispo-result"></div>
 </div>
 
 <div id="calendrier"></div>
@@ -149,7 +164,8 @@ function getFilters() {
 
 function buildUrl(start, end) {
   const f = getFilters();
-  let url = "{% url 'calendrier:api_evenements' %}?start=" + start + "&end=" + end;
+  const showConges = document.getElementById("toggle-conges") ? (document.getElementById("toggle-conges").checked ? "1" : "0") : "1";
+  let url = "{% url 'calendrier:api_evenements' %}?start=" + start + "&end=" + end + "&conges=" + showConges;
   if (f.temple)    url += "&temple="    + f.temple;
   if (f.obedience) url += "&obedience=" + f.obedience;
   if (f.loge)      url += "&loge="      + f.loge;
@@ -235,6 +251,93 @@ function closePanel() {
 
 function toggleDispo() { document.getElementById("dispo-panel").classList.toggle("open"); }
 
+var dispoTypeFilter = 'all';
+var dispoLastResults = null;
+
+function setDispoType(type, btn) {
+  dispoTypeFilter = type;
+  document.querySelectorAll('#dispo-type-btns button').forEach(function(b) {
+    b.className = 'btn btn-sm btn-outline-secondary';
+    b.style.background = ''; b.style.color = ''; b.style.border = '';
+  });
+  btn.className = 'btn btn-sm active';
+  btn.style.cssText = 'background:#0F2137;color:white;border:none;';
+  if (dispoLastResults) renderDispoResults(dispoLastResults);
+}
+
+function renderDispoResults(results) {
+  var debut = document.getElementById("dispo-debut").value;
+  var fin   = document.getElementById("dispo-fin").value;
+  var result = document.getElementById("dispo-result");
+  var jours = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
+  var cell = (l) => l ? '<td class="dispo-libre text-center">✅</td>' : '<td class="dispo-occupe text-center">🔴</td>';
+  var cellTxt = (l, occ) => l ? '<td class="dispo-libre">Libre</td>'
+    : '<td class="dispo-occupe small">' + (occ ? occ.loge || occ.organisation || '—' : '—') + '</td>';
+  var html = '';
+
+  // ── Temples ──────────────────────────────────────────────────
+  if (dispoTypeFilter === 'all' || dispoTypeFilter === 'temple') {
+    var templeNames = [];
+    if (results.length) results[0].temples.forEach(function(t) { templeNames.push(t.nom); });
+    html += '<div class="mb-3"><div class="fw-semibold small mb-1" style="color:#0F2137;">🏛 Temples</div>'
+      + '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">'
+      + '<thead style="background:#0F2137;color:#C8A84B;"><tr><th>Date</th>'
+      + templeNames.map(n => '<th class="text-center">' + n.replace('Temple ','') + '</th>').join('')
+      + '</tr></thead><tbody>';
+    results.forEach(function(data) {
+      var tm = {}; data.temples.forEach(function(t) { tm[t.nom] = t; });
+      var d = new Date(data.date + "T12:00:00");
+      var lbl = jours[d.getDay()] + ' ' + data.date.split('-').reverse().join('/');
+      html += '<tr><td class="small fw-semibold">' + lbl + '</td>'
+        + templeNames.map(n => cell(tm[n] ? tm[n].libre : true)).join('') + '</tr>';
+    });
+    html += '</tbody></table></div></div>';
+  }
+
+  // ── Salles de réunion ─────────────────────────────────────────
+  if (dispoTypeFilter === 'all' || dispoTypeFilter === 'salle') {
+    var salleItems = results.length ? results[0].salles.filter(s => s.type_salle !== 'cabinet_reflexion') : [];
+    if (salleItems.length) {
+      html += '<div class="mb-3"><div class="fw-semibold small mb-1" style="color:#0F2137;">🪑 Salles de réunion</div>'
+        + '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">'
+        + '<thead style="background:#0F2137;color:#C8A84B;"><tr><th>Date</th>'
+        + salleItems.map(s => '<th>' + s.nom.split('(')[0].trim() + ' <span class="fw-normal opacity-75">(' + s.capacite + 'p)</span></th>').join('')
+        + '</tr></thead><tbody>';
+      results.forEach(function(data) {
+        var sm = {}; data.salles.filter(s => s.type_salle !== 'cabinet_reflexion').forEach(function(s) { sm[s.id] = s; });
+        var d = new Date(data.date + "T12:00:00");
+        var lbl = jours[d.getDay()] + ' ' + data.date.split('-').reverse().join('/');
+        html += '<tr><td class="small fw-semibold">' + lbl + '</td>'
+          + salleItems.map(s => cell(sm[s.id] ? sm[s.id].libre : true)).join('') + '</tr>';
+      });
+      html += '</tbody></table></div></div>';
+    }
+  }
+
+  // ── Cabinets ──────────────────────────────────────────────────
+  if (dispoTypeFilter === 'all' || dispoTypeFilter === 'cabinet') {
+    var cabItems = results.length ? results[0].salles.filter(s => s.type_salle === 'cabinet_reflexion') : [];
+    if (cabItems.length) {
+      html += '<div class="mb-3"><div class="fw-semibold small mb-1" style="color:#0F2137;">🚪 Cabinets de réflexion</div>'
+        + '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">'
+        + '<thead style="background:#0F2137;color:#C8A84B;"><tr><th>Date</th>'
+        + cabItems.map(s => '<th>' + s.nom.split('(')[0].trim() + '</th>').join('')
+        + '</tr></thead><tbody>';
+      results.forEach(function(data) {
+        var cm = {}; data.salles.filter(s => s.type_salle === 'cabinet_reflexion').forEach(function(s) { cm[s.id] = s; });
+        var d = new Date(data.date + "T12:00:00");
+        var lbl = jours[d.getDay()] + ' ' + data.date.split('-').reverse().join('/');
+        html += '<tr><td class="small fw-semibold">' + lbl + '</td>'
+          + cabItems.map(s => cell(cm[s.id] ? cm[s.id].libre : true)).join('') + '</tr>';
+      });
+      html += '</tbody></table></div></div>';
+    }
+  }
+
+  html += '<p class="text-muted small mt-1">' + debut + ' – ' + fin + ' · ' + results.length + ' jour(s)</p>';
+  result.innerHTML = html;
+}
+
 function checkDispo() {
   var dateDebut = document.getElementById("dispo-date-debut").value;
   var dateFin   = document.getElementById("dispo-date-fin").value || dateDebut;
@@ -250,22 +353,8 @@ function checkDispo() {
   Promise.all(dates.map(function(d) {
     return fetch(apiBase + "?date=" + d + "&heure_debut=" + debut + "&heure_fin=" + fin).then(r => r.json());
   })).then(function(results) {
-    var html = '<table class="table table-sm table-bordered"><thead style="background:#0F2137;color:#C8A84B;"><tr><th>Date</th><th>Laf.</th><th>Éga.</th><th>Fra.</th><th>Lib.</th><th>Salles</th></tr></thead><tbody>';
-    results.forEach(function(data) {
-      var tm = {};
-      data.temples.forEach(function(t) { tm[t.nom] = t.libre; });
-      var salles = data.salles.filter(s => s.libre).map(s => s.nom).join(", ") || "—";
-      var d = new Date(data.date + "T12:00:00");
-      var jours = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
-      var lbl = jours[d.getDay()] + " " + data.date.split("-").reverse().join("/");
-      var cell = (l) => l ? '<td class="dispo-libre">✅</td>' : '<td class="dispo-occupe">🔴</td>';
-      html += '<tr><td class="small fw-semibold">' + lbl + '</td>'
-        + cell(tm["Temple Lafayette"]) + cell(tm["Temple Égalité"] || tm["Temple Egalite"])
-        + cell(tm["Temple Fraternité"] || tm["Temple Fraternite"]) + cell(tm["Temple Liberté"] || tm["Temple Liberte"])
-        + '<td class="small text-muted">' + salles + '</td></tr>';
-    });
-    html += '</tbody></table><p class="text-muted small mt-1">' + debut + ' – ' + fin + ' · ' + dates.length + ' jour(s)</p>';
-    result.innerHTML = html;
+    dispoLastResults = results;
+    renderDispoResults(results);
   }).catch(err => { result.innerHTML = '<p class="text-danger small">Erreur : ' + err.message + '</p>'; });
 }
 </script>

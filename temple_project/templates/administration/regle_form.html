@@ -2,7 +2,7 @@
 {% block title %}{% if regle %}Modifier la règle{% else %}Ajouter une règle{% endif %}{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-7">
+  <div class="col-lg-8">
     <div class="mb-4">
       <h1 class="h3" style="color:#0F2137;">
         {% if regle %}✏️ Modifier la règle{% else %}➕ Ajouter une règle{% endif %}
@@ -59,22 +59,54 @@
             </div>
           </div>
 
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Heure de début</label>
-              <select name="heure_debut" class="form-select">
-                {% for val, label in horaires %}
-                <option value="{{ val }}" {% if regle and regle.heure_debut|time:"H:i" == val %}selected{% elif not regle and val == "19:30" %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
+          {# ── Tranches horaires prédéfinies ── #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Tranche horaire</label>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              {% for code, label, debut, fin in tranches %}
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                onclick="setHoraire('{{ debut }}','{{ fin }}')">
+                {{ label }}<span class="text-muted ms-1" style="font-size:11px;">({{ debut }}–{{ fin }})</span>
+              </button>
+              {% endfor %}
             </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Heure de fin</label>
-              <select name="heure_fin" class="form-select">
-                {% for val, label in horaires %}
-                <option value="{{ val }}" {% if regle and regle.heure_fin|time:"H:i" == val %}selected{% elif not regle and val == "22:30" %}selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-              </select>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label small">Heure de début</label>
+                <select name="heure_debut" id="id_heure_debut" class="form-select">
+                  {% for val, label in horaires %}
+                  <option value="{{ val }}" {% if regle and regle.heure_debut|time:"H:i" == val %}selected{% elif not regle and val == "19:00" %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small">Heure de fin</label>
+                <select name="heure_fin" id="id_heure_fin" class="form-select">
+                  {% for val, label in horaires %}
+                  <option value="{{ val }}" {% if regle and regle.heure_fin|time:"H:i" == val %}selected{% elif not regle and val == "22:30" %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {# ── Mois actifs ── #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Mois actifs</label>
+            <div class="form-text mb-2">Cochez les mois où la loge se réunit. Laisser tout décoché = tous les mois (sauf juillet-août gérés automatiquement).</div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setMois([9,10,11,12,1,2,3,4,5,6])">Saison complète (Sep–Juin)</button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setMois([])">Tous (décocher tout)</button>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              {% for num, nom in mois_choices %}
+              <div class="form-check form-check-inline">
+                <input type="checkbox" name="mois_actifs" value="{{ num }}"
+                  class="form-check-input mois-cb" id="mois_{{ num }}"
+                  {% if regle and num in regle.mois_actifs %}checked{% endif %}>
+                <label class="form-check-label small" for="mois_{{ num }}">{{ nom }}</label>
+              </div>
+              {% endfor %}
             </div>
           </div>
 
@@ -113,4 +145,19 @@
     </div>
   </div>
 </div>
+
+<script>
+function setHoraire(debut, fin) {
+  var elDebut = document.getElementById('id_heure_debut');
+  var elFin   = document.getElementById('id_heure_fin');
+  elDebut.value = debut;
+  elFin.value   = fin;
+  if (window.$) { $(elDebut).trigger('change'); $(elFin).trigger('change'); }
+}
+function setMois(liste) {
+  document.querySelectorAll('.mois-cb').forEach(function(cb) {
+    cb.checked = liste.length === 0 ? false : liste.includes(parseInt(cb.value));
+  });
+}
+</script>
 {% endblock %}

@@ -2,7 +2,7 @@ from django.shortcuts import render
 from temple_project.apps.auth_custom.views import membre_required
 from django.http import JsonResponse
 from django.db.models import Q
-from datetime import date
+from datetime import date, timedelta
 import calendar
 
 from temple_project.apps.reservations.models import (
@@ -61,7 +61,7 @@ def api_evenements(request):
             color = _couleur_reservation(r)
             events.append({
                 "id":    f"t-{r.pk}",
-                "title": f"{r.loge.abreviation or r.loge.nom}",
+                "title": f"{(r.loge.abreviation or r.loge.nom) if r.loge else (r.nom_organisation or '?')}",
                 "start": f"{r.date}T{r.heure_debut}",
                 "end":   f"{r.date}T{r.heure_fin}",
                 "backgroundColor": color["bg"],
@@ -70,8 +70,8 @@ def api_evenements(request):
                 "extendedProps": {
                     "type":       "temple",
                     "temple":     str(r.temple),
-                    "loge":       r.loge.nom,
-                    "obedience":  r.loge.obedience.nom,
+                    "loge":       r.loge.nom if r.loge else (r.nom_organisation or '?'),
+                    "obedience":  r.loge.obedience.nom if r.loge else '—',
                     "type_res":   r.get_type_reservation_display(),
                     "sous_type":  r.get_sous_type_display(),
                     "statut":     r.statut,
@@ -136,6 +136,40 @@ def api_evenements(request):
             },
         })
 
+    # ── 4. Jours fériés et vacances scolaires Zone B ─────────────────────────
+    if request.GET.get("conges", "1") != "0":
+        annee_debut = int(start[:4]) if start else date.today().year
+        annee_fin   = int(end[:4])   if end   else date.today().year
+        for annee in range(annee_debut, annee_fin + 1):
+            for ev in _feries(annee):
+                d = ev["date"]
+                if str(d) >= start and str(d) <= end:
+                    events.append({
+                        "id":    f"ferie-{d}",
+                        "title": ev["label"],
+                        "start": str(d),
+                        "allDay": True,
+                        "display": "background",
+                        "backgroundColor": "#FEF9C3",
+                        "borderColor":     "#CA8A04",
+                        "extendedProps": {"type": "ferie"},
+                    })
+            for ev in _vacances_zone_b(annee):
+                d_start = str(ev["debut"])
+                d_end   = str(ev["fin"] + timedelta(days=1))
+                if d_start <= end and d_end >= start:
+                    events.append({
+                        "id":    f"vac-{ev['debut']}-{ev['fin']}",
+                        "title": ev["label"],
+                        "start": d_start,
+                        "end":   d_end,
+                        "allDay": True,
+                        "display": "background",
+                        "backgroundColor": "#DCFCE7",
+                        "borderColor":     "#16A34A",
+                        "extendedProps": {"type": "vacances"},
+                    })
+
     return JsonResponse(events, safe=False)
 
 
@@ -163,7 +197,7 @@ def api_disponibilites(request):
     temples_occupes = {}
     for r in reservations:
         temples_occupes[r.temple.nom] = {
-            "loge":     r.loge.nom,
+            "loge":     r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur),
             "horaires": f"{r.heure_debut:%H:%M}–{r.heure_fin:%H:%M}",
             "statut":   r.statut,
         }
@@ -203,6 +237,7 @@ def api_disponibilites(request):
         salles_result.append({
             "id":        salle.pk,
             "nom":       str(salle),
+            "type_salle": salle.type_salle,
             "capacite":  salle.capacite,
             "libre":     occ is None,
             "occupation": occ,
@@ -226,7 +261,74 @@ def _couleur_reservation(r):
     if r.statut == "refusee":
         return {"bg": "#FFF1F2", "border": "#FB7185", "text": "#881337"}
     # Validée
-    if r.loge.type_loge == "haut_grade":
+    if r.loge and r.loge.type_loge == "haut_grade":
         return {"bg": "#F0FDF4", "border": "#4ADE80", "text": "#14532D"}
     return {"bg": "#EFF6FF", "border": "#60A5FA", "text": "#1E3A8A"}
+
+
+def _paques(annee):
+    """Calcule la date de Pâques (algorithme anonyme grégorien)."""
+    a = annee % 19
+    b, c = divmod(annee, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month, day = divmod(114 + h + l - 7 * m, 31)
+    return date(annee, month, day + 1)
+
+
+def _feries(annee):
+    """Retourne la liste des jours fériés français pour une année."""
+    paques = _paques(annee)
+    return [
+        {"date": date(annee, 1, 1),   "label": "Jour de l'an"},
+        {"date": paques + timedelta(days=1), "label": "Lundi de Pâques"},
+        {"date": date(annee, 5, 1),   "label": "Fête du Travail"},
+        {"date": date(annee, 5, 8),   "label": "Victoire 1945"},
+        {"date": paques + timedelta(days=39), "label": "Ascension"},
+        {"date": paques + timedelta(days=50), "label": "Lundi de Pentecôte"},
+        {"date": date(annee, 7, 14),  "label": "Fête Nationale"},
+        {"date": date(annee, 8, 15),  "label": "Assomption"},
+        {"date": date(annee, 11, 1),  "label": "Toussaint"},
+        {"date": date(annee, 11, 11), "label": "Armistice"},
+        {"date": date(annee, 12, 25), "label": "Noël"},
+    ]
+
+
+def _vacances_zone_b(annee):
+    """
+    Vacances scolaires Zone B (académie Nancy-Metz) pour l'année civile donnée.
+    Couvre la saison scolaire annee-1/annee et annee/annee+1.
+    """
+    PERIODES = {
+        # saison 2024-2025
+        2024: [
+            {"label": "Toussaint 2024",  "debut": date(2024, 10, 19), "fin": date(2024, 11,  3)},
+            {"label": "Noël 2024-2025",  "debut": date(2024, 12, 21), "fin": date(2025,  1,  5)},
+        ],
+        2025: [
+            {"label": "Hiver 2025",      "debut": date(2025,  2, 22), "fin": date(2025,  3,  9)},
+            {"label": "Printemps 2025",  "debut": date(2025,  4, 19), "fin": date(2025,  5,  4)},
+            {"label": "Été 2025",        "debut": date(2025,  7,  5), "fin": date(2025,  9,  1)},
+            {"label": "Toussaint 2025",  "debut": date(2025, 10, 18), "fin": date(2025, 11,  2)},
+            {"label": "Noël 2025-2026",  "debut": date(2025, 12, 20), "fin": date(2026,  1,  4)},
+        ],
+        2026: [
+            {"label": "Hiver 2026",      "debut": date(2026,  2, 14), "fin": date(2026,  3,  1)},
+            {"label": "Printemps 2026",  "debut": date(2026,  4, 18), "fin": date(2026,  5,  3)},
+            {"label": "Été 2026",        "debut": date(2026,  7,  4), "fin": date(2026,  9,  1)},
+            {"label": "Toussaint 2026",  "debut": date(2026, 10, 17), "fin": date(2026, 11,  1)},
+            {"label": "Noël 2026-2027",  "debut": date(2026, 12, 19), "fin": date(2027,  1,  3)},
+        ],
+        2027: [
+            {"label": "Hiver 2027",      "debut": date(2027,  2, 13), "fin": date(2027,  2, 28)},
+            {"label": "Printemps 2027",  "debut": date(2027,  4, 17), "fin": date(2027,  5,  2)},
+            {"label": "Été 2027",        "debut": date(2027,  7,  3), "fin": date(2027,  9,  1)},
+        ],
+    }
+    return PERIODES.get(annee, [])
 

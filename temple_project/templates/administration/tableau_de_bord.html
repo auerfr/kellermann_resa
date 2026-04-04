@@ -10,12 +10,14 @@
   <div class="d-flex gap-2 flex-wrap">
     <a href="{% url 'administration:parametres' %}" class="btn btn-outline-info btn-sm">⚙ Paramètres</a>
     <a href="{% url 'administration:import_excel' %}" class="btn btn-outline-primary btn-sm">📂 Importer Excel</a>
-    <a href="{% url 'administration:template_excel' %}" class="btn btn-outline-success btn-sm">📥 Template Excel</a>
+    <a href="{% url 'administration:template_excel' %}" class="btn btn-outline-success btn-sm">📥 Template vierge</a>
+    <a href="{% url 'administration:export_excel' %}" class="btn btn-outline-success btn-sm">📤 Exporter données</a>
     <a href="{% url 'administration:regles_liste' %}" class="btn btn-outline-secondary btn-sm">📋 Règles</a>
     <a href="{% url 'administration:salles_liste' %}" class="btn btn-outline-warning btn-sm">🏛 Salles</a>
     <a href="{% url 'administration:gestion_saison' %}" class="btn btn-outline-dark btn-sm">📅 Saison</a>
     <a href="{% url 'administration:backup' %}" class="btn btn-outline-success btn-sm">💾 Backup</a>
     <a href="{% url 'administration:regenerer' %}" class="btn btn-warning btn-sm">🔄 Regénérer</a>
+    <a href="{% url 'administration:reset_calendrier' %}" class="btn btn-danger btn-sm">🗑 Nettoyage</a>
   </div>
 </div>
 

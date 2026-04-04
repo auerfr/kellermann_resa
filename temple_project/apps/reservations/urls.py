@@ -49,4 +49,15 @@ urlpatterns = [
     path("api/verifier-conflit/",
          views.api_verifier_conflit,
          name="api_verifier_conflit"),
+
+    # Demandes de règles de récurrence
+    path("recurrence/",
+         views.soumettre_demande_recurrence,
+         name="demande_recurrence"),
+    path("recurrence/confirmation/<uuid:uuid>/",
+         views.confirmation_recurrence,
+         name="confirmation_recurrence"),
+    path("recurrence/suivi/<uuid:uuid>/",
+         views.suivi_recurrence,
+         name="suivi_recurrence"),
 ]

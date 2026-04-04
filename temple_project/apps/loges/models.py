@@ -20,20 +20,25 @@ class Loge(models.Model):
     ]
 
     RITE_CHOICES = [
-        ("reaa",  "REAA — Rite Écossais Ancien et Accepté"),
-        ("rer",   "RER — Rite Écossais Rectifié"),
-        ("rf",    "RF — Rite Français"),
-        ("rem",   "REM — Rite Écossais Moderne"),
-        ("dh",    "DH — Droit Humain"),
-        ("mem",   "MEM — Memphis-Misraïm"),
-        ("autre", "Autre"),
+        ("reaa",      "REAA — Rite Écossais Ancien et Accepté"),
+        ("rer",       "RER — Rite Écossais Rectifié"),
+        ("rf",        "RF — Rite Français"),
+        ("rf_reaa",   "RF/REAA — Rite Français et Rite Écossais Ancien et Accepté"),
+        ("rem",       "REM — Rite Écossais Moderne"),
+        ("dh",        "DH — Droit Humain"),
+        ("mem",       "MEM — Memphis-Misraïm"),
+        ("rapmm",     "RAPMM — Rite Ancien et Primitif de Memphis-Misraïm"),
+        ("rmfr",      "RMFR — Rite Moderne Français Rectifié"),
+        ("emulation", "Emulation"),
+        ("marque",    "Marque et York"),
+        ("autre",     "Autre"),
     ]
 
     nom                   = models.CharField(max_length=200)
     abreviation           = models.CharField(max_length=20, blank=True)
     obedience             = models.ForeignKey(Obedience, on_delete=models.PROTECT, related_name="loges")
     type_loge             = models.CharField(max_length=20, choices=TYPE_CHOICES, default="loge")
-    rite                  = models.CharField(max_length=10, choices=RITE_CHOICES, blank=True, default="")
+    rite                  = models.CharField(max_length=20, choices=RITE_CHOICES, blank=True, default="")
     email                 = models.EmailField(blank=True)
     effectif_total        = models.PositiveIntegerField(default=0)
     effectif_moyen_agapes = models.PositiveIntegerField(default=0)

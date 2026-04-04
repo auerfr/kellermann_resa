@@ -13,8 +13,23 @@
           {% csrf_token %}
           <div class="row g-3 mb-3">
             <div class="col-md-6">
-              <label class="form-label fw-semibold">Votre loge</label>
-              {{ form.loge }}
+              <label class="form-label fw-semibold">Votre loge / organisation</label>
+              <div id="loge-select-wrapper">
+                {{ form.loge }}
+                <div class="mt-1">
+                  <a href="#" class="small text-muted" id="lien-saisie-libre" onclick="basculerOrg(true);return false;">
+                    Mon organisation n'est pas dans la liste →
+                  </a>
+                </div>
+              </div>
+              <div id="org-libre-wrapper" style="display:none;">
+                {{ form.nom_organisation }}
+                <div class="mt-1">
+                  <a href="#" class="small text-muted" onclick="basculerOrg(false);return false;">
+                    ← Choisir dans la liste
+                  </a>
+                </div>
+              </div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">Temple souhaite</label>
@@ -104,7 +119,32 @@
 </div>
 
 <script>
+function basculerOrg(libre) {
+  var selWrap   = document.getElementById('loge-select-wrapper');
+  var libreWrap = document.getElementById('org-libre-wrapper');
+  var orgInput  = document.querySelector('[name="nom_organisation"]');
+  if (libre) {
+    selWrap.style.display   = 'none';
+    libreWrap.style.display = 'block';
+    // vider la loge via Select2 si dispo, sinon natif
+    if (window.$ && $('[name="loge"]').data('select2')) {
+      $('[name="loge"]').val(null).trigger('change');
+    } else {
+      document.querySelector('[name="loge"]').value = '';
+    }
+    orgInput.required = true;
+  } else {
+    selWrap.style.display   = 'block';
+    libreWrap.style.display = 'none';
+    orgInput.required = false;
+    orgInput.value    = '';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+  // Si nom_organisation déjà rempli (erreur de validation), afficher la saisie libre
+  var orgInput = document.querySelector('[name="nom_organisation"]');
+  if (orgInput && orgInput.value.trim()) { basculerOrg(true); }
     const sousTypeSelect = document.querySelector('[name="sous_type"]');
     const profanesContainer = document.getElementById('profanes-admis-container');
     const cabinetsCheckboxes = document.querySelectorAll('input[name="cabinets"]');
@@ -159,8 +199,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    // Écouteurs d'événements pour la vérification de conflit
+    // Écouteurs pour la vérification de conflit (natif + Select2)
     templeSelect.addEventListener('change', verifierConflit);
+    if (window.$ && $(templeSelect).data('select2')) {
+        $(templeSelect).on('select2:select select2:unselect', verifierConflit);
+    }
     dateInput.addEventListener('change', verifierConflit);
     heureDebutInput.addEventListener('change', verifierConflit);
     heureFinInput.addEventListener('change', verifierConflit);

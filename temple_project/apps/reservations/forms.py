@@ -32,7 +32,7 @@ class DemandeReservationForm(forms.ModelForm):
     class Meta:
         model = Reservation
         fields = [
-            "loge", "temple", "date",
+            "loge", "nom_organisation", "temple", "date",
             "heure_debut", "heure_fin",
             "sous_type",
             "besoin_agapes", "nombre_repas",
@@ -41,17 +41,29 @@ class DemandeReservationForm(forms.ModelForm):
             "nom_demandeur", "email_demandeur", "commentaire",
         ]
         widgets = {
-            "date":          forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "loge":          forms.Select(attrs={"class": "form-select"}),
-            "temple":        forms.Select(attrs={"class": "form-select"}),
-            "sous_type":     forms.Select(attrs={"class": "form-select"}),
-            "cabinets":      forms.CheckboxSelectMultiple(),
-            "profanes_admis": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "nom_demandeur": forms.TextInput(attrs={"class": "form-control"}),
-            "email_demandeur": forms.EmailInput(attrs={"class": "form-control"}),
-            "commentaire":   forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
-            "nombre_repas":  forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+            "date":             forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+            "loge":             forms.Select(attrs={"class": "form-select"}),
+            "nom_organisation": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Ex : Association Fraternelle du Monde, Atelier…"
+            }),
+            "temple":           forms.Select(attrs={"class": "form-select"}),
+            "sous_type":        forms.Select(attrs={"class": "form-select"}),
+            "cabinets":         forms.CheckboxSelectMultiple(),
+            "profanes_admis":   forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "nom_demandeur":    forms.TextInput(attrs={"class": "form-control"}),
+            "email_demandeur":  forms.EmailInput(attrs={"class": "form-control"}),
+            "commentaire":      forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+            "nombre_repas":     forms.NumberInput(attrs={"class": "form-control", "min": 0}),
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get('loge') and not cleaned.get('nom_organisation', '').strip():
+            raise forms.ValidationError(
+                "Sélectionnez une loge dans la liste ou saisissez le nom de votre organisation."
+            )
+        return cleaned
 
 
 class DemandeReservationSalleForm(forms.ModelForm):

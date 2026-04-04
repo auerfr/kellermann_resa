@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Demande de règle de récurrence{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="mb-4">
+      <h1 class="h3 mb-1" style="color:#0F2137;">Demande de règle de récurrence</h1>
+      <p class="text-muted small">
+        Votre loge souhaite réserver régulièrement un temple ? Remplissez ce formulaire.
+        L'administration le traitera et vous répondra par email.
+      </p>
+    </div>
+
+    {% if messages %}
+      {% for msg in messages %}
+      <div class="alert alert-danger">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          {# ── Identification ── #}
+          <h6 class="text-uppercase text-muted mb-3" style="font-size:11px;letter-spacing:.08em;">Identification</h6>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Loge <span class="text-danger">*</span></label>
+              <select name="loge" class="form-select" required>
+                <option value="">Sélectionnez votre loge</option>
+                {% for l in loges %}
+                <option value="{{ l.pk }}">{{ l.abreviation }} — {{ l.nom }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Temple souhaité <span class="text-danger">*</span></label>
+              <select name="temple" class="form-select" required>
+                <option value="">Sélectionnez un temple</option>
+                {% for t in temples %}
+                <option value="{{ t.pk }}">{{ t }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre nom <span class="text-danger">*</span></label>
+              <input type="text" name="nom_demandeur" class="form-control" required placeholder="Prénom Nom">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre email <span class="text-danger">*</span></label>
+              <input type="email" name="email_demandeur" class="form-control" required placeholder="email@exemple.fr">
+            </div>
+          </div>
+
+          {# ── Fréquence ── #}
+          <h6 class="text-uppercase text-muted mb-3" style="font-size:11px;letter-spacing:.08em;">Fréquence</h6>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Jour de la semaine <span class="text-danger">*</span></label>
+              <select name="jour_semaine" class="form-select" required>
+                <option value="">— Choisir —</option>
+                {% for val, label in jours %}
+                <option value="{{ val }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Semaine du mois <span class="text-danger">*</span></label>
+              <select name="numero_semaine" class="form-select" required>
+                <option value="">— Choisir —</option>
+                {% for val, label in semaines %}
+                <option value="{{ val }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Ex. : « 1re semaine » + « Lundi » = chaque 1er lundi du mois</div>
+            </div>
+          </div>
+
+          {# ── Horaires ── #}
+          <h6 class="text-uppercase text-muted mb-3" style="font-size:11px;letter-spacing:.08em;">Horaires</h6>
+          <div class="mb-2 d-flex flex-wrap gap-2">
+            {% for label, debut, fin in tranches %}
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+              onclick="setHoraire('{{ debut }}','{{ fin }}')">
+              {{ label }}
+              <span class="text-muted ms-1" style="font-size:11px;">{{ debut }}–{{ fin }}</span>
+            </button>
+            {% endfor %}
+          </div>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Heure de début <span class="text-danger">*</span></label>
+              <select name="heure_debut" id="id_heure_debut" class="form-select" required>
+                {% for val, label in horaires %}
+                <option value="{{ val }}" {% if val == "19:00" %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Heure de fin <span class="text-danger">*</span></label>
+              <select name="heure_fin" id="id_heure_fin" class="form-select" required>
+                {% for val, label in horaires %}
+                <option value="{{ val }}" {% if val == "22:30" %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          {# ── Mois actifs ── #}
+          <h6 class="text-uppercase text-muted mb-3" style="font-size:11px;letter-spacing:.08em;">Mois concernés</h6>
+          <div class="form-text mb-2">
+            Cochez uniquement les mois où votre loge se réunit.
+            Laisser tout décoché = tous les mois hors juillet–août.
+          </div>
+          <div class="d-flex flex-wrap gap-2 mb-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setMois([9,10,11,12,1,2,3,4,5,6])">Saison complète (Sep–Juin)</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setMois([])">Décocher tout</button>
+          </div>
+          <div class="d-flex flex-wrap gap-3 mb-4">
+            {% for num, nom in mois %}
+            <div class="form-check">
+              <input type="checkbox" name="mois_actifs" value="{{ num }}"
+                class="form-check-input mois-cb" id="mois_{{ num }}">
+              <label class="form-check-label" for="mois_{{ num }}">{{ nom }}</label>
+            </div>
+            {% endfor %}
+          </div>
+
+          {# ── Commentaire ── #}
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Commentaire <span class="text-muted fw-normal">(facultatif)</span></label>
+            <textarea name="commentaire" class="form-control" rows="3"
+              placeholder="Informations complémentaires pour l'administration…"></textarea>
+          </div>
+
+          <div class="d-flex gap-3">
+            <button type="submit" class="btn px-4" style="background:#0F2137;color:white;">
+              Envoyer ma demande
+            </button>
+            <a href="{% url 'calendrier:principal' %}" class="btn btn-outline-secondary">Retour au calendrier</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setHoraire(d, f) {
+  var elDebut = document.getElementById('id_heure_debut');
+  var elFin   = document.getElementById('id_heure_fin');
+  elDebut.value = d;
+  elFin.value   = f;
+  if (window.$) { $(elDebut).trigger('change'); $(elFin).trigger('change'); }
+}
+function setMois(liste) {
+  document.querySelectorAll('.mois-cb').forEach(function(cb) {
+    cb.checked = liste.length ? liste.includes(parseInt(cb.value)) : false;
+  });
+}
+</script>
+{% endblock %}

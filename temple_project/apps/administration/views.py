@@ -195,11 +195,13 @@ def regle_form(request, pk=None):
     regle = get_object_or_404(RegleRecurrence, pk=pk) if pk else None
     if request.method == 'POST':
         try:
+            mois_actifs = [int(m) for m in request.POST.getlist('mois_actifs') if m.isdigit()]
             data = {
                 'loge_id': request.POST['loge'], 'temple_id': request.POST['temple'],
                 'jour_semaine': int(request.POST['jour_semaine']),
                 'numero_semaine': int(request.POST['numero_semaine']),
                 'heure_debut': request.POST['heure_debut'], 'heure_fin': request.POST['heure_fin'],
+                'mois_actifs': mois_actifs,
                 'actif': request.POST.get('actif') == 'on',
                 'date_debut': request.POST.get('date_debut') or None,
                 'date_fin': request.POST.get('date_fin') or None,
@@ -222,10 +224,23 @@ def regle_form(request, pk=None):
         'jours': RegleRecurrence.JOUR_CHOICES,
         'semaines': RegleRecurrence.SEMAINE_CHOICES,
         'horaires': [
-            ('09:00','09h00'),('09:30','09h30'),('10:00','10h00'),
-            ('14:00','14h00'),('14:30','14h30'),('19:00','19h00'),
-            ('19:30','19h30'),('20:00','20h00'),('20:30','20h30'),
+            ('09:00','09h00'),('09:30','09h30'),('10:00','10h00'),('10:30','10h30'),
+            ('11:00','11h00'),('11:30','11h30'),('12:00','12h00'),
+            ('14:00','14h00'),('14:30','14h30'),('15:00','15h00'),('15:30','15h30'),
+            ('16:00','16h00'),('16:30','16h30'),('17:00','17h00'),
+            ('19:00','19h00'),('19:30','19h30'),('20:00','20h00'),('20:30','20h30'),
             ('21:00','21h00'),('22:00','22h00'),('22:30','22h30'),('23:00','23h00'),
+        ],
+        'tranches': [
+            ('matin',    'Matin',       '09:00', '12:00'),
+            ('apmidi',   'Après-midi',  '14:00', '17:00'),
+            ('soir',     'Soir',        '19:00', '22:30'),
+            ('journee',  'Journée',     '09:00', '17:00'),
+        ],
+        'mois_choices': [
+            (1,'Janvier'),(2,'Février'),(3,'Mars'),(4,'Avril'),
+            (5,'Mai'),(6,'Juin'),(7,'Juillet'),(8,'Août'),
+            (9,'Septembre'),(10,'Octobre'),(11,'Novembre'),(12,'Décembre'),
         ],
     })
 
@@ -319,38 +334,159 @@ def import_excel(request):
 
 # ── Template Excel ────────────────────────────────────────────────────────────
 
+def _style_header(ws, row, cols, hf, hfill, ctr, thin):
+    for col, h in enumerate(cols, 1):
+        c = ws.cell(row=row, column=col, value=h)
+        c.font = hf; c.fill = hfill; c.alignment = ctr; c.border = thin
+
+def _style_row(ws, row, vals, thin, ctr, fill=None):
+    for ci, v in enumerate(vals, 1):
+        c = ws.cell(row=row, column=ci, value=v)
+        c.border = thin; c.alignment = ctr
+        if fill: c.fill = fill
+
 @login_required
 def telecharger_template_excel(request):
+    """Template vierge avec exemples, listes déroulantes et onglet Référence."""
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
     wb = openpyxl.Workbook()
-    hf = Font(bold=True, color="FFFFFF", size=11)
+    hf    = Font(bold=True, color="FFFFFF", size=11)
     hfill = PatternFill("solid", fgColor="0F2137")
-    ctr = Alignment(horizontal="center", vertical="center")
-    thin = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    ex    = PatternFill("solid", fgColor="EFF6FF")   # ligne exemple
+    ctr   = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin  = Border(left=Side(style='thin'), right=Side(style='thin'),
+                   top=Side(style='thin'), bottom=Side(style='thin'))
 
-    ws = wb.active
-    ws.title = "LOGES"
-    for col, h in enumerate(["Abréviation","Nom complet","Obédience","Type","Email","Effectif total","Moy. agapes"], 1):
-        c = ws.cell(row=1, column=col, value=h)
-        c.font = hf; c.fill = hfill; c.alignment = ctr; c.border = thin
-    for ri, row in enumerate([["3P","Les 3 Piliers","GODF","loge","contact@loge.fr",45,30],["14GO","4/14 Consistoire GODF","GODF","haut_grade","",20,0]], 2):
-        for ci, v in enumerate(row, 1):
-            c = ws.cell(row=ri, column=ci, value=v); c.border = thin; c.alignment = ctr
-    for col, w in zip(['A','B','C','D','E','F','G'], [12,35,12,12,25,14,12]):
-        ws.column_dimensions[col].width = w
+    # ── Onglet RÉFÉRENCE ──────────────────────────────────────────────────────
+    ws_ref = wb.active
+    ws_ref.title = "RÉFÉRENCE"
+    _style_header(ws_ref, 1, ["Temples","Obédiences","Types loge","Rites","Jours","N° semaine","Mois (n°)","Mois (nom)"], hf, hfill, ctr, thin)
+    ref_data = [
+        ("Lafayette",  "GODF",   "loge",       "reaa", "Lundi",    1, 1, "Janvier"),
+        ("Égalité",    "GLdF",   "haut_grade", "rer",  "Mardi",    2, 2, "Février"),
+        ("Fraternité", "GLNF",   "",           "rf",   "Mercredi", 3, 3, "Mars"),
+        ("Liberté",    "GLAMF",  "",           "rem",  "Jeudi",    4, 4, "Avril"),
+        ("",           "GODF-RF","",           "dh",   "Vendredi",-1, 5, "Mai"),
+        ("",           "",       "",           "mem",  "Samedi",   "", 6, "Juin"),
+        ("",           "",       "",           "autre","Dimanche", "", 7, "Juillet"),
+        ("",           "",       "",           "",     "",         "", 8, "Août"),
+        ("",           "",       "",           "",     "",         "", 9, "Septembre"),
+        ("",           "",       "",           "",     "",         "",10, "Octobre"),
+        ("",           "",       "",           "",     "",         "",11, "Novembre"),
+        ("",           "",       "",           "",     "",         "",12, "Décembre"),
+    ]
+    for ri, row in enumerate(ref_data, 2):
+        _style_row(ws_ref, ri, row, thin, ctr)
+    ws_ref.cell(row=14, column=1, value="N° semaine : 1=1re, 2=2e, 3=3e, 4=4e, -1=Dernière")
+    ws_ref.cell(row=15, column=4, value="Rites : reaa, rer, rf, rem, dh, mem, autre (laisser vide si inconnu)")
+    for col, w in zip(['A','B','C','D','E','F','G','H'], [14,12,12,8,12,12,10,12]):
+        ws_ref.column_dimensions[col].width = w
+    ws_ref.freeze_panes = "A2"
 
-    ws2 = wb.create_sheet("REGLES RECURRENCE")
-    for col, h in enumerate(["Abréviation","Nom complet","Obédience","Type","Temple","Jour","N° semaine","Heure début","Heure fin"], 1):
-        c = ws2.cell(row=1, column=col, value=h)
-        c.font = hf; c.fill = hfill; c.alignment = ctr; c.border = thin
-    ws2.cell(row=3, column=1, value="Temples : Lafayette, Liberte, Egalite, Fraternite")
-    ws2.cell(row=4, column=1, value="Jours : Lundi, Mardi, Mercredi, Jeudi, Vendredi, Samedi, Dimanche")
-    ws2.cell(row=5, column=1, value="N° semaine : 1, 2, 3, 4 ou -1 (derniere)")
-    for ci, v in enumerate(["3P","Les 3 Piliers","GODF","loge","Lafayette","Lundi",2,"19:30","22:30"], 1):
-        c = ws2.cell(row=2, column=ci, value=v); c.border = thin; c.alignment = ctr
-    ws2.column_dimensions['B'].width = 35
+    # ── Onglet LOGES ─────────────────────────────────────────────────────────
+    ws_l = wb.create_sheet("LOGES")
+    headers_l = ["Abréviation *","Nom complet *","Obédience *","Type *","Rite","Email","Effectif total","Moy. agapes"]
+    _style_header(ws_l, 1, headers_l, hf, hfill, ctr, thin)
+    # Lignes exemple
+    _style_row(ws_l, 2, ["3P","Les 3 Piliers","GODF","loge","reaa","contact@loge.fr",45,30], thin, ctr, ex)
+    _style_row(ws_l, 3, ["14GO","14/Consistoire GODF","GODF","haut_grade","rf","",20,0], thin, ctr, ex)
+    # Validations
+    dv_obe  = DataValidation(type="list", formula1="RÉFÉRENCE!$B$2:$B$6", allow_blank=True,  showDropDown=False)
+    dv_type = DataValidation(type="list", formula1='"loge,haut_grade"',   allow_blank=False, showDropDown=False)
+    dv_rite = DataValidation(type="list", formula1="RÉFÉRENCE!$D$2:$D$8", allow_blank=True,  showDropDown=False)
+    ws_l.add_data_validation(dv_obe);  dv_obe.sqref  = "C2:C500"
+    ws_l.add_data_validation(dv_type); dv_type.sqref = "D2:D500"
+    ws_l.add_data_validation(dv_rite); dv_rite.sqref = "E2:E500"
+    for col, w in zip(['A','B','C','D','E','F','G','H'], [12,38,12,12,8,28,14,12]):
+        ws_l.column_dimensions[col].width = w
+    ws_l.freeze_panes = "A2"
+    ws_l.row_dimensions[1].height = 30
+
+    # ── Onglet RÈGLES RÉCURRENCE ─────────────────────────────────────────────
+    ws_r = wb.create_sheet("RÈGLES RÉCURRENCE")
+    headers_r = ["Abréviation *","Nom complet *","Obédience *","Type *",
+                 "Temple *","Jour *","N° semaine *","Heure début","Heure fin",
+                 "Mois actifs (ex: 9,10,11,12,1,2,3,4,5,6)"]
+    _style_header(ws_r, 1, headers_r, hf, hfill, ctr, thin)
+    _style_row(ws_r, 2, ["3P","Les 3 Piliers","GODF","loge","Lafayette","Dimanche",2,"19:30","22:30","9,10,11,12,1,2,3,4,5,6"], thin, ctr, ex)
+    _style_row(ws_r, 3, ["14GO","14/Consistoire","GODF","haut_grade","Égalité","Lundi",1,"14:00","17:00","5,6,9,10"], thin, ctr, ex)
+    # Validations
+    dv_t = DataValidation(type="list", formula1="RÉFÉRENCE!$A$2:$A$5", allow_blank=False, showDropDown=False)
+    dv_j = DataValidation(type="list", formula1="RÉFÉRENCE!$D$2:$D$8", allow_blank=False, showDropDown=False)
+    dv_s = DataValidation(type="list", formula1="RÉFÉRENCE!$E$2:$E$6", allow_blank=False, showDropDown=False)
+    ws_r.add_data_validation(dv_t); dv_t.sqref = "E2:E500"
+    ws_r.add_data_validation(dv_j); dv_j.sqref = "F2:F500"
+    ws_r.add_data_validation(dv_s); dv_s.sqref = "G2:G500"
+    for col, w in zip(range(1, 11), [12,38,12,12,14,12,12,12,12,38]):
+        ws_r.column_dimensions[get_column_letter(col)].width = w
+    ws_r.freeze_panes = "A2"
+    ws_r.row_dimensions[1].height = 30
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = 'attachment; filename="Template_Kellermann_Import.xlsx"'
+    response['Content-Disposition'] = 'attachment; filename="Kellermann_Import_Template.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def telecharger_export_excel(request):
+    """Export des données existantes (loges + règles) au même format que le template."""
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    hf    = Font(bold=True, color="FFFFFF", size=11)
+    hfill = PatternFill("solid", fgColor="0F2137")
+    alt   = PatternFill("solid", fgColor="F8FAFC")
+    ctr   = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin  = Border(left=Side(style='thin'), right=Side(style='thin'),
+                   top=Side(style='thin'), bottom=Side(style='thin'))
+
+    # ── Loges ────────────────────────────────────────────────────────────────
+    ws_l = wb.active
+    ws_l.title = "LOGES"
+    headers_l = ["Abréviation","Nom complet","Obédience","Type","Rite","Email","Effectif total","Moy. agapes"]
+    _style_header(ws_l, 1, headers_l, hf, hfill, ctr, thin)
+    for ri, loge in enumerate(Loge.objects.select_related('obedience').order_by('nom'), 2):
+        fill = None if ri % 2 == 0 else alt
+        _style_row(ws_l, ri, [
+            loge.abreviation, loge.nom,
+            loge.obedience.abreviation if loge.obedience else "",
+            loge.type_loge, loge.rite or "",
+            loge.email or "",
+            loge.effectif_total or "", loge.effectif_moyen_agapes or "",
+        ], thin, ctr, fill)
+    for col, w in zip(['A','B','C','D','E','F','G','H'], [12,38,12,12,8,28,14,12]):
+        ws_l.column_dimensions[col].width = w
+    ws_l.freeze_panes = "A2"
+
+    # ── Règles ───────────────────────────────────────────────────────────────
+    ws_r = wb.create_sheet("RÈGLES RÉCURRENCE")
+    headers_r = ["Abréviation","Nom complet","Obédience","Type",
+                 "Temple","Jour","N° semaine","Heure début","Heure fin","Mois actifs"]
+    _style_header(ws_r, 1, headers_r, hf, hfill, ctr, thin)
+    JOURS = dict(RegleRecurrence.JOUR_CHOICES)
+    for ri, reg in enumerate(RegleRecurrence.objects.select_related('loge','loge__obedience','temple').order_by('loge__nom'), 2):
+        fill = None if ri % 2 == 0 else alt
+        mois_str = ",".join(str(m) for m in reg.mois_actifs) if reg.mois_actifs else ""
+        _style_row(ws_r, ri, [
+            reg.loge.abreviation, reg.loge.nom,
+            reg.loge.obedience.abreviation if reg.loge.obedience else "",
+            reg.loge.type_loge,
+            reg.temple.get_nom_display().replace("Temple ", ""),
+            JOURS.get(reg.jour_semaine, ""),
+            reg.numero_semaine,
+            reg.heure_debut.strftime("%H:%M"),
+            reg.heure_fin.strftime("%H:%M"),
+            mois_str,
+        ], thin, ctr, fill)
+    for col, w in zip(range(1, 11), [12,38,12,12,14,12,12,12,12,30]):
+        ws_r.column_dimensions[get_column_letter(col)].width = w
+    ws_r.freeze_panes = "A2"
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="Kellermann_Export_{date.today():%Y%m%d}.xlsx"'
     wb.save(response)
     return response
 
@@ -379,6 +515,96 @@ def generer_reservations_annuelles(request):
                     created += 1
         messages.success(request, f"{created} réservations générées pour {annee}.")
     return redirect('administration:tableau_de_bord')
+
+
+# ── Reset / Nettoyage calendrier ─────────────────────────────────────────────
+
+@login_required
+def reset_calendrier(request):
+    today = date.today()
+    annees = list(range(today.year - 2, today.year + 3))
+
+    # Compteurs pour la prévisualisation
+    def _compter(annee, loge_id, temple_id):
+        qs_auto = Reservation.objects.filter(regle_source__isnull=False, date__year=annee)
+        qs_tout = Reservation.objects.filter(date__year=annee)
+        qs_regles = RegleRecurrence.objects.all()
+        if loge_id:
+            qs_auto  = qs_auto.filter(loge_id=loge_id)
+            qs_tout  = qs_tout.filter(loge_id=loge_id)
+            qs_regles = qs_regles.filter(loge_id=loge_id)
+        if temple_id:
+            qs_auto  = qs_auto.filter(temple_id=temple_id)
+            qs_tout  = qs_tout.filter(temple_id=temple_id)
+            qs_regles = qs_regles.filter(temple_id=temple_id)
+        return {'auto': qs_auto.count(), 'tout': qs_tout.count(), 'regles': qs_regles.count()}
+
+    if request.method == 'POST':
+        if not request.POST.get('confirmer'):
+            messages.error(request, "Cochez la case de confirmation pour valider.")
+            return redirect('administration:reset_calendrier')
+
+        action    = request.POST.get('action')
+        annee     = request.POST.get('annee')
+        loge_id   = request.POST.get('loge') or None
+        temple_id = request.POST.get('temple') or None
+
+        nb = 0
+        if action == 'auto':
+            # Supprimer réservations auto-générées pour l'année
+            qs = Reservation.objects.filter(regle_source__isnull=False, date__year=int(annee))
+            if loge_id:   qs = qs.filter(loge_id=loge_id)
+            if temple_id: qs = qs.filter(temple_id=temple_id)
+            nb, _ = qs.delete()
+            messages.success(request, f"{nb} réservation(s) automatique(s) supprimée(s) pour {annee}.")
+
+        elif action == 'tout':
+            # Supprimer TOUTES les réservations temple pour l'année
+            qs = Reservation.objects.filter(date__year=int(annee))
+            if loge_id:   qs = qs.filter(loge_id=loge_id)
+            if temple_id: qs = qs.filter(temple_id=temple_id)
+            nb, _ = qs.delete()
+            messages.warning(request, f"{nb} réservation(s) supprimée(s) pour {annee} (régulières + exceptionnelles).")
+
+        elif action == 'regles':
+            # Supprimer les règles de récurrence (+ réservations liées en cascade si souhaité)
+            qs = RegleRecurrence.objects.all()
+            if loge_id:   qs = qs.filter(loge_id=loge_id)
+            if temple_id: qs = qs.filter(temple_id=temple_id)
+            nb, _ = qs.delete()
+            messages.warning(request, f"{nb} règle(s) de récurrence supprimée(s).")
+
+        elif action == 'tout_absolu':
+            # Tout supprimer : règles + réservations sans filtre année
+            qs_r = Reservation.objects.all()
+            qs_reg = RegleRecurrence.objects.all()
+            if loge_id:
+                qs_r   = qs_r.filter(loge_id=loge_id)
+                qs_reg = qs_reg.filter(loge_id=loge_id)
+            if temple_id:
+                qs_r   = qs_r.filter(temple_id=temple_id)
+                qs_reg = qs_reg.filter(temple_id=temple_id)
+            nb_r, _ = qs_r.delete()
+            nb_reg, _ = qs_reg.delete()
+            messages.error(request, f"Nettoyage complet : {nb_reg} règle(s) et {nb_r} réservation(s) supprimée(s).")
+
+        return redirect('administration:tableau_de_bord')
+
+    # GET — afficher les compteurs
+    annee_sel  = int(request.GET.get('annee', today.year))
+    loge_id    = request.GET.get('loge') or None
+    temple_id  = request.GET.get('temple') or None
+    compteurs  = _compter(annee_sel, loge_id, temple_id)
+
+    return render(request, 'administration/reset_calendrier.html', {
+        'annees'   : annees,
+        'annee_sel': annee_sel,
+        'loges'    : Loge.objects.filter(actif=True).order_by('nom'),
+        'temples'  : Temple.objects.all(),
+        'loge_id'  : loge_id,
+        'temple_id': temple_id,
+        'compteurs': compteurs,
+    })
 
 
 # ── Gestion saison ────────────────────────────────────────────────────────────
@@ -614,26 +840,45 @@ def _importer_donnees(wb):
                 if not row[0]: continue
                 ob, co = Obedience.objects.get_or_create(nom=str(row[2]).strip() if row[2] else 'Non définie')
                 if co: stats['obediences'] += 1
-                RITES_VALIDES = ['reaa','rer','rf','rem','dh','mem','autre']
-                rite = str(row[7]).strip().lower() if len(row) > 7 and row[7] else ''
-                if rite not in RITES_VALIDES: rite = ''
+                RITES_VALIDES = ['reaa','rer','rf','rf_reaa','rem','dh','mem','rapmm','rmfr','emulation','marque','autre']
+                RITE_ALIASES  = {'rf/reaa': 'rf_reaa', 'reaa/rf': 'rf_reaa'}
+                def _normalise_rite(raw):
+                    r = raw.strip().lower()
+                    return RITE_ALIASES.get(r, r if r in RITES_VALIDES else '')
+                # Nouveau format : col4=rite, col5=email, col6=effectif, col7=agapes
+                # Ancien format  : col4=email, col5=effectif, col6=agapes, col7=rite
+                # Détection : si col4 est dans les rites valides → nouveau format
+                col4_val = str(row[4]).strip().lower() if len(row) > 4 and row[4] else ''
+                col4_norm = RITE_ALIASES.get(col4_val, col4_val)
+                nouveau_format = col4_norm in RITES_VALIDES or col4_val == ''
+                if nouveau_format:
+                    rite     = _normalise_rite(str(row[4]) if len(row) > 4 and row[4] else '')
+                    email    = str(row[5]).strip() if len(row) > 5 and row[5] else ''
+                    effectif = int(row[6]) if len(row) > 6 and row[6] and str(row[6]).isdigit() else 0
+                    agapes   = int(row[7]) if len(row) > 7 and row[7] and str(row[7]).isdigit() else 0
+                else:
+                    email    = col4_val
+                    effectif = int(row[5]) if len(row) > 5 and row[5] and str(row[5]).isdigit() else 0
+                    agapes   = int(row[6]) if len(row) > 6 and row[6] and str(row[6]).isdigit() else 0
+                    rite     = _normalise_rite(str(row[7]) if len(row) > 7 and row[7] else '')
                 _, cl = Loge.objects.update_or_create(
                     abreviation=str(row[0]).strip(),
                     defaults={'nom': str(row[1]).strip() if row[1] else str(row[0]).strip(), 'obedience': ob,
                               'type_loge': str(row[3]).strip() if row[3] in ('loge','haut_grade') else 'loge',
-                              'rite': rite,
-                              'email': str(row[4]).strip() if row[4] else '',
-                              'effectif_total': int(row[5]) if row[5] and str(row[5]).isdigit() else 0,
-                              'effectif_moyen_agapes': int(row[6]) if row[6] and str(row[6]).isdigit() else 0}
+                              'rite': rite, 'email': email,
+                              'effectif_total': effectif, 'effectif_moyen_agapes': agapes}
                 )
                 if cl: stats['loges'] += 1
             except Exception as e:
                 errors.append(f"LOGES ligne {i} : {e}")
 
-    if 'REGLES RECURRENCE' in wb.sheetnames:
+    # Accepter l'ancien nom sans accents et le nouveau avec accents
+    regles_sheet = next((n for n in wb.sheetnames if 'GLES' in n and 'CURRENCE' in n), None)
+    if regles_sheet:
         JOURS  = {'Lundi':0,'Mardi':1,'Mercredi':2,'Jeudi':3,'Vendredi':4,'Samedi':5,'Dimanche':6}
-        TEMPLES = {'Lafayette':'lafayette','Liberte':'liberte','Egalite':'egalite','Fraternite':'fraternite'}
-        for i, row in enumerate(wb['REGLES RECURRENCE'].iter_rows(min_row=2, values_only=True), 2):
+        TEMPLES = {'Lafayette':'lafayette','Liberte':'liberte','Egalite':'egalite','Fraternite':'fraternite',
+                   'Égalité':'egalite','Fraternité':'fraternite','Liberté':'liberte'}
+        for i, row in enumerate(wb[regles_sheet].iter_rows(min_row=2, values_only=True), 2):
             try:
                 if not row[0] or not row[4] or not row[5] or row[6] is None: continue
                 try: loge = Loge.objects.get(abreviation=str(row[0]).strip())
@@ -657,7 +902,8 @@ def _importer_donnees(wb):
 
 
 def _calculer_dates_regle(regle, annee):
-    return [d for mois in range(1, 13) for d in [_nieme_jour_du_mois(annee, mois, regle.numero_semaine, regle.jour_semaine)] if d]
+    mois_list = regle.mois_actifs if regle.mois_actifs else list(range(1, 13))
+    return [d for mois in mois_list for d in [_nieme_jour_du_mois(annee, mois, regle.numero_semaine, regle.jour_semaine)] if d]
 
 
 # ── Paramètres ────────────────────────────────────────────────────────────────

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Suivi de demande de récurrence{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <h2 class="h4 mb-4" style="color:#0F2137;">Suivi de votre demande</h2>
+
+        {% if demande.statut == 'attente' %}
+        <div class="alert alert-warning">
+          <strong>En attente</strong> — Votre demande est en cours d'examen par l'administration.
+        </div>
+        {% elif demande.statut == 'validee' %}
+        <div class="alert alert-success">
+          <strong>Validée</strong> — Votre règle de récurrence a été acceptée et les tenues ont été planifiées.
+        </div>
+        {% elif demande.statut == 'refusee' %}
+        <div class="alert alert-danger">
+          <strong>Refusée</strong> — Votre demande n'a pas pu être acceptée.
+        </div>
+        {% endif %}
+
+        <table class="table table-sm table-borderless">
+          <tr><td class="text-muted" style="width:40%">Loge</td><td class="fw-semibold">{{ demande.loge }}</td></tr>
+          <tr><td class="text-muted">Temple</td><td>{{ demande.temple }}</td></tr>
+          <tr><td class="text-muted">Fréquence</td><td>{{ demande.get_numero_semaine_display }} {{ demande.get_jour_semaine_display }}</td></tr>
+          <tr><td class="text-muted">Horaires</td><td>{{ demande.heure_debut|time:"H:i" }} – {{ demande.heure_fin|time:"H:i" }}</td></tr>
+          <tr><td class="text-muted">Mois</td>
+            <td>
+              {% if demande.mois_actifs %}{{ demande.mois_actifs|join:", " }}{% else %}Tous{% endif %}
+            </td>
+          </tr>
+          <tr><td class="text-muted">Demandé le</td><td>{{ demande.date_demande|date:"d/m/Y H:i" }}</td></tr>
+          <tr><td class="text-muted">Référence</td><td><code>{{ demande.uuid }}</code></td></tr>
+        </table>
+
+        {% if demande.commentaire_admin %}
+        <div class="alert alert-light mt-3">
+          <small class="text-muted d-block mb-1">Message de l'administration</small>
+          {{ demande.commentaire_admin }}
+        </div>
+        {% endif %}
+
+        <a href="{% url 'calendrier:principal' %}" class="btn btn-outline-secondary mt-3">Retour au calendrier</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

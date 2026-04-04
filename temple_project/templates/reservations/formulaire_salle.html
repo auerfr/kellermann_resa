@@ -50,10 +50,30 @@
             </div>
           </div>
 
-          {# Organisation + objet #}
+          {# Organisation / Loge #}
           <div class="mb-3">
-            <label class="form-label fw-semibold">Organisation / Loge</label>
-            {{ form.organisation }}
+            <label class="form-label fw-semibold">Votre loge / organisation</label>
+            <div id="loge-select-wrapper">
+              <select id="loge-selector" class="form-select" onchange="logeSelectChange(this)">
+                <option value="">— Sélectionner une loge —</option>
+                {% for loge in loges %}
+                  <option value="{{ loge.nom }}">{{ loge }}</option>
+                {% endfor %}
+              </select>
+              <div class="mt-1">
+                <a href="#" class="small text-muted" onclick="basculerOrg(true);return false;">
+                  Mon organisation n'est pas dans la liste →
+                </a>
+              </div>
+            </div>
+            <div id="org-libre-wrapper" style="display:none;">
+              {{ form.organisation }}
+              <div class="mt-1">
+                <a href="#" class="small text-muted" onclick="basculerOrg(false);return false;">
+                  ← Choisir dans la liste
+                </a>
+              </div>
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Objet de la réunion <span class="text-danger">*</span></label>
@@ -87,4 +107,58 @@
 
   </div>
 </div>
+
+<script>
+function logeSelectChange(sel) {
+  var orgInput = document.querySelector('[name="organisation"]');
+  if (sel.value) orgInput.value = sel.value;
+}
+
+function basculerOrg(libre) {
+  var selWrap   = document.getElementById('loge-select-wrapper');
+  var libreWrap = document.getElementById('org-libre-wrapper');
+  var orgInput  = document.querySelector('[name="organisation"]');
+  if (libre) {
+    selWrap.style.display   = 'none';
+    libreWrap.style.display = 'block';
+    orgInput.value = '';
+    if (window.$ && $('#loge-selector').data('select2')) {
+      $('#loge-selector').val(null).trigger('change');
+    } else {
+      document.getElementById('loge-selector').value = '';
+    }
+  } else {
+    selWrap.style.display   = 'block';
+    libreWrap.style.display = 'none';
+    orgInput.value = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var orgInput = document.querySelector('[name="organisation"]');
+  if (orgInput && orgInput.value.trim()) {
+    var sel = document.getElementById('loge-selector');
+    var matched = false;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === orgInput.value.trim()) {
+        sel.value = sel.options[i].value;
+        if (window.$) { $(sel).trigger('change'); }
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) { basculerOrg(true); orgInput.value = orgInput.value.trim(); }
+  }
+
+  // Sync Select2 change event
+  if (window.$) {
+    $('#loge-selector').on('select2:select', function(e) {
+      document.querySelector('[name="organisation"]').value = e.params.data.id || '';
+    });
+    $('#loge-selector').on('select2:clear', function() {
+      document.querySelector('[name="organisation"]').value = '';
+    });
+  }
+});
+</script>
 {% endblock %}

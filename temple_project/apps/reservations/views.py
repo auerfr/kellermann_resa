@@ -5,7 +5,8 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.db.models import Q, Sum
 from .emails import envoyer_email_nouvelle_demande
-from .models import Reservation, ReservationSalle, SalleReunion
+from .models import Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence, RegleRecurrence, Temple
+from temple_project.apps.loges.models import Loge
 from .forms import DemandeReservationForm, DemandeReservationSalleForm, DemandeCabinetsForm, DemandeBanquetForm
 
 
@@ -62,7 +63,8 @@ def soumettre_demande_salle(request):
             return redirect("reservations:confirmation_salle", uuid=resa.uuid)
     else:
         form = DemandeReservationSalleForm()
-    return render(request, "reservations/formulaire_salle.html", {"form": form})
+    loges = Loge.objects.filter(actif=True).order_by('nom')
+    return render(request, "reservations/formulaire_salle.html", {"form": form, "loges": loges})
 
 
 def confirmation(request, uuid):
@@ -292,6 +294,106 @@ def demande_banquet(request):
 def confirmation_banquet(request, uuid):
     resa = get_object_or_404(ReservationSalle, uuid=uuid)
     return render(request, "reservations/confirmation_banquet.html", {"reservation": resa})
+
+
+def soumettre_demande_recurrence(request):
+    """Formulaire front-end : une loge demande une règle de récurrence."""
+    HORAIRES = [
+        ('09:00','09h00'),('09:30','09h30'),('10:00','10h00'),('10:30','10h30'),
+        ('11:00','11h00'),('11:30','11h30'),('12:00','12h00'),
+        ('14:00','14h00'),('14:30','14h30'),('15:00','15h00'),('15:30','15h30'),
+        ('16:00','16h00'),('16:30','16h30'),('17:00','17h00'),
+        ('19:00','19h00'),('19:30','19h30'),('20:00','20h00'),('20:30','20h30'),
+        ('21:00','21h00'),('22:00','22h00'),('22:30','22h30'),('23:00','23h00'),
+    ]
+    MOIS = [
+        (1,'Janvier'),(2,'Février'),(3,'Mars'),(4,'Avril'),
+        (5,'Mai'),(6,'Juin'),(7,'Juillet'),(8,'Août'),
+        (9,'Septembre'),(10,'Octobre'),(11,'Novembre'),(12,'Décembre'),
+    ]
+    TRANCHES = [
+        ('Matin', '09:00', '12:00'),
+        ('Après-midi', '14:00', '17:00'),
+        ('Soir', '19:00', '22:30'),
+        ('Journée complète', '09:00', '17:00'),
+    ]
+
+    if request.method == 'POST':
+        try:
+            mois_actifs = [int(m) for m in request.POST.getlist('mois_actifs') if m.isdigit()]
+            demande = DemandeRegleRecurrence.objects.create(
+                loge_id        = request.POST['loge'],
+                temple_id      = request.POST['temple'],
+                jour_semaine   = int(request.POST['jour_semaine']),
+                numero_semaine = int(request.POST['numero_semaine']),
+                heure_debut    = request.POST['heure_debut'],
+                heure_fin      = request.POST['heure_fin'],
+                mois_actifs    = mois_actifs,
+                nom_demandeur  = request.POST['nom_demandeur'].strip(),
+                email_demandeur= request.POST['email_demandeur'].strip(),
+                commentaire    = request.POST.get('commentaire', '').strip(),
+                statut         = 'attente',
+            )
+            # Email à l'admin
+            send_mail(
+                subject=f"[Kellermann] Nouvelle demande de règle – {demande.loge}",
+                message=(
+                    f"Nouvelle demande de règle de récurrence.\n\n"
+                    f"Loge      : {demande.loge}\n"
+                    f"Temple    : {demande.temple}\n"
+                    f"Fréquence : {demande.get_numero_semaine_display()} {demande.get_jour_semaine_display()}\n"
+                    f"Horaires  : {demande.heure_debut:%H:%M} – {demande.heure_fin:%H:%M}\n"
+                    f"Mois      : {', '.join(str(m) for m in demande.mois_actifs) or 'Tous'}\n"
+                    f"Demandeur : {demande.nom_demandeur} ({demande.email_demandeur})\n"
+                    f"Commentaire : {demande.commentaire}\n\n"
+                    f"Connectez-vous pour valider ou refuser cette demande."
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[settings.DEFAULT_FROM_EMAIL],
+                fail_silently=True,
+            )
+            # Email de confirmation au demandeur
+            send_mail(
+                subject="[Kellermann] Confirmation de votre demande de récurrence",
+                message=(
+                    f"Bonjour {demande.nom_demandeur},\n\n"
+                    f"Votre demande de règle de récurrence a bien été reçue.\n\n"
+                    f"Récapitulatif :\n"
+                    f"  Loge      : {demande.loge}\n"
+                    f"  Temple    : {demande.temple}\n"
+                    f"  Fréquence : {demande.get_numero_semaine_display()} {demande.get_jour_semaine_display()}\n"
+                    f"  Horaires  : {demande.heure_debut:%H:%M} – {demande.heure_fin:%H:%M}\n\n"
+                    f"Référence : {demande.uuid}\n\n"
+                    f"Vous serez informé(e) par email dès qu'elle sera traitée.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[demande.email_demandeur],
+                fail_silently=True,
+            )
+            return redirect('reservations:confirmation_recurrence', uuid=demande.uuid)
+        except Exception as e:
+            messages.error(request, f"Erreur lors de la soumission : {e}")
+
+    return render(request, 'reservations/formulaire_recurrence.html', {
+        'loges'   : Loge.objects.filter(actif=True).order_by('nom'),
+        'temples' : Temple.objects.all(),
+        'jours'   : RegleRecurrence.JOUR_CHOICES,
+        'semaines': RegleRecurrence.SEMAINE_CHOICES,
+        'horaires': HORAIRES,
+        'mois'    : MOIS,
+        'tranches': TRANCHES,
+    })
+
+
+def confirmation_recurrence(request, uuid):
+    demande = get_object_or_404(DemandeRegleRecurrence, uuid=uuid)
+    return render(request, 'reservations/confirmation_recurrence.html', {'demande': demande})
+
+
+def suivi_recurrence(request, uuid):
+    demande = get_object_or_404(DemandeRegleRecurrence, uuid=uuid)
+    return render(request, 'reservations/suivi_recurrence.html', {'demande': demande})
 
 
 def api_verifier_conflit(request):

@@ -89,6 +89,11 @@ class RegleRecurrence(models.Model):
     numero_semaine = models.SmallIntegerField(choices=SEMAINE_CHOICES)
     heure_debut    = models.TimeField(default="19:30")
     heure_fin      = models.TimeField(default="22:30")
+    mois_actifs    = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Mois actifs (1=Jan … 12=Déc). Laisser vide = tous les mois (sauf juillet-août)."
+    )
     actif          = models.BooleanField(default=True)
     date_debut     = models.DateField(
         null=True, blank=True,
@@ -111,6 +116,45 @@ class RegleRecurrence(models.Model):
         )
 
 
+class DemandeRegleRecurrence(models.Model):
+    """Demande front-end d'une loge pour créer une règle de récurrence."""
+    STATUT_CHOICES = [
+        ("attente",  "En attente"),
+        ("validee",  "Validée"),
+        ("refusee",  "Refusée"),
+    ]
+
+    uuid            = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    loge            = models.ForeignKey(Loge, on_delete=models.CASCADE, related_name="demandes_regle")
+    temple          = models.ForeignKey(Temple, on_delete=models.PROTECT)
+    jour_semaine    = models.PositiveSmallIntegerField(choices=RegleRecurrence.JOUR_CHOICES)
+    numero_semaine  = models.SmallIntegerField(choices=RegleRecurrence.SEMAINE_CHOICES)
+    heure_debut     = models.TimeField()
+    heure_fin       = models.TimeField()
+    mois_actifs     = models.JSONField(default=list, blank=True)
+    nom_demandeur   = models.CharField(max_length=100)
+    email_demandeur = models.EmailField()
+    commentaire     = models.TextField(blank=True)
+    statut          = models.CharField(max_length=10, choices=STATUT_CHOICES, default="attente")
+    date_demande    = models.DateTimeField(auto_now_add=True)
+    regle_creee     = models.ForeignKey(
+        RegleRecurrence, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="demande_source"
+    )
+    commentaire_admin = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Demande de règle de récurrence"
+        verbose_name_plural = "Demandes de règles de récurrence"
+        ordering = ["-date_demande"]
+
+    def __str__(self):
+        return (
+            f"{self.loge} – {self.get_numero_semaine_display()} "
+            f"{self.get_jour_semaine_display()} [{self.get_statut_display()}]"
+        )
+
+
 class Reservation(models.Model):
     TYPE_CHOICES = [
         ("reguliere",     "Régulière"),
@@ -129,7 +173,13 @@ class Reservation(models.Model):
     ]
 
     uuid             = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    loge             = models.ForeignKey(Loge, on_delete=models.PROTECT, related_name="reservations")
+    loge             = models.ForeignKey(
+        Loge, null=True, blank=True, on_delete=models.SET_NULL, related_name="reservations"
+    )
+    nom_organisation = models.CharField(
+        max_length=200, blank=True,
+        help_text="Si la loge n'est pas dans la liste, saisissez son nom ici."
+    )
     temple           = models.ForeignKey(Temple, on_delete=models.PROTECT)
     cabinets         = models.ManyToManyField(SalleReunion, blank=True, related_name='reservations_cabinets')
     type_reservation = models.CharField(max_length=20, choices=TYPE_CHOICES, default="reguliere")
@@ -158,8 +208,12 @@ class Reservation(models.Model):
         verbose_name_plural = "Réservations"
         ordering = ["date", "heure_debut"]
 
+    def nom_demandeur_ou_org(self):
+        return self.loge.nom if self.loge else (self.nom_organisation or self.nom_demandeur)
+
     def __str__(self):
-        return f"{self.loge} – {self.date} {self.heure_debut} ({self.temple})"
+        org = self.loge or self.nom_organisation or self.nom_demandeur
+        return f"{org} – {self.date} {self.heure_debut} ({self.temple})"
 
 
 class ReservationSalle(models.Model):
