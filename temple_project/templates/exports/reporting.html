@@ -164,13 +164,44 @@
         Exports
       </div>
       <div class="card-body">
-        <div class="d-flex gap-2 flex-wrap">
+        <div class="d-flex gap-2 flex-wrap align-items-center">
           <a href="{% url 'exports:csv' %}?annee={{ annee }}" class="btn btn-sm btn-outline-secondary">
             CSV
           </a>
           <a href="{% url 'exports:excel' %}?annee={{ annee }}" class="btn btn-sm" style="background:#0F2137; color:#C8A84B; border:none;">
             Excel
           </a>
+          <div class="vr mx-1"></div>
+          {# PDF Planning mensuel #}
+          <select id="pdf-temple" class="form-select form-select-sm" style="width:auto;">
+            <option value="">Tous les temples</option>
+            {% for t in temples %}
+            <option value="{{ t.pk }}">{{ t }}</option>
+            {% endfor %}
+          </select>
+          <select id="pdf-mois" class="form-select form-select-sm" style="width:auto;">
+            <option value="9">Septembre</option>
+            <option value="10">Octobre</option>
+            <option value="11">Novembre</option>
+            <option value="12">Décembre</option>
+            <option value="1">Janvier</option>
+            <option value="2">Février</option>
+            <option value="3">Mars</option>
+            <option value="4">Avril</option>
+            <option value="5">Mai</option>
+            <option value="6">Juin</option>
+          </select>
+          <button class="btn btn-sm btn-outline-danger"
+            onclick="(function(){
+              var t=document.getElementById('pdf-temple').value;
+              var m=document.getElementById('pdf-mois').value;
+              var a={{ annee }};
+              var yr=(m>=9)?a:a+1;
+              var url='{% url 'exports:planning_pdf' %}?mois='+m+'&annee='+yr+(t?'&temple='+t:'');
+              window.location=url;
+            })()">
+            📄 Planning PDF mensuel
+          </button>
         </div>
       </div>
     </div>

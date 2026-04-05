@@ -8,7 +8,8 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
-from temple_project.apps.reservations.models import Reservation
+from datetime import timedelta
+from temple_project.apps.reservations.models import Reservation, Temple
 
 
 @login_required
@@ -166,6 +167,7 @@ def reporting(request):
         "reservations_par_obedience": reservations_par_obedience,
         "reservations_par_mois": reservations_par_mois_json,
         "reservations_par_temple": reservations_par_temple_json,
+        "temples": Temple.objects.all().order_by('nom'),
     }
 
     return render(request, "exports/reporting.html", context)
@@ -182,3 +184,155 @@ def _get_queryset_from_request(request):
     if request.GET.get("loge"):
         qs = qs.filter(loge_id=request.GET["loge"])
     return qs.order_by("date", "heure_debut")
+
+
+@login_required
+def planning_pdf(request):
+    """Export PDF du planning mensuel des tenues, par temple."""
+    from io import BytesIO
+    import calendar as _cal
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle,
+        Paragraph, Spacer, HRFlowable,
+    )
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    today    = date.today()
+    mois_p   = int(request.GET.get('mois',   today.month))
+    annee_p  = int(request.GET.get('annee',  today.year))
+    temple_p = request.GET.get('temple') or None
+
+    MOIS_NOMS = {1:'Janvier',2:'Février',3:'Mars',4:'Avril',5:'Mai',6:'Juin',
+                 7:'Juillet',8:'Août',9:'Septembre',10:'Octobre',
+                 11:'Novembre',12:'Décembre'}
+    JOURS_FR  = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
+
+    debut = date(annee_p, mois_p, 1)
+    fin   = date(annee_p, mois_p, _cal.monthrange(annee_p, mois_p)[1])
+
+    if temple_p:
+        temples = list(Temple.objects.filter(pk=temple_p))
+    else:
+        temples = list(Temple.objects.all().order_by('nom'))
+
+    C_NAVY  = colors.HexColor('#0F2137')
+    C_GOLD  = colors.HexColor('#C8A84B')
+    C_LIGHT = colors.HexColor('#F8FAFC')
+    C_ROW2  = colors.HexColor('#EFF6FF')
+
+    sty_h1   = ParagraphStyle('h1',  fontName='Helvetica-Bold', fontSize=14,
+                               textColor=C_NAVY, spaceAfter=2)
+    sty_h2   = ParagraphStyle('h2',  fontName='Helvetica-Bold', fontSize=11,
+                               textColor=C_GOLD, spaceAfter=6)
+    sty_sub  = ParagraphStyle('sub', fontName='Helvetica',      fontSize=9,
+                               textColor=colors.grey, spaceAfter=10)
+    sty_pied = ParagraphStyle('pied',fontName='Helvetica',      fontSize=7,
+                               textColor=colors.grey, alignment=TA_CENTER)
+    sty_vide = ParagraphStyle('vide',fontName='Helvetica-Oblique', fontSize=9,
+                               textColor=colors.grey, alignment=TA_CENTER)
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=1.5*cm, rightMargin=1.5*cm,
+        topMargin=1.5*cm, bottomMargin=2*cm,
+    )
+
+    col_widths = [2.2*cm, 1.4*cm, 5.0*cm, 2.8*cm, 2.8*cm, 1.8*cm]
+    headers    = ['Date', 'Jour', 'Loge', 'Horaires', 'Type', 'Agapes']
+
+    def _table_temple(temple):
+        tenues = (
+            Reservation.objects
+            .select_related('loge', 'loge__obedience', 'temple')
+            .filter(
+                temple=temple,
+                statut='validee',
+                date__gte=debut,
+                date__lte=fin,
+            )
+            .order_by('date', 'heure_debut')
+        )
+        rows = [headers]
+        for t in tenues:
+            loge_nom = (t.loge.nom if t.loge
+                        else (t.nom_organisation if hasattr(t, 'nom_organisation') else '—'))
+            agapes = f"Oui – {t.nombre_repas} cvts" if t.besoin_agapes else 'Non'
+            rows.append([
+                t.date.strftime('%d/%m/%Y'),
+                JOURS_FR[t.date.weekday()],
+                loge_nom,
+                f"{t.heure_debut:%H:%M} – {t.heure_fin:%H:%M}",
+                t.get_type_reservation_display(),
+                agapes,
+            ])
+        return rows, tenues.count()
+
+    story = []
+
+    # En-tête global
+    titre_periode = f"{MOIS_NOMS[mois_p]} {annee_p}"
+    story.append(Paragraph(f"Kellermann — Planning des tenues", sty_h1))
+    story.append(Paragraph(titre_periode, sty_h2))
+    story.append(Spacer(1, 0.2*cm))
+
+    for i, temple in enumerate(temples):
+        rows, nb = _table_temple(temple)
+
+        story.append(Paragraph(str(temple), ParagraphStyle(
+            'tnom', fontName='Helvetica-Bold', fontSize=10,
+            textColor=C_NAVY, spaceAfter=3,
+        )))
+        story.append(Paragraph(f"{nb} tenue{'s' if nb != 1 else ''}", sty_sub))
+
+        if nb == 0:
+            story.append(Paragraph("Aucune tenue ce mois-ci.", sty_vide))
+        else:
+            n = len(rows)
+            tbl = Table(rows, colWidths=col_widths, repeatRows=1)
+            tbl.setStyle(TableStyle([
+                ('BACKGROUND',    (0,0),  (-1,0),   C_NAVY),
+                ('TEXTCOLOR',     (0,0),  (-1,0),   C_GOLD),
+                ('FONTNAME',      (0,0),  (-1,0),   'Helvetica-Bold'),
+                ('FONTSIZE',      (0,0),  (-1,0),   8),
+                ('ALIGN',         (0,0),  (-1,0),   'CENTER'),
+                ('TOPPADDING',    (0,0),  (-1,0),   5),
+                ('BOTTOMPADDING', (0,0),  (-1,0),   5),
+                ('FONTNAME',      (0,1),  (-1,n-1), 'Helvetica'),
+                ('FONTSIZE',      (0,1),  (-1,n-1), 8),
+                ('ROWBACKGROUNDS',(0,1),  (-1,n-1), [colors.white, C_LIGHT]),
+                ('TOPPADDING',    (0,1),  (-1,n-1), 4),
+                ('BOTTOMPADDING', (0,1),  (-1,n-1), 4),
+                ('ALIGN',         (1,1),  (1,n-1),  'CENTER'),  # Jour
+                ('ALIGN',         (3,1),  (3,n-1),  'CENTER'),  # Horaires
+                ('ALIGN',         (5,1),  (5,n-1),  'CENTER'),  # Agapes
+                ('GRID',          (0,0),  (-1,-1),  0.4, colors.HexColor('#CBD5E1')),
+                ('BOX',           (0,0),  (-1,-1),  1,   C_NAVY),
+            ]))
+            story.append(tbl)
+
+        if i < len(temples) - 1:
+            story.append(Spacer(1, 0.5*cm))
+            story.append(HRFlowable(width='100%', thickness=0.5,
+                                    color=colors.HexColor('#E2E8F0')))
+            story.append(Spacer(1, 0.3*cm))
+
+    story.append(Spacer(1, 0.6*cm))
+    story.append(Paragraph(
+        f"Généré le {today.strftime('%d/%m/%Y')} — Temples Kellermann",
+        sty_pied,
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    nom = f"planning_{annee_p}_{mois_p:02d}"
+    if temple_p and temples:
+        nom += f"_{temples[0].nom.replace(' ', '_')}"
+    nom += ".pdf"
+    response = HttpResponse(buf, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nom}"'
+    return response

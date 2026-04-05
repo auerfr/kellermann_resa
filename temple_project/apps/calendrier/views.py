@@ -14,16 +14,18 @@ from temple_project.apps.loges.models import Loge, Obedience
 
 def calendrier_principal(request):
     """Vue principale du calendrier — accessible avec mot de passe annuel."""
+    today      = date.today()
     temples    = Temple.objects.all()
     loges      = Loge.objects.filter(actif=True).select_related("obedience").order_by("nom")
     obediences = Obedience.objects.all().order_by("nom")
     salles     = SalleReunion.objects.filter(actif=True)
 
     context = {
-        "temples":    temples,
-        "loges":      loges,
-        "obediences": obediences,
-        "salles":     salles,
+        "temples":       temples,
+        "loges":         loges,
+        "obediences":    obediences,
+        "salles":        salles,
+        "annee_courante": today.year if today.month >= 9 else today.year - 1,
     }
     return render(request, "calendrier/principal.html", context)
 

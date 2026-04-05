@@ -998,6 +998,396 @@ def salle_supprimer(request, pk):
     return render(request, 'administration/salle_supprimer.html', {'salle': salle})
 
 
+@login_required
+def agapes_traiteur(request):
+    """Vue synthétique agapes + banquets pour le traiteur."""
+    today = date.today()
+    annee_courante = today.year if today.month >= 9 else today.year - 1
+    annee_param = int(request.GET.get('annee', annee_courante))
+    debut_saison = date(annee_param, 9, 1)
+    fin_saison   = date(annee_param + 1, 6, 30)
+
+    # Tenues avec agapes
+    tenues = (
+        Reservation.objects
+        .select_related('loge', 'temple')
+        .filter(
+            besoin_agapes=True,
+            statut='validee',
+            date__gte=debut_saison,
+            date__lte=fin_saison,
+        )
+        .order_by('date')
+    )
+
+    # Banquets (ReservationSalle type agapes)
+    banquets = (
+        ReservationSalle.objects
+        .select_related('salle')
+        .filter(
+            salle__type_salle='agapes',
+            statut='validee',
+            date__gte=debut_saison,
+            date__lte=fin_saison,
+        )
+        .order_by('date')
+    )
+
+    # Fusion en liste normalisée
+    lignes = []
+    for t in tenues:
+        lignes.append({
+            'date':         t.date,
+            'organisation': t.loge.nom if t.loge else (t.nom_organisation or t.nom_demandeur),
+            'type':         'Tenue + agapes',
+            'couverts':     t.nombre_repas,
+            'lieu':         str(t.temple),
+            'horaires':     f"{t.heure_debut:%H:%M} – {t.heure_fin:%H:%M}",
+            'commentaire':  t.commentaire,
+        })
+    for b in banquets:
+        lignes.append({
+            'date':         b.date,
+            'organisation': b.organisation or b.nom_demandeur,
+            'type':         'Banquet d\'ordre',
+            'couverts':     b.nombre_participants,
+            'lieu':         str(b.salle),
+            'horaires':     f"{b.heure_debut:%H:%M} – {b.heure_fin:%H:%M}",
+            'commentaire':  b.commentaire,
+        })
+    lignes.sort(key=lambda x: x['date'])
+
+    # Totaux par mois
+    MOIS_ORDRE = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
+    MOIS_NOMS  = {1:'Janvier',2:'Février',3:'Mars',4:'Avril',5:'Mai',6:'Juin',
+                  9:'Septembre',10:'Octobre',11:'Novembre',12:'Décembre'}
+    totaux_mois = {}
+    for m in MOIS_ORDRE:
+        sous_liste = [l for l in lignes if l['date'].month == m]
+        if sous_liste:
+            totaux_mois[m] = {
+                'nom':      MOIS_NOMS[m],
+                'lignes':   sous_liste,
+                'total':    sum(l['couverts'] for l in sous_liste),
+            }
+
+    context = {
+        'lignes':       lignes,
+        'totaux_mois':  totaux_mois,
+        'total_saison': sum(l['couverts'] for l in lignes),
+        'annee':        annee_param,
+        'annees':       list(range(annee_courante - 2, annee_courante + 2)),
+        'saison_label': f"{annee_param}/{annee_param + 1}",
+        'mois_liste':   [(m, MOIS_NOMS[m]) for m in MOIS_ORDRE],
+    }
+    return render(request, 'administration/agapes_traiteur.html', context)
+
+
+@login_required
+def agapes_export_excel(request):
+    """Export Excel de la synthèse agapes/banquets."""
+    today = date.today()
+    annee_courante = today.year if today.month >= 9 else today.year - 1
+    annee_param = int(request.GET.get('annee', annee_courante))
+    debut_saison = date(annee_param, 9, 1)
+    fin_saison   = date(annee_param + 1, 6, 30)
+
+    tenues = (
+        Reservation.objects
+        .select_related('loge', 'temple')
+        .filter(besoin_agapes=True, statut='validee',
+                date__gte=debut_saison, date__lte=fin_saison)
+        .order_by('date')
+    )
+    banquets = (
+        ReservationSalle.objects
+        .select_related('salle')
+        .filter(salle__type_salle='agapes', statut='validee',
+                date__gte=debut_saison, date__lte=fin_saison)
+        .order_by('date')
+    )
+
+    lignes = []
+    for t in tenues:
+        lignes.append((
+            t.date.strftime('%d/%m/%Y'),
+            t.loge.nom if t.loge else (t.nom_organisation or t.nom_demandeur),
+            'Tenue + agapes',
+            t.nombre_repas,
+            str(t.temple),
+            f"{t.heure_debut:%H:%M} – {t.heure_fin:%H:%M}",
+            t.commentaire,
+        ))
+    for b in banquets:
+        lignes.append((
+            b.date.strftime('%d/%m/%Y'),
+            b.organisation or b.nom_demandeur,
+            "Banquet d'ordre",
+            b.nombre_participants,
+            str(b.salle),
+            f"{b.heure_debut:%H:%M} – {b.heure_fin:%H:%M}",
+            b.commentaire,
+        ))
+    lignes.sort(key=lambda x: x[0])
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Agapes {annee_param}-{annee_param + 1}"
+
+    # Styles
+    hf    = Font(bold=True, color="C8A84B")
+    hfill = PatternFill("solid", fgColor="0F2137")
+    ctr   = Alignment(horizontal="center", vertical="center")
+    thin  = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin'),
+    )
+    total_fill = PatternFill("solid", fgColor="F1F5F9")
+    total_font = Font(bold=True)
+
+    headers = ["Date", "Loge / Organisation", "Type", "Couverts", "Lieu", "Horaires", "Commentaire"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = hf; cell.fill = hfill; cell.alignment = ctr; cell.border = thin
+    ws.row_dimensions[1].height = 20
+
+    col_widths = [14, 36, 20, 12, 22, 18, 40]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    MOIS_NOMS = {1:'Janvier',2:'Février',3:'Mars',4:'Avril',5:'Mai',6:'Juin',
+                 9:'Septembre',10:'Octobre',11:'Novembre',12:'Décembre'}
+    MOIS_ORDRE = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
+
+    row_idx = 2
+    for mois in MOIS_ORDRE:
+        mois_lignes = [l for l in lignes if l[0][3:5] == f"{mois:02d}"]
+        if not mois_lignes:
+            continue
+        # Séparateur de mois
+        ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=7)
+        sep = ws.cell(row=row_idx, column=1, value=MOIS_NOMS[mois].upper())
+        sep.font = Font(bold=True, color="0F2137")
+        sep.fill = PatternFill("solid", fgColor="E2E8F0")
+        sep.alignment = ctr; sep.border = thin
+        row_idx += 1
+        # Lignes
+        for l in mois_lignes:
+            for col, val in enumerate(l, 1):
+                c = ws.cell(row=row_idx, column=col, value=val)
+                c.border = thin
+                if col == 4:  # Couverts
+                    c.alignment = ctr
+            row_idx += 1
+        # Total mois
+        total = sum(l[3] for l in mois_lignes)
+        ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=3)
+        ws.cell(row=row_idx, column=1, value=f"Total {MOIS_NOMS[mois]}").font = total_font
+        ws.cell(row=row_idx, column=1).fill = total_fill
+        ws.cell(row=row_idx, column=1).border = thin
+        tc = ws.cell(row=row_idx, column=4, value=total)
+        tc.font = total_font; tc.fill = total_fill
+        tc.alignment = ctr; tc.border = thin
+        for col in range(5, 8):
+            ws.cell(row=row_idx, column=col).fill = total_fill
+            ws.cell(row=row_idx, column=col).border = thin
+        row_idx += 1
+
+    # Total saison
+    total_saison = sum(l[3] for l in lignes)
+    row_idx += 1
+    ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=3)
+    ws.cell(row=row_idx, column=1, value=f"TOTAL SAISON {annee_param}/{annee_param+1}").font = Font(bold=True, color="C8A84B")
+    ws.cell(row=row_idx, column=1).fill = PatternFill("solid", fgColor="0F2137")
+    ws.cell(row=row_idx, column=1).border = thin
+    ts = ws.cell(row=row_idx, column=4, value=total_saison)
+    ts.font = Font(bold=True, color="C8A84B")
+    ts.fill = PatternFill("solid", fgColor="0F2137")
+    ts.alignment = ctr; ts.border = thin
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="agapes_{annee_param}-{annee_param+1}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def agapes_export_pdf(request):
+    """Export PDF de la synthèse agapes/banquets (mensuel ou 7 jours)."""
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+
+    today = date.today()
+    annee_courante = today.year if today.month >= 9 else today.year - 1
+    annee_param = int(request.GET.get('annee', annee_courante))
+    periode = request.GET.get('periode', 'mensuel')
+    mois_param = request.GET.get('mois')
+
+    MOIS_NOMS = {1:'Janvier',2:'Février',3:'Mars',4:'Avril',5:'Mai',6:'Juin',
+                 7:'Juillet',8:'Août',9:'Septembre',10:'Octobre',11:'Novembre',12:'Décembre'}
+    JOURS_FR  = {0:'Lun',1:'Mar',2:'Mer',3:'Jeu',4:'Ven',5:'Sam',6:'Dim'}
+
+    if periode == 'hebdo':
+        date_debut = today
+        date_fin   = today + timedelta(days=6)
+        titre_periode = f"7 prochains jours ({date_debut.strftime('%d/%m')} – {date_fin.strftime('%d/%m/%Y')})"
+        nom_fichier = f"agapes_7jours_{today.strftime('%Y%m%d')}.pdf"
+    else:
+        if mois_param:
+            mois_int = int(mois_param)
+        else:
+            mois_int = today.month
+        annee_mois = annee_param if mois_int >= 9 else annee_param + 1
+        import calendar as _cal
+        dernier_jour = _cal.monthrange(annee_mois, mois_int)[1]
+        date_debut = date(annee_mois, mois_int, 1)
+        date_fin   = date(annee_mois, mois_int, dernier_jour)
+        titre_periode = f"{MOIS_NOMS[mois_int]} {annee_mois}"
+        nom_fichier = f"agapes_{annee_mois}_{mois_int:02d}.pdf"
+
+    # Requêtes
+    tenues = (
+        Reservation.objects
+        .select_related('loge', 'temple')
+        .filter(besoin_agapes=True, statut='validee',
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+    banquets = (
+        ReservationSalle.objects
+        .select_related('salle')
+        .filter(salle__type_salle='agapes', statut='validee',
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+
+    lignes = []
+    for t in tenues:
+        lignes.append({
+            'date':         t.date,
+            'organisation': t.loge.nom if t.loge else (t.nom_organisation or t.nom_demandeur),
+            'type':         'Tenue + agapes',
+            'couverts':     t.nombre_repas,
+            'lieu':         str(t.temple),
+            'horaires':     f"{t.heure_debut:%H:%M}–{t.heure_fin:%H:%M}",
+        })
+    for b in banquets:
+        lignes.append({
+            'date':         b.date,
+            'organisation': b.organisation or b.nom_demandeur,
+            'type':         "Banquet d'ordre",
+            'couverts':     b.nombre_participants,
+            'lieu':         str(b.salle),
+            'horaires':     f"{b.heure_debut:%H:%M}–{b.heure_fin:%H:%M}",
+        })
+    lignes.sort(key=lambda x: x['date'])
+
+    # Couleurs
+    C_NAVY  = colors.HexColor('#0F2137')
+    C_GOLD  = colors.HexColor('#C8A84B')
+    C_LIGHT = colors.HexColor('#F8FAFC')
+    C_TOTAL = colors.HexColor('#E2E8F0')
+
+    # Construction du PDF
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=1.5*cm, rightMargin=1.5*cm,
+        topMargin=1.5*cm, bottomMargin=2*cm,
+    )
+
+    sty_titre = ParagraphStyle('titre', fontSize=16, textColor=C_NAVY,
+                               spaceAfter=4, fontName='Helvetica-Bold')
+    sty_sous  = ParagraphStyle('sous',  fontSize=11, textColor=C_GOLD,
+                               spaceAfter=12, fontName='Helvetica-Bold')
+    sty_pied  = ParagraphStyle('pied',  fontSize=8,  textColor=colors.grey,
+                               alignment=TA_CENTER)
+
+    story = []
+
+    # En-tête
+    story.append(Paragraph("Kellermann — Recapitulatif Agapes", sty_titre))
+    story.append(Paragraph(titre_periode, sty_sous))
+
+    if not lignes:
+        story.append(Paragraph("Aucun evenement sur cette periode.", ParagraphStyle('x', fontSize=10)))
+    else:
+        # Tableau
+        headers = ["Date", "Loge / Organisation", "Type", "Couverts", "Lieu", "Horaires"]
+        col_widths = [2.5*cm, 5.5*cm, 3.2*cm, 2*cm, 3.2*cm, 2.6*cm]
+
+        table_data = [headers]
+        for l in lignes:
+            jour_fr = JOURS_FR.get(l['date'].weekday(), '')
+            table_data.append([
+                f"{jour_fr} {l['date'].strftime('%d/%m/%Y')}",
+                l['organisation'],
+                l['type'],
+                str(l['couverts']),
+                l['lieu'],
+                l['horaires'],
+            ])
+
+        # Ligne total
+        total = sum(l['couverts'] for l in lignes)
+        table_data.append(["", "TOTAL", "", str(total), "", ""])
+
+        tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+        n = len(table_data)
+        style = TableStyle([
+            # En-tête
+            ('BACKGROUND',   (0,0), (-1,0),  C_NAVY),
+            ('TEXTCOLOR',    (0,0), (-1,0),  C_GOLD),
+            ('FONTNAME',     (0,0), (-1,0),  'Helvetica-Bold'),
+            ('FONTSIZE',     (0,0), (-1,0),  8),
+            ('ALIGN',        (0,0), (-1,0),  'CENTER'),
+            ('BOTTOMPADDING',(0,0), (-1,0),  6),
+            ('TOPPADDING',   (0,0), (-1,0),  6),
+            # Corps
+            ('FONTNAME',     (0,1), (-1,n-2), 'Helvetica'),
+            ('FONTSIZE',     (0,1), (-1,n-2), 8),
+            ('ROWBACKGROUNDS',(0,1),(-1,n-2), [colors.white, C_LIGHT]),
+            ('ALIGN',        (3,1), (3,n-2),  'CENTER'),
+            ('FONTNAME',     (3,1), (3,n-2),  'Helvetica-Bold'),
+            # Ligne total
+            ('BACKGROUND',   (0,n-1), (-1,n-1), C_TOTAL),
+            ('FONTNAME',     (0,n-1), (-1,n-1), 'Helvetica-Bold'),
+            ('FONTSIZE',     (0,n-1), (-1,n-1), 9),
+            ('ALIGN',        (1,n-1), (1,n-1),  'RIGHT'),
+            ('ALIGN',        (3,n-1), (3,n-1),  'CENTER'),
+            ('TEXTCOLOR',    (0,n-1), (-1,n-1), C_NAVY),
+            ('TOPPADDING',   (0,n-1), (-1,n-1), 6),
+            ('BOTTOMPADDING',(0,n-1), (-1,n-1), 6),
+            # Bordures
+            ('GRID',         (0,0),  (-1,-1),  0.4, colors.HexColor('#CBD5E1')),
+            ('BOX',          (0,0),  (-1,-1),  1,   C_NAVY),
+        ])
+        tbl.setStyle(style)
+        story.append(tbl)
+        story.append(Spacer(1, 0.5*cm))
+
+    # Pied de page
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Paragraph(
+        f"Document genere le {today.strftime('%d/%m/%Y')} — Temples Kellermann",
+        sty_pied,
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    response = HttpResponse(buf, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}"'
+    return response
+
+
 def _nieme_jour_du_mois(annee, mois, n, jour):
     premier = date(annee, mois, 1)
     dernier = date(annee, mois, calendar.monthrange(annee, mois)[1])

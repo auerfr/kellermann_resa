@@ -51,6 +51,41 @@
     <a href="{% url 'reservations:demande' %}" class="btn btn-sm" style="background:#0F2137;color:white;">+ Temple</a>
     <a href="{% url 'reservations:demande_salle' %}" class="btn btn-sm btn-outline-primary">+ Salle</a>
     <a href="{% url 'reservations:demande_recurrence' %}" class="btn btn-sm btn-outline-secondary" title="Demander une réservation récurrente">+ Récurrence</a>
+    <button class="btn btn-sm btn-outline-danger" onclick="togglePdfPanel()" title="Exporter le planning en PDF">📄 PDF</button>
+  </div>
+</div>
+
+{# Panneau PDF planning #}
+<div id="pdf-panel" class="card border-0 shadow-sm mb-3" style="display:none;">
+  <div class="card-body py-2 px-3">
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <span class="small fw-semibold" style="color:#0F2137;">Planning PDF :</span>
+      <select id="pdf-cal-temple" class="form-select form-select-sm" style="width:auto;">
+        <option value="">Tous les temples</option>
+        {% for temple in temples %}<option value="{{ temple.pk }}">{{ temple }}</option>{% endfor %}
+      </select>
+      <select id="pdf-cal-mois" class="form-select form-select-sm" style="width:auto;">
+        <option value="9">Septembre</option>
+        <option value="10">Octobre</option>
+        <option value="11">Novembre</option>
+        <option value="12">Décembre</option>
+        <option value="1">Janvier</option>
+        <option value="2">Février</option>
+        <option value="3">Mars</option>
+        <option value="4">Avril</option>
+        <option value="5">Mai</option>
+        <option value="6">Juin</option>
+      </select>
+      <select id="pdf-cal-annee" class="form-select form-select-sm" style="width:auto;">
+        {% with y=annee_courante %}
+        <option value="{{ y }}">{{ y }}</option>
+        <option value="{{ y|add:1 }}">{{ y|add:1 }}</option>
+        <option value="{{ y|add:-1 }}">{{ y|add:-1 }}</option>
+        {% endwith %}
+      </select>
+      <button class="btn btn-sm btn-danger" onclick="exportPdfPlanning()">📄 Télécharger</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="togglePdfPanel()">✕</button>
+    </div>
   </div>
 </div>
 
@@ -256,6 +291,18 @@ function closePanel() {
 }
 
 function toggleDispo() { document.getElementById("dispo-panel").classList.toggle("open"); }
+
+function togglePdfPanel() {
+  var p = document.getElementById("pdf-panel");
+  p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+}
+function exportPdfPlanning() {
+  var t = document.getElementById("pdf-cal-temple").value;
+  var m = document.getElementById("pdf-cal-mois").value;
+  var a = document.getElementById("pdf-cal-annee").value;
+  var url = "{% url 'exports:planning_pdf' %}?mois=" + m + "&annee=" + a + (t ? "&temple=" + t : "");
+  window.location = url;
+}
 
 var dispoTypeFilter = 'all';
 var dispoLastResults = null;
