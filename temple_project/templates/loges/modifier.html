@@ -40,16 +40,25 @@
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Rite</label>
-            <select name="rite" class="form-select">
-              <option value="">-- Non renseigne --</option>
-              <option value="reaa" {% if loge.rite == 'reaa' %}selected{% endif %}>REAA -- Rite Ecossais Ancien et Accepte</option>
-              <option value="rer" {% if loge.rite == 'rer' %}selected{% endif %}>RER -- Rite Ecossais Rectifie</option>
-              <option value="rf" {% if loge.rite == 'rf' %}selected{% endif %}>RF -- Rite Francais</option>
-              <option value="rem" {% if loge.rite == 'rem' %}selected{% endif %}>REM -- Rite Ecossais Moderne</option>
-              <option value="dh" {% if loge.rite == 'dh' %}selected{% endif %}>DH -- Droit Humain</option>
-              <option value="mem" {% if loge.rite == 'mem' %}selected{% endif %}>MEM -- Memphis-Misraim</option>
+            <select name="rite" id="rite-select" class="form-select" onchange="toggleRitePrecision()">
+              <option value="">-- Non renseigné --</option>
+              <option value="reaa" {% if loge.rite == 'reaa' %}selected{% endif %}>REAA — Rite Écossais Ancien et Accepté</option>
+              <option value="rer" {% if loge.rite == 'rer' %}selected{% endif %}>RER — Rite Écossais Rectifié</option>
+              <option value="rf" {% if loge.rite == 'rf' %}selected{% endif %}>RF — Rite Français</option>
+              <option value="rem" {% if loge.rite == 'rem' %}selected{% endif %}>REM — Rite Écossais Moderne</option>
+              <option value="dh" {% if loge.rite == 'dh' %}selected{% endif %}>DH — Droit Humain</option>
+              <option value="mem" {% if loge.rite == 'mem' %}selected{% endif %}>MEM — Memphis-Misraïm</option>
+              <option value="rapmm" {% if loge.rite == 'rapmm' %}selected{% endif %}>RAPMM — Rite Ancien et Primitif de Memphis-Misraïm</option>
+              <option value="rmfr" {% if loge.rite == 'rmfr' %}selected{% endif %}>RMFR — Rite Moderne Français</option>
+              <option value="rf_reaa" {% if loge.rite == 'rf_reaa' %}selected{% endif %}>RF/REAA — Rite Français et Écossais</option>
+              <option value="emulation" {% if loge.rite == 'emulation' %}selected{% endif %}>Émulation</option>
+              <option value="marque" {% if loge.rite == 'marque' %}selected{% endif %}>Marque</option>
               <option value="autre" {% if loge.rite == 'autre' %}selected{% endif %}>Autre</option>
             </select>
+            <div id="rite-precision-block" class="mt-2" style="display:{% if loge.rite == 'autre' %}block{% else %}none{% endif %};">
+              <input type="text" name="rite_precision" value="{{ loge.rite_precision }}"
+                     class="form-control" placeholder="Précisez le rite…">
+            </div>
           </div>
           <div class="mb-3">
             <label class="form-label fw-semibold">Email de contact</label>
@@ -74,4 +83,13 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleRitePrecision() {
+  var val = document.getElementById('rite-select').value;
+  document.getElementById('rite-precision-block').style.display = (val === 'autre') ? 'block' : 'none';
+}
+</script>
 {% endblock %}

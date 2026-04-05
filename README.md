@@ -1,25 +1,71 @@
 # ⚒ Kellermann Réservations
 
-Application web de gestion des réservations de temples et cabinets de réflexion.
+Outil de gestion des réservations du Temple Kellermann — loges, cabinets de réflexion, salles de réunion et banquets.
 
 ## Stack technique
-- **Python 3.11+** / **Django 5.0**
-- **SQLite** (développement) → **PostgreSQL** (production)
-- **FullCalendar 6** pour la visualisation
+- **Python 3.13** / **Django 5**
+- **SQLite** (développement et production)
+- **FullCalendar 6** pour la visualisation du calendrier
 - **openpyxl** pour les imports/exports Excel
+- **ReportLab** pour les exports PDF
+- **Select2** sur les dropdowns
 
-## Installation rapide (Windows)
+## Structure du projet
+```
+temple_project/
+  apps/
+    loges/          → Loges & Obédiences
+    reservations/   → Réservations temples, salles, cabinets, banquets, récurrences
+    calendrier/     → Vue calendrier (FullCalendar + API JSON)
+    exports/        → CSV, Excel, PDF, Reporting
+    administration/ → Tableau de bord, validation, import Excel, agapes traiteur
+    auth_custom/    → Authentification visiteur (mot de passe annuel) et admin
+  templates/        → HTML
+  static/           → CSS, JS, images
+```
+
+## URL de production
+**https://kellermanadmin.eu.pythonanywhere.com**
+
+Hébergement : PythonAnywhere (plan gratuit)
+
+## Workflow de déploiement
+
+```bash
+# 1. Développement local
+python manage.py runserver
+
+# 2. Pousser les modifications
+git add .
+git commit -m "Description des changements"
+git push --force origin main
+
+# 3. Sur PythonAnywhere (console Bash)
+cd kellermann_resa
+git fetch origin
+git reset --hard origin/main
+python manage.py migrate
+# Puis : Reload via l'onglet Web
+```
+
+> **Note Proton Drive** : si le dossier `.git` a été supprimé par Proton Drive,
+> relancer avant chaque push :
+> ```bash
+> git init
+> git remote add origin https://github.com/auerfr/kellermann_resa.git
+> git add . && git commit -m "restore" && git push --force origin main
+> ```
+
+## Installation locale (Windows)
 
 ```powershell
-# 1. Cloner le dépôt
 cd "C:\Users\francois-regis.auer\Proton Drive\auer.fr (1)\My files"
 gh repo clone auerfr/kellermann_resa
 cd kellermann_resa
-
-# 2. Lancer l'installation automatique
-.\SETUP_WINDOWS.ps1
-
-# 3. Démarrer le serveur
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py migrate
 python manage.py runserver
 ```
 
@@ -29,16 +75,5 @@ Puis ouvrir : http://127.0.0.1:8000
 - URL : http://127.0.0.1:8000/django-admin/
 - Login : `admin` / Mot de passe : `Admin1234!` **(à changer immédiatement)**
 
-## Structure du projet
-```
-temple_project/
-  apps/
-    loges/          → Loges & Obédiences
-    reservations/   → Modèle de données principal
-    calendrier/     → Vue calendrier (FullCalendar + API JSON)
-    exports/        → CSV, Excel, Reporting
-    administration/ → Tableau de bord, validation, import Excel
-  templates/        → HTML
-  static/           → CSS, JS, images
-  fixtures/         → Données initiales
-```
+## Voir aussi
+- [CHANGELOG.md](CHANGELOG.md) — historique des fonctionnalités

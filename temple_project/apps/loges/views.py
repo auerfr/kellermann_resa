@@ -129,7 +129,8 @@ def modifier_loge(request, pk):
             obd, _ = Obedience.objects.get_or_create(nom=obd_nom)
             loge.obedience = obd
         loge.type_loge = request.POST.get('type_loge', loge.type_loge)
-        loge.rite = request.POST.get('rite', loge.rite)
+        loge.rite           = request.POST.get('rite', loge.rite)
+        loge.rite_precision = request.POST.get('rite_precision', '').strip()
         loge.save()
         messages.success(request, f"Loge {loge.nom} modifiée avec succès.")
         return redirect('loges:detail', pk=loge.pk)

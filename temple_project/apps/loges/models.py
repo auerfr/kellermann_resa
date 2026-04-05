@@ -39,6 +39,7 @@ class Loge(models.Model):
     obedience             = models.ForeignKey(Obedience, on_delete=models.PROTECT, related_name="loges")
     type_loge             = models.CharField(max_length=20, choices=TYPE_CHOICES, default="loge")
     rite                  = models.CharField(max_length=20, choices=RITE_CHOICES, blank=True, default="")
+    rite_precision        = models.CharField(max_length=200, blank=True, default="")
     email                 = models.EmailField(blank=True)
     effectif_total        = models.PositiveIntegerField(default=0)
     effectif_moyen_agapes = models.PositiveIntegerField(default=0)
