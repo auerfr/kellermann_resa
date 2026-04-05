@@ -19,6 +19,7 @@ urlpatterns = [
     path("salles/<int:pk>/modifier/", views.salle_form, name="salle_modifier"),
     path("salles/<int:pk>/supprimer/", views.salle_supprimer, name="salle_supprimer"),
     path("parametres/", views.parametres, name="parametres"),
+    path("parametres/test-smtp/", views.tester_smtp, name="tester_smtp"),
     path("saison/", views.gestion_saison, name="gestion_saison"),
     path("backup/", views.telecharger_backup, name="backup"),
     path("restaurer/", views.restaurer_backup, name="restaurer_backup"),

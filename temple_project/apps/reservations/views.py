@@ -1,8 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
-from django.core.mail import send_mail
-from django.conf import settings
 from django.http import JsonResponse
+from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin
 from django.db.models import Q, Sum
 from .emails import envoyer_email_nouvelle_demande
 from .models import Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence, RegleRecurrence, Temple
@@ -20,7 +19,7 @@ def soumettre_demande(request):
             resa.save()
             form.save_m2m()
             envoyer_email_nouvelle_demande(resa)
-            send_mail(
+            send_mail_kellermann(
                 subject="Confirmation de votre demande de reservation",
                 message=(
                     f"Votre demande pour le {resa.date} a bien ete recue.\n"
@@ -28,9 +27,7 @@ def soumettre_demande(request):
                     f"Vous pouvez suivre votre demande sur : "
                     f"{request.build_absolute_uri('/reservations/suivi/' + str(resa.uuid) + '/')}"
                 ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[resa.email_demandeur],
-                fail_silently=True,
             )
             messages.success(request, "Votre demande a ete soumise avec succes.")
             return redirect("reservations:confirmation", uuid=resa.uuid)
@@ -46,7 +43,7 @@ def soumettre_demande_salle(request):
             resa = form.save(commit=False)
             resa.statut = "attente"
             resa.save()
-            send_mail(
+            send_mail_kellermann(
                 subject="Confirmation de votre demande de salle",
                 message=(
                     f"Votre demande de salle pour le {resa.date} a bien ete recue.\n"
@@ -55,9 +52,7 @@ def soumettre_demande_salle(request):
                     f"Vous pouvez suivre votre demande sur : "
                     f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(resa.uuid) + '/')}"
                 ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[resa.email_demandeur],
-                fail_silently=True,
             )
             messages.success(request, "Votre demande de salle a ete soumise avec succes.")
             return redirect("reservations:confirmation_salle", uuid=resa.uuid)
@@ -159,7 +154,7 @@ def demande_cabinets(request):
                 reservations_creees.append(resa)
 
             # Envoyer un email de confirmation
-            send_mail(
+            send_mail_kellermann(
                 subject="Confirmation de votre demande de cabinets de réflexion",
                 message=(
                     f"Votre demande de {nombre_cabinets_demandes} cabinet(s) de réflexion "
@@ -168,9 +163,7 @@ def demande_cabinets(request):
                     f"Vous pouvez suivre votre demande sur : "
                     f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(reservations_creees[0].uuid) + '/')}"
                 ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[form.cleaned_data['email_demandeur']],
-                fail_silently=True,
             )
 
             messages.success(request, f"Votre demande de {nombre_cabinets_demandes} cabinet(s) a été soumise avec succès.")
@@ -268,7 +261,7 @@ def demande_banquet(request):
             )
 
             # Envoyer un email de confirmation
-            send_mail(
+            send_mail_kellermann(
                 subject="Confirmation de votre demande de banquet d'ordre",
                 message=(
                     f"Votre demande de banquet d'ordre pour le {date} "
@@ -278,9 +271,7 @@ def demande_banquet(request):
                     f"Vous pouvez suivre votre demande sur : "
                     f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(resa.uuid) + '/')}"
                 ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[form.cleaned_data['email_demandeur']],
-                fail_silently=True,
             )
 
             messages.success(request, "Votre demande de banquet d'ordre a été soumise avec succès.")
@@ -307,14 +298,13 @@ def soumettre_demande_recurrence(request):
         ('21:00','21h00'),('22:00','22h00'),('22:30','22h30'),('23:00','23h00'),
     ]
     MOIS = [
-        (1,'Janvier'),(2,'Février'),(3,'Mars'),(4,'Avril'),
-        (5,'Mai'),(6,'Juin'),(7,'Juillet'),(8,'Août'),
         (9,'Septembre'),(10,'Octobre'),(11,'Novembre'),(12,'Décembre'),
+        (1,'Janvier'),(2,'Février'),(3,'Mars'),(4,'Avril'),(5,'Mai'),(6,'Juin'),
     ]
     TRANCHES = [
         ('Matin', '09:00', '12:00'),
         ('Après-midi', '14:00', '17:00'),
-        ('Soir', '19:00', '22:30'),
+        ('Soir', '19:30', '22:30'),
         ('Journée complète', '09:00', '17:00'),
     ]
 
@@ -335,7 +325,7 @@ def soumettre_demande_recurrence(request):
                 statut         = 'attente',
             )
             # Email à l'admin
-            send_mail(
+            send_mail_kellermann(
                 subject=f"[Kellermann] Nouvelle demande de règle – {demande.loge}",
                 message=(
                     f"Nouvelle demande de règle de récurrence.\n\n"
@@ -348,12 +338,10 @@ def soumettre_demande_recurrence(request):
                     f"Commentaire : {demande.commentaire}\n\n"
                     f"Connectez-vous pour valider ou refuser cette demande."
                 ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[settings.DEFAULT_FROM_EMAIL],
-                fail_silently=True,
+                recipient_list=[get_email_admin()],
             )
             # Email de confirmation au demandeur
-            send_mail(
+            send_mail_kellermann(
                 subject="[Kellermann] Confirmation de votre demande de récurrence",
                 message=(
                     f"Bonjour {demande.nom_demandeur},\n\n"
@@ -367,9 +355,7 @@ def soumettre_demande_recurrence(request):
                     f"Vous serez informé(e) par email dès qu'elle sera traitée.\n\n"
                     f"Fraternellement,\nL'administration des Temples Kellermann"
                 ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[demande.email_demandeur],
-                fail_silently=True,
             )
             return redirect('reservations:confirmation_recurrence', uuid=demande.uuid)
         except Exception as e:

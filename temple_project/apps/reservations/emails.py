@@ -1,5 +1,4 @@
-from django.core.mail import send_mail
-from django.conf import settings
+from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin
 
 
 def envoyer_email_nouvelle_demande(resa):
@@ -16,6 +15,6 @@ def envoyer_email_nouvelle_demande(resa):
 Connectez-vous pour traiter cette demande.
 """
     try:
-        send_mail(sujet, corps, settings.DEFAULT_FROM_EMAIL, [settings.DEFAULT_FROM_EMAIL], fail_silently=True)
+        send_mail_kellermann(sujet, corps, [get_email_admin()])
     except Exception:
         pass

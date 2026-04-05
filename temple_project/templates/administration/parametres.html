@@ -58,6 +58,17 @@
         <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">Annuler</a>
       </div>
     </form>
+
+    <hr class="my-4">
+    <div class="d-flex align-items-center gap-3">
+      <form method="post" action="{% url 'administration:tester_smtp' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-primary btn-sm">
+          ✉ Tester l'envoi SMTP
+        </button>
+      </form>
+      <span class="text-muted small">Envoie un email de test à <strong>{{ params.email_admin }}</strong></span>
+    </div>
   </div>
 </div>
 

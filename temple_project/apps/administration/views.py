@@ -1,8 +1,8 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.core.mail import send_mail
 from django.conf import settings
+from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin
 from django.http import HttpResponse
 from datetime import date, timedelta
 import calendar
@@ -142,7 +142,7 @@ Details :
     corps += "\nFraternellement,\nL'administration des Temples Kellermann\n"
 
     try:
-        send_mail(sujet, corps, settings.DEFAULT_FROM_EMAIL, [resa.email_demandeur], fail_silently=False)
+        send_mail_kellermann(sujet, corps, [resa.email_demandeur], fail_silently=False)
     except Exception as e:
         print(f"Erreur email decision : {e}")
 
@@ -169,7 +169,7 @@ Details :
     corps += "\nFraternellement,\nL'administration des Temples Kellermann\n"
 
     try:
-        send_mail(sujet, corps, settings.DEFAULT_FROM_EMAIL, [resa.email_demandeur], fail_silently=False)
+        send_mail_kellermann(sujet, corps, [resa.email_demandeur], fail_silently=False)
     except Exception as e:
         print(f"Erreur email decision salle : {e}")
 
@@ -922,9 +922,29 @@ def parametres(request):
         params.smtp_tls = request.POST.get('smtp_tls') == 'on'
         params.save()
         messages.success(request, "Paramètres sauvegardés.")
-        # Mettre à jour settings si nécessaire, mais pour simplifier, on surcharge dans views
         return redirect('administration:parametres')
     return render(request, 'administration/parametres.html', {'params': params})
+
+
+@login_required
+def tester_smtp(request):
+    if request.method != 'POST':
+        return redirect('administration:parametres')
+    dest = get_email_admin()
+    try:
+        send_mail_kellermann(
+            subject="[Kellermann] Test SMTP",
+            message=(
+                "Cet email confirme que la configuration SMTP est fonctionnelle.\n\n"
+                "Si vous recevez ce message, les paramètres SMTP sont correctement configurés."
+            ),
+            recipient_list=[dest],
+            fail_silently=False,
+        )
+        messages.success(request, f"Email de test envoyé avec succès à {dest}.")
+    except Exception as e:
+        messages.error(request, f"Échec de l'envoi : {e}")
+    return redirect('administration:parametres')
 
 
 # ── Gestion des salles ────────────────────────────────────────────────────────
