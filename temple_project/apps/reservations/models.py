@@ -251,7 +251,12 @@ class ReservationSalle(models.Model):
     organisation    = models.CharField(max_length=200, blank=True, help_text="Loge, atelier ou autre")
     objet           = models.CharField(max_length=300, help_text="Objet de la réunion")
     nombre_participants = models.PositiveSmallIntegerField(default=1)
-    nombre_cabinets = models.PositiveSmallIntegerField(default=1, choices=NOMBRE_CABINETS_CHOICES)
+    nombre_cabinets  = models.PositiveSmallIntegerField(default=1, choices=NOMBRE_CABINETS_CHOICES)
+    cabinet_prefere  = models.ForeignKey(
+        SalleReunion, null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='reservations_preferees',
+    )
     commentaire     = models.TextField(blank=True)
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)

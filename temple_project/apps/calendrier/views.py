@@ -56,7 +56,7 @@ def api_evenements(request):
         qs = qs.filter(loge__obedience_id=obd_id)
     if type_filtre in ("reguliere", "exceptionnelle"):
         qs = qs.filter(type_reservation=type_filtre)
-    if type_filtre != "salle":
+    if type_filtre not in ("salle", "cabinet", "banquet"):
         for r in qs:
             color = _couleur_reservation(r)
             events.append({
@@ -85,29 +85,62 @@ def api_evenements(request):
             })
 
     # ── 2. Réservations de salles ─────────────────────────────────────────────
-    if type_filtre in (None, "all", "salle"):
+    if type_filtre not in ("reguliere", "exceptionnelle"):
+        _COULEURS_SALLE = {
+            "cabinet_reflexion": {
+                "validee": {"bg": "#FFF7ED", "border": "#EA580C", "text": "#7C2D12"},
+                "attente": {"bg": "#FEF9C3", "border": "#F59E0B", "text": "#92400E"},
+            },
+            "agapes": {
+                "validee": {"bg": "#FFF1F2", "border": "#BE123C", "text": "#881337"},
+                "attente": {"bg": "#FFE4E6", "border": "#F87171", "text": "#9F1239"},
+            },
+            "reunion": {
+                "validee": {"bg": "#F3E8FF", "border": "#9333EA", "text": "#581C87"},
+                "attente": {"bg": "#F5F3FF", "border": "#A78BFA", "text": "#4C1D95"},
+            },
+        }
         qs_salles = ReservationSalle.objects.select_related("salle").filter(
-            date__gte=start, date__lte=end, statut="validee"
+            date__gte=start, date__lte=end, statut__in=("validee", "attente")
         )
+        if type_filtre == "cabinet":
+            qs_salles = qs_salles.filter(salle__type_salle="cabinet_reflexion")
+        elif type_filtre == "banquet":
+            qs_salles = qs_salles.filter(salle__type_salle="agapes")
+        elif type_filtre == "salle":
+            qs_salles = qs_salles.filter(salle__type_salle="reunion")
         for rs in qs_salles:
+            ts = rs.salle.type_salle
+            couleur = _COULEURS_SALLE.get(ts, _COULEURS_SALLE["reunion"])[rs.statut]
+            org = rs.organisation or rs.nom_demandeur
+            if ts == "cabinet_reflexion":
+                title = f"\U0001f6aa {org} \u2013 Cabinets"
+            elif ts == "agapes":
+                title = f"\U0001f37d {org} \u2013 Banquet"
+            else:
+                title = f"\U0001fa91 {org} \u2013 {rs.salle.nom}"
+            props = {
+                "type":         "salle",
+                "type_salle":   ts,
+                "salle":        str(rs.salle),
+                "objet":        rs.objet,
+                "organisation": rs.organisation,
+                "participants": rs.nombre_participants,
+                "horaires":     f"{rs.heure_debut:%H:%M} \u2013 {rs.heure_fin:%H:%M}",
+                "statut":       rs.statut,
+                "uuid":         str(rs.uuid),
+            }
+            if ts == "cabinet_reflexion":
+                props["nombre_cabinets"] = rs.nombre_cabinets
             events.append({
-                "id":    f"s-{rs.pk}",
-                "title": f"{rs.salle.nom} · {rs.organisation or rs.nom_demandeur}",
-                "start": f"{rs.date}T{rs.heure_debut}",
-                "end":   f"{rs.date}T{rs.heure_fin}",
-                "backgroundColor": "#F3E8FF",
-                "borderColor":     "#9333EA",
-                "textColor":       "#581C87",
-                "extendedProps": {
-                    "type":        "salle",
-                    "salle":       str(rs.salle),
-                    "objet":       rs.objet,
-                    "organisation":rs.organisation,
-                    "participants":rs.nombre_participants,
-                    "horaires":    f"{rs.heure_debut:%H:%M} – {rs.heure_fin:%H:%M}",
-                    "statut":      rs.statut,
-                    "uuid":        str(rs.uuid),
-                },
+                "id":              f"s-{rs.pk}",
+                "title":           title,
+                "start":           f"{rs.date}T{rs.heure_debut}",
+                "end":             f"{rs.date}T{rs.heure_fin}",
+                "backgroundColor": couleur["bg"],
+                "borderColor":     couleur["border"],
+                "textColor":       couleur["text"],
+                "extendedProps":   props,
             })
 
     # ── 3. Indisponibilités ───────────────────────────────────────────────────

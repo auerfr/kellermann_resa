@@ -14,11 +14,31 @@
         <form method="post" id="cabinetsForm" novalidate>
           {% csrf_token %}
 
-          {# Loge + date #}
+          {# Loge / Organisation + date #}
           <div class="row g-3 mb-3">
             <div class="col-md-6">
-              <label class="form-label fw-semibold">Loge</label>
-              {{ form.loge }}
+              <label class="form-label fw-semibold">Votre loge / organisation</label>
+              <div id="loge-select-wrapper">
+                <select id="loge-selector" class="form-select" onchange="logeSelectChange(this)">
+                  <option value="">— Sélectionner une loge —</option>
+                  {% for loge in loges %}
+                  <option value="{{ loge.nom }}">{{ loge }}</option>
+                  {% endfor %}
+                </select>
+                <div class="mt-1">
+                  <a href="#" class="small text-muted" onclick="basculerOrg(true);return false;">
+                    Mon organisation n'est pas dans la liste →
+                  </a>
+                </div>
+              </div>
+              <div id="org-libre-wrapper" style="display:none;">
+                {{ form.organisation }}
+                <div class="mt-1">
+                  <a href="#" class="small text-muted" onclick="basculerOrg(false);return false;">
+                    ← Choisir dans la liste
+                  </a>
+                </div>
+              </div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">Date</label>
@@ -42,8 +62,22 @@
           <div class="mb-3">
             <label class="form-label fw-semibold">Nombre de cabinets souhaités</label>
             {{ form.nombre_cabinets }}
-            <div id="disponibilite-info" class="mt-2 text-muted small">
-              Vérification en cours...
+          </div>
+
+          {# Disponibilité par cabinet #}
+          <div id="cabinets-dispo-block" class="mb-3 p-3 rounded" style="background:#F8FAFC;border:1px solid #E2E8F0;display:none;">
+            <p class="fw-semibold small mb-2" style="color:#0F2137;">Disponibilité des cabinets</p>
+            <div id="cabinets-dispo-list" class="d-flex flex-wrap gap-3"></div>
+          </div>
+
+          {# Préférence de cabinet #}
+          <div id="preference-block" class="mb-3" style="display:none;">
+            <label class="form-label fw-semibold">Préférence de cabinet <span class="text-muted fw-normal">(optionnel)</span></label>
+            <div id="preference-list" class="d-flex flex-wrap gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="cabinet_prefere" value="" id="pref_aucune" checked>
+                <label class="form-check-label" for="pref_aucune">Pas de préférence</label>
+              </div>
             </div>
           </div>
 
@@ -59,16 +93,10 @@
             </div>
           </div>
 
-          {# Organisation + objet #}
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Organisation</label>
-              {{ form.organisation }}
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Objet</label>
-              {{ form.objet }}
-            </div>
+          {# Objet #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Objet</label>
+            {{ form.objet }}
           </div>
 
           {# Commentaire #}
@@ -90,58 +118,142 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('cabinetsForm');
-    const dateInput = form.querySelector('[name="date"]');
-    const heureDebutInput = form.querySelector('[name="heure_debut"]');
-    const heureFinInput = form.querySelector('[name="heure_fin"]');
-    const nombreCabinetsInput = form.querySelector('[name="nombre_cabinets"]');
-    const disponibiliteInfo = document.getElementById('disponibilite-info');
+const CABINETS_LISTE = {{ cabinets_json|safe }};
 
-    function verifierDisponibilite() {
-        const date = dateInput.value;
-        const heureDebut = heureDebutInput.value;
-        const heureFin = heureFinInput.value;
+// ── Toggle loge / saisie libre ─────────────────────────────────────────────
+function logeSelectChange(sel) {
+  var orgInput = document.querySelector('[name="organisation"]');
+  if (sel.value) orgInput.value = sel.value;
+}
 
-        if (!date || !heureDebut || !heureFin) {
-            disponibiliteInfo.textContent = 'Veuillez remplir la date et les horaires.';
-            return;
+function basculerOrg(libre) {
+  var selWrap   = document.getElementById('loge-select-wrapper');
+  var libreWrap = document.getElementById('org-libre-wrapper');
+  var orgInput  = document.querySelector('[name="organisation"]');
+  if (libre) {
+    selWrap.style.display   = 'none';
+    libreWrap.style.display = 'block';
+    orgInput.value = '';
+    if (window.$ && $('#loge-selector').data('select2')) {
+      $('#loge-selector').val(null).trigger('change');
+    } else {
+      document.getElementById('loge-selector').value = '';
+    }
+  } else {
+    selWrap.style.display   = 'block';
+    libreWrap.style.display = 'none';
+    orgInput.value = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const dateInput       = document.querySelector('[name="date"]');
+  const heureDebutInput = document.querySelector('[name="heure_debut"]');
+  const heureFinInput   = document.querySelector('[name="heure_fin"]');
+  const dispoBlock      = document.getElementById('cabinets-dispo-block');
+  const dispoList       = document.getElementById('cabinets-dispo-list');
+  const prefBlock       = document.getElementById('preference-block');
+  const prefList        = document.getElementById('preference-list');
+  const orgInput        = document.querySelector('[name="organisation"]');
+
+  // Restaurer saisie libre si organisation déjà remplie (erreur form)
+  if (orgInput && orgInput.value.trim()) {
+    var sel = document.getElementById('loge-selector');
+    var matched = Array.from(sel.options).some(o => o.value === orgInput.value);
+    if (matched) {
+      sel.value = orgInput.value;
+    } else {
+      basculerOrg(true);
+    }
+  }
+
+  // Select2 sync
+  if (window.$) {
+    $('#loge-selector').on('select2:select', function (e) {
+      document.querySelector('[name="organisation"]').value = e.params.data.id || '';
+    });
+    $('#loge-selector').on('select2:clear', function () {
+      document.querySelector('[name="organisation"]').value = '';
+    });
+  }
+
+  // ── Initialisation préférence depuis le contexte serveur ──────────────────
+  function buildPreferenceRadios(cabinetsLibres) {
+    if (cabinetsLibres.length === 0) {
+      prefBlock.style.display = 'none';
+      return;
+    }
+    prefList.innerHTML = `
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="cabinet_prefere" value="" id="pref_aucune" checked>
+        <label class="form-check-label" for="pref_aucune">Pas de préférence</label>
+      </div>`;
+    cabinetsLibres.forEach(function (c) {
+      const id = 'pref_' + c.pk;
+      prefList.innerHTML += `
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="cabinet_prefere" value="${c.pk}" id="${id}">
+          <label class="form-check-label" for="${id}">${c.nom}</label>
+        </div>`;
+    });
+    prefBlock.style.display = 'block';
+  }
+
+  // ── Disponibilité par cabinet ───────────────────────────────────────────────
+  function verifierDisponibilite() {
+    const date       = dateInput.value;
+    const heureDebut = heureDebutInput.value;
+    const heureFin   = heureFinInput.value;
+
+    if (!date || !heureDebut || !heureFin) {
+      dispoBlock.style.display = 'none';
+      prefBlock.style.display  = 'none';
+      return;
+    }
+
+    fetch(`/reservations/api/cabinets-disponibles/?date=${date}&heure_debut=${heureDebut}&heure_fin=${heureFin}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error || !data.cabinets) {
+          dispoBlock.style.display = 'none';
+          prefBlock.style.display  = 'none';
+          return;
         }
 
-        // Requête AJAX pour vérifier la disponibilité
-        fetch(`/reservations/api/cabinets-disponibles/?date=${date}&heure_debut=${heureDebut}&heure_fin=${heureFin}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    disponibiliteInfo.textContent = 'Erreur lors de la vérification.';
-                    return;
-                }
+        // Fusionner noms réels (contexte serveur) avec disponibilités (API)
+        const dispoMap = {};
+        data.cabinets.forEach(c => { dispoMap[c.pk] = c.libre; });
 
-                const disponibles = data.cabinets_disponibles;
-                const demandes = parseInt(nombreCabinetsInput.value);
+        dispoList.innerHTML = '';
+        CABINETS_LISTE.forEach(function (c) {
+          const libre = dispoMap.hasOwnProperty(c.pk) ? dispoMap[c.pk] : true;
+          const badge = document.createElement('span');
+          badge.className = 'badge rounded-pill px-3 py-2';
+          badge.style.background  = libre ? '#F0FDF4' : '#FFF1F2';
+          badge.style.border      = '1px solid ' + (libre ? '#86EFAC' : '#FECDD3');
+          badge.style.color       = libre ? '#166534' : '#9F1239';
+          badge.style.fontSize    = '13px';
+          badge.textContent       = (libre ? '✅ ' : '🔴 ') + c.nom;
+          dispoList.appendChild(badge);
+        });
+        dispoBlock.style.display = 'block';
 
-                if (disponibles >= demandes) {
-                    disponibiliteInfo.innerHTML = `<span class="text-success">✅ ${disponibles} cabinet(s) disponible(s)</span>`;
-                } else {
-                    disponibiliteInfo.innerHTML = `<span class="text-danger">❌ Seulement ${disponibles} cabinet(s) disponible(s) sur ${demandes} demandé(s)</span>`;
-                }
-            })
-            .catch(error => {
-                console.error('Erreur:', error);
-                disponibiliteInfo.textContent = 'Erreur de vérification.';
-            });
-    }
+        const libres = CABINETS_LISTE.filter(c => dispoMap[c.pk] !== false);
+        buildPreferenceRadios(libres);
+      })
+      .catch(function () {
+        dispoBlock.style.display = 'none';
+        prefBlock.style.display  = 'none';
+      });
+  }
 
-    // Écouteurs d'événements
-    dateInput.addEventListener('change', verifierDisponibilite);
-    heureDebutInput.addEventListener('change', verifierDisponibilite);
-    heureFinInput.addEventListener('change', verifierDisponibilite);
-    nombreCabinetsInput.addEventListener('change', verifierDisponibilite);
+  dateInput.addEventListener('change', verifierDisponibilite);
+  heureDebutInput.addEventListener('change', verifierDisponibilite);
+  heureFinInput.addEventListener('change', verifierDisponibilite);
 
-    // Vérification initiale si les champs sont pré-remplis
-    if (dateInput.value && heureDebutInput.value && heureFinInput.value) {
-        verifierDisponibilite();
-    }
+  if (dateInput.value && heureDebutInput.value && heureFinInput.value) {
+    verifierDisponibilite();
+  }
 });
 </script>
 {% endblock %}

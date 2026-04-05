@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.http import JsonResponse
@@ -37,8 +38,10 @@ def soumettre_demande(request):
 
 
 def soumettre_demande_salle(request):
+    salles_reunion = SalleReunion.objects.filter(type_salle='reunion', actif=True)
     if request.method == "POST":
         form = DemandeReservationSalleForm(request.POST)
+        form.fields['salle'].queryset = salles_reunion
         if form.is_valid():
             resa = form.save(commit=False)
             resa.statut = "attente"
@@ -58,6 +61,7 @@ def soumettre_demande_salle(request):
             return redirect("reservations:confirmation_salle", uuid=resa.uuid)
     else:
         form = DemandeReservationSalleForm()
+        form.fields['salle'].queryset = salles_reunion
     loges = Loge.objects.filter(actif=True).order_by('nom')
     return render(request, "reservations/formulaire_salle.html", {"form": form, "loges": loges})
 
@@ -83,6 +87,15 @@ def suivi_salle(request, uuid):
 
 
 def demande_cabinets(request):
+    _loges = Loge.objects.filter(actif=True).order_by('nom')
+    _cabinets_ctx = lambda: {
+        "loges": _loges,
+        "cabinets_json": json.dumps(
+            list(SalleReunion.objects.filter(
+                type_salle='cabinet_reflexion', actif=True
+            ).order_by('nom').values('pk', 'nom'))
+        ),
+    }
     if request.method == "POST":
         form = DemandeCabinetsForm(request.POST)
         if form.is_valid():
@@ -117,23 +130,45 @@ def demande_cabinets(request):
                     f"Pas assez de cabinets disponibles. {cabinets_disponibles} cabinet(s) disponible(s), "
                     f"{nombre_cabinets_demandes} demandé(s)."
                 )
-                return render(request, "reservations/formulaire_cabinets.html", {"form": form})
+                return render(request, "reservations/formulaire_cabinets.html", {"form": form, **_cabinets_ctx()})
 
-            # Créer les réservations pour chaque cabinet demandé
-            cabinets_libres = SalleReunion.objects.filter(
+            # Récupérer la préférence de cabinet (optionnelle)
+            cabinet_prefere_pk = request.POST.get('cabinet_prefere') or None
+            cabinet_prefere_obj = None
+            if cabinet_prefere_pk:
+                try:
+                    cabinet_prefere_obj = SalleReunion.objects.get(
+                        pk=cabinet_prefere_pk, type_salle='cabinet_reflexion', actif=True
+                    )
+                except SalleReunion.DoesNotExist:
+                    cabinet_prefere_obj = None
+
+            # Construire la liste des cabinets libres en priorisant le cabinet préféré
+            from django.db.models import Case, When, Value, IntegerField as DBIntegerField
+            cabinets_libres_qs = SalleReunion.objects.filter(
                 type_salle='cabinet_reflexion',
-                actif=True
+                actif=True,
             ).exclude(
-                # Exclure les cabinets déjà réservés sur ce créneau
                 Q(reservations__date=date) &
                 Q(reservations__heure_debut__lt=heure_fin) &
                 Q(reservations__heure_fin__gt=heure_debut) &
                 Q(reservations__statut__in=['attente', 'validee'])
-            ).distinct()[:nombre_cabinets_demandes]
+            ).distinct()
+
+            if cabinet_prefere_obj:
+                cabinets_libres_qs = cabinets_libres_qs.annotate(
+                    _prio=Case(
+                        When(pk=cabinet_prefere_obj.pk, then=Value(0)),
+                        default=Value(1),
+                        output_field=DBIntegerField(),
+                    )
+                ).order_by('_prio', 'nom')
+
+            cabinets_libres = list(cabinets_libres_qs[:nombre_cabinets_demandes])
 
             if len(cabinets_libres) < nombre_cabinets_demandes:
                 messages.error(request, "Erreur interne : pas assez de cabinets libres trouvés.")
-                return render(request, "reservations/formulaire_cabinets.html", {"form": form})
+                return render(request, "reservations/formulaire_cabinets.html", {"form": form, **_cabinets_ctx()})
 
             # Créer une réservation par cabinet
             reservations_creees = []
@@ -148,8 +183,9 @@ def demande_cabinets(request):
                     email_demandeur=form.cleaned_data['email_demandeur'],
                     organisation=form.cleaned_data['organisation'],
                     objet=form.cleaned_data['objet'],
-                    nombre_cabinets=1,  # Chaque réservation ne réserve qu'un cabinet
-                    commentaire=form.cleaned_data['commentaire']
+                    nombre_cabinets=1,
+                    cabinet_prefere=cabinet_prefere_obj,
+                    commentaire=form.cleaned_data['commentaire'],
                 )
                 reservations_creees.append(resa)
 
@@ -171,7 +207,7 @@ def demande_cabinets(request):
     else:
         form = DemandeCabinetsForm()
 
-    return render(request, "reservations/formulaire_cabinets.html", {"form": form})
+    return render(request, "reservations/formulaire_cabinets.html", {"form": form, **_cabinets_ctx()})
 
 
 def api_cabinets_disponibles(request):
@@ -187,30 +223,26 @@ def api_cabinets_disponibles(request):
         if not all([date, heure_debut, heure_fin]):
             return JsonResponse({'error': 'Paramètres manquants'}, status=400)
 
-        # Compter les cabinets déjà réservés sur ce créneau
-        from django.db.models import Sum
-        reservations_existantes = ReservationSalle.objects.filter(
-            salle__type_salle='cabinet_reflexion',
-            date=date,
-            heure_debut__lt=heure_fin,
-            heure_fin__gt=heure_debut,
-            statut__in=['attente', 'validee']
-        ).aggregate(
-            total_cabinets=Sum('nombre_cabinets')
-        )['total_cabinets'] or 0
+        cabinets = SalleReunion.objects.filter(
+            type_salle='cabinet_reflexion', actif=True
+        ).order_by('nom')
 
-        # Nombre total de cabinets disponibles
-        total_cabinets_disponibles = SalleReunion.objects.filter(
-            type_salle='cabinet_reflexion',
-            actif=True
-        ).count()
+        result = []
+        for cabinet in cabinets:
+            occupe = ReservationSalle.objects.filter(
+                salle=cabinet,
+                date=date,
+                heure_debut__lt=heure_fin,
+                heure_fin__gt=heure_debut,
+                statut__in=['attente', 'validee'],
+            ).exists()
+            result.append({"pk": cabinet.pk, "nom": cabinet.nom, "libre": not occupe})
 
-        cabinets_disponibles = total_cabinets_disponibles - reservations_existantes
-
+        disponibles = sum(1 for c in result if c["libre"])
         return JsonResponse({
-            'cabinets_disponibles': max(0, cabinets_disponibles),
-            'total_cabinets': total_cabinets_disponibles,
-            'cabinets_reserves': reservations_existantes
+            "total": len(result),
+            "disponibles": disponibles,
+            "cabinets": result,
         })
 
     except Exception as e:

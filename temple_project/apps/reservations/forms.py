@@ -104,6 +104,7 @@ class DemandeCabinetsForm(forms.Form):
     loge = forms.ModelChoiceField(
         queryset=None,  # Sera défini dans __init__
         label="Loge",
+        required=False,
         widget=forms.Select(attrs={"class": "form-select"})
     )
     date = forms.DateField(
