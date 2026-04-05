@@ -274,16 +274,30 @@ def regenerer_intelligent(request):
 
         cree = conflit = 0
         for regle in regles:
-            for d in _calculer_dates_regle(regle, annee):
-                if d.month in [7, 8]:
-                    continue
-                if regle.date_fin and d > regle.date_fin:
-                    continue
-                if regle.date_debut and d < regle.date_debut:
-                    continue
-                if mode == 'remplacer':
-                    Reservation.objects.filter(regle_source=regle, date=d).delete()
-                if Reservation.objects.filter(temple=regle.temple, date=d, statut__in=['validee','attente'], heure_debut__lt=regle.heure_fin, heure_fin__gt=regle.heure_debut).exclude(regle_source=regle).exists():
+            # Saison maçonnique : sept→déc de annee + jan→juin de annee+1
+            dates_saison = [
+                d for d in (
+                    _calculer_dates_regle(regle, annee) +
+                    _calculer_dates_regle(regle, annee + 1)
+                )
+                if d.month not in [7, 8]
+                and not (regle.date_fin and d > regle.date_fin)
+                and not (regle.date_debut and d < regle.date_debut)
+            ]
+
+            if mode == 'remplacer':
+                Reservation.objects.filter(
+                    regle_source=regle,
+                    date__year__in=[annee, annee + 1]
+                ).delete()
+
+            for d in dates_saison:
+                if Reservation.objects.filter(
+                    temple=regle.temple, date=d,
+                    statut__in=['validee', 'attente'],
+                    heure_debut__lt=regle.heure_fin,
+                    heure_fin__gt=regle.heure_debut
+                ).exclude(regle_source=regle).exists():
                     conflit += 1
                     continue
                 if not Reservation.objects.filter(regle_source=regle, date=d).exists():
@@ -300,7 +314,7 @@ def regenerer_intelligent(request):
         if conflit:
             messages.warning(request, f"{cree} tenues créées, {conflit} conflits ignorés.")
         else:
-            messages.success(request, f"{cree} tenues créées pour {annee}.")
+            messages.success(request, f"{cree} tenues créées pour la saison {annee}/{annee + 1}.")
         return redirect('administration:tableau_de_bord')
 
     return render(request, 'administration/regenerer.html', {
@@ -472,7 +486,7 @@ def telecharger_export_excel(request):
         mois_str = ",".join(str(m) for m in reg.mois_actifs) if reg.mois_actifs else ""
         _style_row(ws_r, ri, [
             reg.loge.abreviation, reg.loge.nom,
-            reg.loge.obedience.abreviation if reg.loge.obedience else "",
+            reg.loge.obedience.nom if reg.loge.obedience else "",
             reg.loge.type_loge,
             reg.temple.get_nom_display().replace("Temple ", ""),
             JOURS.get(reg.jour_semaine, ""),
