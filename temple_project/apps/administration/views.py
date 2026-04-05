@@ -452,7 +452,7 @@ def telecharger_export_excel(request):
         fill = None if ri % 2 == 0 else alt
         _style_row(ws_l, ri, [
             loge.abreviation, loge.nom,
-            loge.obedience.abreviation if loge.obedience else "",
+            loge.obedience.nom if loge.obedience else "",
             loge.type_loge, loge.rite or "",
             loge.email or "",
             loge.effectif_total or "", loge.effectif_moyen_agapes or "",
