@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Contact — Kellermann{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="mb-4">
+      <h1 class="h3 mb-1" style="color:#0F2137;">📬 Contact & Accès portail</h1>
+      <p class="text-muted small">Demandez un accès à votre espace loge ou envoyez-nous un message.</p>
+    </div>
+
+    {# Onglets #}
+    <ul class="nav nav-tabs mb-4" id="contactTabs">
+      <li class="nav-item">
+        <button class="nav-link {% if onglet == 'acces' %}active{% endif %}"
+          id="tab-acces" data-bs-toggle="tab" data-bs-target="#pane-acces" type="button">
+          🔑 Demande d'accès portail
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link {% if onglet == 'message' %}active{% endif %}"
+          id="tab-message" data-bs-toggle="tab" data-bs-target="#pane-message" type="button">
+          ✉️ Message libre
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+
+      {# Onglet accès portail #}
+      <div class="tab-pane fade {% if onglet == 'acces' %}show active{% endif %}" id="pane-acces">
+        <div class="card shadow-sm border-0">
+          <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+            Demande d'accès à l'espace loge
+          </div>
+          <div class="card-body p-4">
+            <p class="text-muted small mb-4">
+              Remplissez ce formulaire pour obtenir un lien d'accès à l'espace de votre loge.
+              Un administrateur validera votre demande et vous enverra le lien par email.
+            </p>
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="onglet" value="acces">
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Votre loge</label>
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="radio" name="loge_mode" id="mode_liste" value="liste" checked
+                    onchange="toggleLogeMode()">
+                  <label class="form-check-label" for="mode_liste">Choisir dans la liste</label>
+                </div>
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="radio" name="loge_mode" id="mode_libre" value="libre"
+                    onchange="toggleLogeMode()">
+                  <label class="form-check-label" for="mode_libre">Saisir le nom manuellement</label>
+                </div>
+                <div id="block_liste" class="mt-2">
+                  <select name="loge" class="form-select select2">
+                    <option value="">— Sélectionner une loge —</option>
+                    {% for loge in loges %}
+                    <option value="{{ loge.pk }}">{{ loge.abreviation }} — {{ loge.nom }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div id="block_libre" class="mt-2" style="display:none;">
+                  <input type="text" name="nom_loge_libre" class="form-control" placeholder="Nom complet de la loge">
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Nom du Vénérable Maître <span class="text-danger">*</span></label>
+                <input type="text" name="nom_venerable" class="form-control" placeholder="T∴F∴ Jean Dupont" required>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                <input type="email" name="email" class="form-control" placeholder="vm@loge.fr" required>
+                <div class="form-text">Le lien d'accès vous sera envoyé à cette adresse.</div>
+              </div>
+
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Message <span class="text-muted fw-normal">(optionnel)</span></label>
+                <textarea name="message" class="form-control" rows="3"
+                  placeholder="Précisions, contexte de la demande…"></textarea>
+              </div>
+
+              <button type="submit" class="btn px-4 fw-semibold" style="background:#0F2137;color:#C8A84B;">
+                Envoyer la demande →
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {# Onglet message libre #}
+      <div class="tab-pane fade {% if onglet == 'message' %}show active{% endif %}" id="pane-message">
+        <div class="card shadow-sm border-0">
+          <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+            Envoyer un message à l'administration
+          </div>
+          <div class="card-body p-4">
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="onglet" value="message">
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Votre nom <span class="text-danger">*</span></label>
+                <input type="text" name="nom" class="form-control" required>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+                <input type="email" name="email_message" class="form-control" required
+                  value="{% if user.is_staff and user.email %}{{ user.email }}{% endif %}">
+                <div class="form-text">
+                  Votre email est nécessaire pour que nous puissions vous répondre.
+                  Il ne sera pas affiché publiquement.
+                </div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Sujet</label>
+                <input type="text" name="sujet" class="form-control" placeholder="Objet de votre message">
+              </div>
+
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Message <span class="text-danger">*</span></label>
+                <textarea name="message_libre" class="form-control" rows="5" required></textarea>
+              </div>
+
+              <button type="submit" class="btn px-4 fw-semibold" style="background:#0F2137;color:#C8A84B;">
+                Envoyer →
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleLogeMode() {
+  var mode = document.querySelector('input[name="loge_mode"]:checked').value;
+  document.getElementById('block_liste').style.display = (mode === 'liste') ? 'block' : 'none';
+  document.getElementById('block_libre').style.display = (mode === 'libre') ? 'block' : 'none';
+}
+</script>
+{% endblock %}

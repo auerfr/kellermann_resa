@@ -50,6 +50,17 @@ urlpatterns = [
          views.api_verifier_conflit,
          name="api_verifier_conflit"),
 
+    # Portail loge
+    path("contact/",
+         views.contact_portail,
+         name="contact"),
+    path("portail/<uuid:token>/",
+         views.portail_loge,
+         name="portail_loge"),
+    path("contact/confirmation/",
+         views.confirmation_contact,
+         name="confirmation_contact"),
+
     # Demandes de règles de récurrence
     path("recurrence/",
          views.soumettre_demande_recurrence,

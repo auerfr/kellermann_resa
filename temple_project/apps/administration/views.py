@@ -10,7 +10,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from temple_project.apps.reservations.models import (
-    Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle
+    Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle, DemandeAccesPortail
 )
 from temple_project.apps.loges.models import Loge, Obedience
 from .models import Parametres
@@ -25,15 +25,18 @@ def tableau_de_bord(request):
     reservations_salle_attente = ReservationSalle.objects.filter(
         statut='attente'
     ).select_related('salle').order_by('date')
+    demandes_portail_attente = DemandeAccesPortail.objects.filter(statut='attente').order_by('created_at')
     context = {
-        'attente':         reservations_attente,
-        'recentes':        reservations_recentes,
-        'nb_attente':      reservations_attente.count(),
-        'nb_loges':        Loge.objects.count(),
-        'nb_reservations': Reservation.objects.count(),
-        'nb_regles':       RegleRecurrence.objects.filter(actif=True).count(),
-        'attente_salles': reservations_salle_attente,
-        'nb_attente_salles': reservations_salle_attente.count(),
+        'attente':                  reservations_attente,
+        'recentes':                 reservations_recentes,
+        'nb_attente':               reservations_attente.count(),
+        'nb_loges':                 Loge.objects.count(),
+        'nb_reservations':          Reservation.objects.count(),
+        'nb_regles':                RegleRecurrence.objects.filter(actif=True).count(),
+        'attente_salles':           reservations_salle_attente,
+        'nb_attente_salles':        reservations_salle_attente.count(),
+        'demandes_portail':         demandes_portail_attente,
+        'nb_demandes_portail':      demandes_portail_attente.count(),
     }
     return render(request, 'administration/tableau_de_bord.html', context)
 
@@ -175,6 +178,52 @@ Details :
         send_mail_kellermann(sujet, corps, [resa.email_demandeur], fail_silently=False)
     except Exception as e:
         print(f"Erreur email decision : {e}")
+
+
+@login_required
+def valider_acces_portail(request, pk):
+    demande = get_object_or_404(DemandeAccesPortail, pk=pk)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action not in ('valider', 'refuser'):
+            messages.error(request, "Action invalide.")
+            return redirect('administration:tableau_de_bord')
+
+        demande.statut = 'validee' if action == 'valider' else 'refusee'
+        demande.save()
+
+        if action == 'valider':
+            lien = request.build_absolute_uri(f'/reservations/portail/{demande.token}/')
+            send_mail_kellermann(
+                subject="[Kellermann] Votre accès au portail loge a été validé",
+                message=(
+                    f"Bonjour {demande.nom_venerable},\n\n"
+                    f"Votre demande d'accès au portail loge a été validée.\n\n"
+                    f"Vous pouvez accéder à votre espace loge via le lien suivant :\n"
+                    f"{lien}\n\n"
+                    f"Ce lien est personnel — ne le partagez pas.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[demande.email],
+            )
+            messages.success(request, f"Accès validé pour {demande.nom_loge_display()} — lien envoyé à {demande.email}.")
+        else:
+            send_mail_kellermann(
+                subject="[Kellermann] Votre demande d'accès portail",
+                message=(
+                    f"Bonjour {demande.nom_venerable},\n\n"
+                    f"Votre demande d'accès au portail loge n'a pas pu être accordée.\n\n"
+                    f"Pour toute question, contactez l'administration.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[demande.email],
+            )
+            messages.warning(request, f"Demande refusée pour {demande.nom_loge_display()}.")
+
+        return redirect('administration:tableau_de_bord')
+
+    return render(request, 'administration/valider_acces_portail.html', {'demande': demande})
 
 
 def _envoyer_email_decision_salle(resa, action, commentaire_admin=''):

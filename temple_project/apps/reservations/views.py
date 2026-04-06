@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin
 from django.db.models import Q, Sum
 from .emails import envoyer_email_nouvelle_demande
-from .models import Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence, RegleRecurrence, Temple
+from .models import Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence, RegleRecurrence, Temple, DemandeAccesPortail
 from temple_project.apps.loges.models import Loge
 from .forms import DemandeReservationForm, DemandeReservationSalleForm, DemandeCabinetsForm, DemandeBanquetForm
 
@@ -443,4 +443,108 @@ def api_verifier_conflit(request):
     return JsonResponse({
         'conflit': conflit,
         'message': '⚠️ Attention — Ce créneau est déjà occupé sur ce temple. Votre demande sera soumise mais pourrait être refusée.' if conflit else '✅ Ce créneau semble disponible.'
+    })
+
+
+# ── Portail loge ──────────────────────────────────────────────────────────────
+
+def contact_portail(request):
+    loges = Loge.objects.filter(actif=True).order_by('nom')
+
+    if request.method == 'POST':
+        onglet = request.POST.get('onglet', 'acces')
+
+        if onglet == 'acces':
+            loge_id        = request.POST.get('loge') or None
+            nom_loge_libre = request.POST.get('nom_loge_libre', '').strip()
+            nom_venerable  = request.POST.get('nom_venerable', '').strip()
+            email          = request.POST.get('email', '').strip()
+            message        = request.POST.get('message', '').strip()
+
+            if not nom_venerable or not email:
+                messages.error(request, "Le nom du Vénérable et l'email sont obligatoires.")
+                return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': 'acces'})
+
+            loge_obj = None
+            if loge_id:
+                try:
+                    loge_obj = Loge.objects.get(pk=loge_id)
+                except Loge.DoesNotExist:
+                    pass
+
+            if not loge_obj and not nom_loge_libre:
+                messages.error(request, "Veuillez sélectionner une loge ou saisir son nom.")
+                return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': 'acces'})
+
+            demande = DemandeAccesPortail.objects.create(
+                loge=loge_obj,
+                nom_loge_libre=nom_loge_libre if not loge_obj else '',
+                nom_venerable=nom_venerable,
+                email=email,
+                message=message,
+            )
+
+            # Email à l'admin
+            nom_loge_display = loge_obj.nom if loge_obj else nom_loge_libre
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande d'accès portail — {nom_loge_display}",
+                message=(
+                    f"Nouvelle demande d'accès au portail loge.\n\n"
+                    f"Loge        : {nom_loge_display}\n"
+                    f"Vénérable   : {nom_venerable}\n"
+                    f"Email       : {email}\n"
+                    f"Message     : {message or '(aucun)'}\n\n"
+                    f"À valider dans le tableau de bord d'administration."
+                ),
+                recipient_list=[get_email_admin()],
+            )
+
+            return redirect('reservations:confirmation_contact')
+
+        else:  # onglet == 'message'
+            nom     = request.POST.get('nom', '').strip()
+            email   = request.POST.get('email_message', '').strip()
+            sujet   = request.POST.get('sujet', '').strip()
+            message = request.POST.get('message_libre', '').strip()
+
+            if not nom or not email or not message:
+                messages.error(request, "Nom, email et message sont obligatoires.")
+                return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': 'message'})
+
+            send_mail_kellermann(
+                subject=f"[Kellermann] Message libre — {sujet or nom}",
+                message=(
+                    f"Message via le formulaire de contact.\n\n"
+                    f"Nom    : {nom}\n"
+                    f"Email  : {email}\n"
+                    f"Sujet  : {sujet or '(non précisé)'}\n\n"
+                    f"Message :\n{message}"
+                ),
+                recipient_list=[get_email_admin()],
+            )
+            return redirect('reservations:confirmation_contact')
+
+    return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': 'acces'})
+
+
+def confirmation_contact(request):
+    return render(request, 'reservations/confirmation_contact.html')
+
+
+def portail_loge(request, token):
+    demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+
+    from datetime import date as date_cls
+    today = date_cls.today()
+
+    reservations = Reservation.objects.filter(
+        loge=demande.loge,
+        date__gte=today,
+        statut='validee',
+    ).select_related('temple').order_by('date') if demande.loge else Reservation.objects.none()
+
+    return render(request, 'reservations/portail_loge.html', {
+        'demande':      demande,
+        'reservations': reservations,
+        'loge':         demande.loge,
     })

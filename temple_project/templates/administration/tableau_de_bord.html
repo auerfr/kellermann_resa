@@ -98,6 +98,39 @@
 </div>
 {% endif %}
 
+{% if demandes_portail %}
+<div class="card shadow-sm mb-4 border-info border-opacity-50">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#EFF6FF;">
+    <h5 class="mb-0" style="color:#1E40AF;">🔑 Demandes d'accès portail ({{ nb_demandes_portail }})</h5>
+    <span class="badge bg-info text-dark">Action requise</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead style="background:#0F2137;">
+        <tr>
+          <th style="color:#C8A84B;font-size:11px;">LOGE</th>
+          <th style="color:#C8A84B;font-size:11px;">VÉNÉRABLE</th>
+          <th style="color:#C8A84B;font-size:11px;">EMAIL</th>
+          <th style="color:#C8A84B;font-size:11px;">REÇU LE</th>
+          <th style="color:#C8A84B;font-size:11px;">ACTION</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in demandes_portail %}
+        <tr>
+          <td class="fw-semibold" style="color:#0F2137;">{{ d.nom_loge_display }}</td>
+          <td class="small">{{ d.nom_venerable }}</td>
+          <td class="small"><a href="mailto:{{ d.email }}">{{ d.email }}</a></td>
+          <td class="small text-muted">{{ d.created_at|date:"d/m à H:i" }}</td>
+          <td><a href="{% url 'administration:valider_acces_portail' d.pk %}" class="btn btn-sm btn-info fw-semibold">Traiter →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {% if attente_salles %}
 <div class="card shadow-sm mb-4 border-warning border-opacity-50">
   <div class="card-header d-flex justify-content-between align-items-center" style="background:#FFFBEB;">

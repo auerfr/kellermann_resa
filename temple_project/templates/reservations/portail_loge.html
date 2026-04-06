@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Portail — {{ demande.nom_loge_display }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+
+    <div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <h1 class="h3 mb-1" style="color:#0F2137;">⚒ Espace loge</h1>
+        <p class="text-muted small mb-0">{{ demande.nom_loge_display }} — T∴F∴ {{ demande.nom_venerable }}</p>
+      </div>
+      <a href="{% url 'reservations:demande' %}" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;">
+        + Nouvelle demande
+      </a>
+    </div>
+
+    {# Réservations à venir #}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+        Prochaines tenues validées
+      </div>
+      {% if reservations %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead style="background:#F8FAFC;">
+            <tr>
+              <th class="text-muted small ps-3">Date</th>
+              <th class="text-muted small">Temple</th>
+              <th class="text-muted small">Horaires</th>
+              <th class="text-muted small">Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in reservations %}
+            <tr>
+              <td class="fw-semibold ps-3" style="color:#0F2137;">{{ r.date|date:"l d F Y" }}</td>
+              <td><span class="badge" style="background:#0F2137;">{{ r.temple }}</span></td>
+              <td class="small">{{ r.heure_debut|time:"H:i" }} – {{ r.heure_fin|time:"H:i" }}</td>
+              <td class="small text-muted">{{ r.get_type_reservation_display }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card-body text-center text-muted py-4">
+        Aucune tenue validée à venir.
+      </div>
+      {% endif %}
+    </div>
+
+    {# Actions #}
+    <div class="card shadow-sm border-0">
+      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+        Faire une demande
+      </div>
+      <div class="card-body p-4">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <a href="{% url 'reservations:demande' %}" class="btn btn-outline-primary w-100 py-3">
+              🏛 Réserver un temple
+            </a>
+          </div>
+          <div class="col-md-4">
+            <a href="{% url 'reservations:demande_recurrence' %}" class="btn btn-outline-secondary w-100 py-3">
+              🔁 Demander une récurrence
+            </a>
+          </div>
+          <div class="col-md-4">
+            <a href="{% url 'reservations:demande_cabinets' %}" class="btn btn-outline-dark w-100 py-3">
+              🚪 Réserver des cabinets
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

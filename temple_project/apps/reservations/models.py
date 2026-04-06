@@ -216,6 +216,36 @@ class Reservation(models.Model):
         return f"{org} – {self.date} {self.heure_debut} ({self.temple})"
 
 
+class DemandeAccesPortail(models.Model):
+    STATUT_CHOICES = [
+        ("attente", "En attente"),
+        ("validee", "Validée"),
+        ("refusee", "Refusée"),
+    ]
+
+    loge             = models.ForeignKey(
+        Loge, null=True, blank=True, on_delete=models.SET_NULL, related_name="demandes_portail"
+    )
+    nom_loge_libre   = models.CharField(max_length=200, blank=True, help_text="Si la loge n'est pas dans la liste")
+    nom_venerable    = models.CharField(max_length=200)
+    email            = models.EmailField()
+    message          = models.TextField(blank=True)
+    statut           = models.CharField(max_length=10, choices=STATUT_CHOICES, default="attente")
+    token            = models.UUIDField(default=uuid.uuid4, unique=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Demande d'accès portail"
+        verbose_name_plural = "Demandes d'accès portail"
+        ordering = ["-created_at"]
+
+    def nom_loge_display(self):
+        return self.loge.nom if self.loge else self.nom_loge_libre
+
+    def __str__(self):
+        return f"{self.nom_loge_display()} — {self.nom_venerable} [{self.get_statut_display()}]"
+
+
 class ReservationSalle(models.Model):
     STATUT_CHOICES = [
         ("attente", "En attente"),

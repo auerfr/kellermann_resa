@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Message envoyé — Kellermann{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6 text-center py-5">
+    <div style="font-size:3rem;" class="mb-3">⚒</div>
+    <h1 class="h3 mb-3" style="color:#0F2137;">Message envoyé</h1>
+    <div style="width:48px;height:3px;background:#C8A84B;margin:0 auto 1.5rem;border-radius:2px;"></div>
+    <p class="text-muted mb-4">
+      Votre message a bien été transmis à l'administration.<br>
+      Si vous avez soumis une demande d'accès portail, vous recevrez un email avec votre lien personnel
+      une fois la demande validée.
+    </p>
+    <a href="/" class="btn px-4 fw-semibold" style="background:#0F2137;color:#C8A84B;">
+      ← Retour à l'accueil
+    </a>
+  </div>
+</div>
+{% endblock %}
