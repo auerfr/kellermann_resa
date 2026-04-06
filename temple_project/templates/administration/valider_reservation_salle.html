@@ -21,9 +21,15 @@
             <td class="fw-semibold">{{ reservation.organisation }}</td>
           </tr>
           <tr>
-            <td class="text-muted ps-4">Salle</td>
+            <td class="text-muted ps-4">{% if is_cabinet %}Cabinet demandé{% else %}Salle{% endif %}</td>
             <td>{{ reservation.salle }}</td>
           </tr>
+          {% if is_cabinet and reservation.cabinet_prefere %}
+          <tr>
+            <td class="text-muted ps-4">Préférence</td>
+            <td>{{ reservation.cabinet_prefere.nom }}</td>
+          </tr>
+          {% endif %}
           <tr>
             <td class="text-muted ps-4">Date</td>
             <td class="fw-semibold">{{ reservation.date|date:"l d F Y" }}</td>
@@ -68,7 +74,7 @@
       </div>
     </div>
 
-    {# Vérification conflits #}
+    {# Vérification conflits (salles non-cabinet uniquement) #}
     {% if conflits %}
     <div class="alert alert-warning mb-4">
       <strong>⚠️ Attention — Conflits détectés</strong>
@@ -88,6 +94,35 @@
       <div class="card-body p-4">
         <form method="post">
           {% csrf_token %}
+
+          {# Sélecteur cabinet (dans le form pour transmission directe) #}
+          {% if is_cabinet %}
+          <div class="mb-4 p-3 rounded" style="background:#f8f9fa;border:1px solid #dee2e6;">
+            <div class="fw-semibold mb-2" style="color:#0F2137;">Disponibilité des cabinets — {{ reservation.date|date:"d/m/Y" }}</div>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              {% for item in cabinets_dispo %}
+              <span class="badge px-3 py-2
+                {% if item.libre %}bg-success{% else %}bg-danger{% endif %}"
+                style="font-size:13px;">
+                {{ item.cabinet.nom }}{% if item.prefere %} ★{% endif %}
+                — {% if item.libre %}Libre{% else %}Occupé{% endif %}
+              </span>
+              {% endfor %}
+            </div>
+            <label class="form-label fw-semibold">Cabinet attribué <span class="text-danger">*</span></label>
+            <select name="cabinet_attribue_id" class="form-select" style="max-width:340px;">
+              <option value="">— Choisir un cabinet —</option>
+              {% for item in cabinets_dispo %}
+              <option value="{{ item.cabinet.pk }}"
+                {% if item.prefere and item.libre %}selected{% elif not item.libre %}disabled{% endif %}>
+                {{ item.cabinet.nom }}{% if item.prefere %} (préféré){% endif %}{% if not item.libre %} — Occupé{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">★ = cabinet préféré du demandeur. Le cabinet préféré est présélectionné s'il est libre.</div>
+          </div>
+          {% endif %}
+
           <div class="mb-4">
             <label class="form-label fw-semibold">Commentaire pour le demandeur <span class="text-muted fw-normal">(optionnel)</span></label>
             <textarea name="commentaire_admin" class="form-control" rows="3"

@@ -82,8 +82,9 @@ def valider_reservation(request, pk):
 @login_required
 def valider_reservation_salle(request, pk):
     resa = get_object_or_404(ReservationSalle, pk=pk)
+    is_cabinet = resa.salle.type_salle == 'cabinet_reflexion'
 
-    # Détection conflits
+    # Détection conflits (non applicable aux cabinets — chacun a sa propre salle)
     conflits = ReservationSalle.objects.filter(
         salle=resa.salle,
         date=resa.date,
@@ -92,6 +93,24 @@ def valider_reservation_salle(request, pk):
         heure_fin__gt=resa.heure_debut,
     ).exclude(pk=pk)
 
+    # Disponibilité des cabinets (en excluant la demande en cours)
+    cabinets_dispo = []
+    if is_cabinet:
+        from temple_project.apps.reservations.models import SalleReunion
+        for cabinet in SalleReunion.objects.filter(type_salle='cabinet_reflexion', actif=True).order_by('nom'):
+            occupe = ReservationSalle.objects.filter(
+                salle=cabinet,
+                date=resa.date,
+                heure_debut__lt=resa.heure_fin,
+                heure_fin__gt=resa.heure_debut,
+                statut__in=['attente', 'validee'],
+            ).exclude(pk=pk).exists()
+            cabinets_dispo.append({
+                'cabinet': cabinet,
+                'libre': not occupe,
+                'prefere': resa.cabinet_prefere_id == cabinet.pk,
+            })
+
     if request.method == 'POST':
         action            = request.POST.get('action')
         commentaire_admin = request.POST.get('commentaire_admin', '').strip()
@@ -99,6 +118,15 @@ def valider_reservation_salle(request, pk):
         if action not in ('valider', 'refuser'):
             messages.error(request, "Action invalide.")
             return redirect('administration:tableau_de_bord')
+
+        if action == 'valider' and is_cabinet:
+            cabinet_attribue_id = request.POST.get('cabinet_attribue_id')
+            if cabinet_attribue_id:
+                from temple_project.apps.reservations.models import SalleReunion
+                try:
+                    resa.salle = SalleReunion.objects.get(pk=cabinet_attribue_id, type_salle='cabinet_reflexion')
+                except SalleReunion.DoesNotExist:
+                    pass
 
         resa.statut = 'validee' if action == 'valider' else 'refusee'
         resa.save()
@@ -113,8 +141,10 @@ def valider_reservation_salle(request, pk):
         return redirect('administration:tableau_de_bord')
 
     return render(request, 'administration/valider_reservation_salle.html', {
-        'reservation': resa,
-        'conflits':    conflits,
+        'reservation':   resa,
+        'conflits':      conflits,
+        'is_cabinet':    is_cabinet,
+        'cabinets_dispo': cabinets_dispo,
     })
 
 
@@ -149,12 +179,40 @@ Details :
 
 def _envoyer_email_decision_salle(resa, action, commentaire_admin=''):
     validee = (action == 'valider')
-    sujet = (
-        f"[Kellermann] Votre demande de salle du {resa.date:%d/%m/%Y} a ete validee"
-        if validee else
-        f"[Kellermann] Votre demande de salle du {resa.date:%d/%m/%Y} n'a pas pu etre accordee"
-    )
-    corps = f"""Bonjour {resa.nom_demandeur},
+    is_cabinet = resa.salle.type_salle == 'cabinet_reflexion'
+
+    if is_cabinet:
+        sujet = (
+            f"[Kellermann] Votre demande de cabinet du {resa.date:%d/%m/%Y} a ete validee"
+            if validee else
+            f"[Kellermann] Votre demande de cabinet du {resa.date:%d/%m/%Y} n'a pas pu etre accordee"
+        )
+        if validee:
+            corps = f"""Bonjour {resa.nom_demandeur},
+
+Votre demande de cabinet de reflexion a ete validee.
+
+Cabinet attribue : {resa.salle.nom}
+Date             : {resa.date:%d/%m/%Y}
+Horaires         : {resa.heure_debut:%H:%M} - {resa.heure_fin:%H:%M}
+Objet            : {resa.objet}
+"""
+        else:
+            corps = f"""Bonjour {resa.nom_demandeur},
+
+Votre demande de cabinet de reflexion du {resa.date:%d/%m/%Y} n'a pas pu etre accordee.
+
+Date     : {resa.date:%d/%m/%Y}
+Horaires : {resa.heure_debut:%H:%M} - {resa.heure_fin:%H:%M}
+Objet    : {resa.objet}
+"""
+    else:
+        sujet = (
+            f"[Kellermann] Votre demande de salle du {resa.date:%d/%m/%Y} a ete validee"
+            if validee else
+            f"[Kellermann] Votre demande de salle du {resa.date:%d/%m/%Y} n'a pas pu etre accordee"
+        )
+        corps = f"""Bonjour {resa.nom_demandeur},
 
 {"Votre demande de reservation de salle a ete validee." if validee else "Votre demande de reservation de salle n'a pas pu etre acceptee."}
 
@@ -164,6 +222,7 @@ Details :
   Horaires  : {resa.heure_debut:%H:%M} - {resa.heure_fin:%H:%M}
   Objet     : {resa.objet}
 """
+
     if commentaire_admin:
         corps += f"\nMessage de l'administrateur :\n{commentaire_admin}\n"
     corps += "\nFraternellement,\nL'administration des Temples Kellermann\n"

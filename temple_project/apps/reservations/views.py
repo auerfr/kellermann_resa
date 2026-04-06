@@ -223,19 +223,24 @@ def api_cabinets_disponibles(request):
         if not all([date, heure_debut, heure_fin]):
             return JsonResponse({'error': 'Paramètres manquants'}, status=400)
 
+        exclude_pk = request.GET.get('exclude_pk')
+
         cabinets = SalleReunion.objects.filter(
             type_salle='cabinet_reflexion', actif=True
         ).order_by('nom')
 
         result = []
         for cabinet in cabinets:
-            occupe = ReservationSalle.objects.filter(
+            qs = ReservationSalle.objects.filter(
                 salle=cabinet,
                 date=date,
                 heure_debut__lt=heure_fin,
                 heure_fin__gt=heure_debut,
                 statut__in=['attente', 'validee'],
-            ).exists()
+            )
+            if exclude_pk:
+                qs = qs.exclude(pk=exclude_pk)
+            occupe = qs.exists()
             result.append({"pk": cabinet.pk, "nom": cabinet.nom, "libre": not occupe})
 
         disponibles = sum(1 for c in result if c["libre"])
