@@ -5,7 +5,10 @@
 <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
   <div>
     <h1 class="h3 mb-1" style="color:#0F2137;">🍽 Agapes & Banquets — {{ saison_label }}</h1>
-    <p class="text-muted small mb-0">{{ lignes|length }} événement(s) · {{ total_saison }} couvert(s) au total</p>
+    <p class="text-muted small mb-0">
+      {{ lignes|length }} événement{{ lignes|length|pluralize }} · {{ total_saison }} couvert{{ total_saison|pluralize }} au total
+      {% if has_estimations %}<span class="text-warning ms-1" title="Certaines valeurs sont estimées">⚠ dont estimations</span>{% endif %}
+    </p>
   </div>
   <div class="d-flex gap-2 flex-wrap align-items-center">
     {# Sélecteur de saison #}
@@ -16,6 +19,15 @@
         {% endfor %}
       </select>
     </form>
+    {# Toggle vue #}
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" id="btn-vue-mois" class="btn btn-outline-secondary active" onclick="setVue('mois')">
+        📅 Par mois
+      </button>
+      <button type="button" id="btn-vue-annuelle" class="btn btn-outline-secondary" onclick="setVue('annuelle')">
+        📋 Annuelle
+      </button>
+    </div>
     {# Export Excel avec filtres #}
     <button class="btn btn-sm btn-outline-success" type="button"
             data-bs-toggle="collapse" data-bs-target="#export-panel">📥 Excel ▾</button>
@@ -68,14 +80,22 @@
 <div class="alert alert-info">Aucune agape ni banquet validé(e) pour la saison {{ saison_label }}.</div>
 {% else %}
 
+{# ── VUE PAR MOIS ─────────────────────────────────────────────────────── #}
+<div id="vue-mois">
 {% for mois, data in totaux_mois.items %}
 <div class="card shadow-sm border-0 mb-4">
   <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;">
     <h6 class="mb-0" style="color:#C8A84B;letter-spacing:.06em;font-size:13px;">{{ data.nom|upper }}</h6>
     <span class="badge" style="background:#C8A84B;color:#0F2137;font-size:12px;">
-      {{ data.total }} couvert{{ data.total|pluralize }}
+      {% if data.lignes %}
+        {{ data.total }} couvert{{ data.total|pluralize }}
+        {% if data.has_estimations %}<span class="ms-1 opacity-75" title="Dont estimations">~</span>{% endif %}
+      {% else %}
+        —
+      {% endif %}
     </span>
   </div>
+  {% if data.lignes %}
   <div class="table-responsive">
     <table class="table table-hover mb-0">
       <thead style="background:#F8FAFC;">
@@ -92,23 +112,22 @@
       <tbody>
         {% for ligne in data.lignes %}
         <tr>
-          <td class="fw-semibold" style="color:#0F2137;white-space:nowrap;">
-            {{ ligne.date|date:"D d/m/Y" }}
-          </td>
+          <td class="fw-semibold" style="color:#0F2137;white-space:nowrap;">{{ ligne.date|date:"D d/m/Y" }}</td>
           <td class="fw-semibold">{{ ligne.organisation }}</td>
           <td>
             {% if ligne.type == "Banquet d'ordre" %}
-            <span class="badge" style="background:#FFF1F2;color:#BE123C;border:1px solid #FECDD3;">
-              🍽 Banquet
-            </span>
+            <span class="badge" style="background:#FFF1F2;color:#BE123C;border:1px solid #FECDD3;">🍽 Banquet</span>
             {% else %}
-            <span class="badge" style="background:#F0FDF4;color:#166534;border:1px solid #86EFAC;">
-              ⚒ Tenue + agapes
-            </span>
+            <span class="badge" style="background:#F0FDF4;color:#166534;border:1px solid #86EFAC;">⚒ Tenue + agapes</span>
             {% endif %}
           </td>
           <td class="text-center fw-bold" style="color:#0F2137;font-size:1.05rem;">
-            {{ ligne.couverts }}
+            {% if ligne.est_estimation %}
+              <span class="text-warning" title="Estimation basée sur l'effectif moyen de la loge">~{{ ligne.couverts }}</span>
+              <br><small class="text-muted fw-normal" style="font-size:10px;">estim.</small>
+            {% else %}
+              {{ ligne.couverts }}
+            {% endif %}
           </td>
           <td class="text-muted small">{{ ligne.lieu }}</td>
           <td class="text-muted small" style="white-space:nowrap;">{{ ligne.horaires }}</td>
@@ -118,31 +137,107 @@
       </tbody>
       <tfoot>
         <tr style="background:#F1F5F9;">
-          <td colspan="3" class="fw-bold text-end pe-3" style="color:#0F2137;">
-            Total {{ data.nom }}
-          </td>
+          <td colspan="3" class="fw-bold text-end pe-3" style="color:#0F2137;">Total {{ data.nom }}</td>
           <td class="text-center fw-bold" style="color:#0F2137;font-size:1.05rem;">
-            {{ data.total }}
+            {{ data.total }}{% if data.has_estimations %}<sup title="Dont estimations" style="color:#D97706;">~</sup>{% endif %}
           </td>
           <td colspan="3"></td>
         </tr>
       </tfoot>
     </table>
   </div>
+  {% else %}
+  <div class="card-body py-2 px-3 text-muted small fst-italic">Aucun événement ce mois.</div>
+  {% endif %}
 </div>
 {% endfor %}
+</div>{# /vue-mois #}
+
+{# ── VUE ANNUELLE ─────────────────────────────────────────────────────── #}
+<div id="vue-annuelle" style="display:none;">
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead style="background:#0F2137;">
+        <tr>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.05em;">DATE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.05em;">LOGE / ORGANISATION</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.05em;">TYPE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.05em;text-align:center;">COUVERTS</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.05em;">LIEU</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.05em;">HORAIRES</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.05em;">COMMENTAIRE</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ligne in lignes %}
+        <tr>
+          <td class="fw-semibold" style="color:#0F2137;white-space:nowrap;">{{ ligne.date|date:"D d/m/Y" }}</td>
+          <td class="fw-semibold">{{ ligne.organisation }}</td>
+          <td>
+            {% if ligne.type == "Banquet d'ordre" %}
+            <span class="badge" style="background:#FFF1F2;color:#BE123C;border:1px solid #FECDD3;">🍽 Banquet</span>
+            {% else %}
+            <span class="badge" style="background:#F0FDF4;color:#166534;border:1px solid #86EFAC;">⚒ Tenue + agapes</span>
+            {% endif %}
+          </td>
+          <td class="text-center fw-bold" style="color:#0F2137;font-size:1.05rem;">
+            {% if ligne.est_estimation %}
+              <span class="text-warning" title="Estimation basée sur l'effectif moyen de la loge">~{{ ligne.couverts }}</span>
+              <br><small class="text-muted fw-normal" style="font-size:10px;">estim.</small>
+            {% else %}
+              {{ ligne.couverts }}
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ ligne.lieu }}</td>
+          <td class="text-muted small" style="white-space:nowrap;">{{ ligne.horaires }}</td>
+          <td class="text-muted small">{{ ligne.commentaire|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>{# /vue-annuelle #}
 
 {# Total saison #}
-<div class="card border-0 shadow-sm" style="background:#0F2137;">
+<div class="card border-0 shadow-sm mt-3" style="background:#0F2137;">
   <div class="card-body py-3 d-flex justify-content-between align-items-center">
     <span class="fw-bold" style="color:#C8A84B;font-size:15px;letter-spacing:.05em;">
       TOTAL SAISON {{ saison_label }}
     </span>
     <span class="fw-bold" style="color:#C8A84B;font-size:1.5rem;">
       {{ total_saison }} couvert{{ total_saison|pluralize }}
+      {% if has_estimations %}<sup style="font-size:0.8rem;" title="Dont estimations">~</sup>{% endif %}
     </span>
   </div>
 </div>
 
 {% endif %}
+
+<script>
+function setVue(mode) {
+  const vueMois     = document.getElementById('vue-mois');
+  const vueAnnuelle = document.getElementById('vue-annuelle');
+  const btnMois     = document.getElementById('btn-vue-mois');
+  const btnAnnuelle = document.getElementById('btn-vue-annuelle');
+  if (mode === 'mois') {
+    vueMois.style.display     = '';
+    vueAnnuelle.style.display = 'none';
+    btnMois.classList.add('active');
+    btnAnnuelle.classList.remove('active');
+  } else {
+    vueMois.style.display     = 'none';
+    vueAnnuelle.style.display = '';
+    btnMois.classList.remove('active');
+    btnAnnuelle.classList.add('active');
+  }
+  localStorage.setItem('agapes_vue', mode);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const saved = localStorage.getItem('agapes_vue');
+  if (saved === 'annuelle') setVue('annuelle');
+});
+</script>
 {% endblock %}

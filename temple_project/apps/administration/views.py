@@ -1127,6 +1127,18 @@ def salle_supprimer(request, pk):
     return render(request, 'administration/salle_supprimer.html', {'salle': salle})
 
 
+def _couverts_admin(t):
+    nombre = getattr(t, 'nombre_repas', 0) or 0
+    if nombre > 0:
+        return (nombre, False)
+    loge = getattr(t, 'loge', None)
+    if loge is not None:
+        effectif = getattr(loge, 'effectif_moyen_agapes', 0) or 0
+        if effectif > 0:
+            return (effectif, True)
+    return (0, False)
+
+
 @login_required
 def agapes_traiteur(request):
     """Vue synthétique agapes + banquets pour le traiteur."""
@@ -1165,49 +1177,53 @@ def agapes_traiteur(request):
     # Fusion en liste normalisée
     lignes = []
     for t in tenues:
+        couverts, est_estim = _couverts_admin(t)
         lignes.append({
-            'date':         t.date,
-            'organisation': t.loge.nom if t.loge else (t.nom_organisation or t.nom_demandeur),
-            'type':         'Tenue + agapes',
-            'couverts':     t.nombre_repas,
-            'lieu':         str(t.temple),
-            'horaires':     f"{t.heure_debut:%H:%M} – {t.heure_fin:%H:%M}",
-            'commentaire':  t.commentaire,
+            'date':           t.date,
+            'organisation':   t.loge.nom if t.loge else (t.nom_organisation or t.nom_demandeur),
+            'type':           'Tenue + agapes',
+            'couverts':       couverts,
+            'est_estimation': est_estim,
+            'lieu':           str(t.temple),
+            'horaires':       f"{t.heure_debut:%H:%M} – {t.heure_fin:%H:%M}",
+            'commentaire':    t.commentaire,
         })
     for b in banquets:
         lignes.append({
-            'date':         b.date,
-            'organisation': b.organisation or b.nom_demandeur,
-            'type':         'Banquet d\'ordre',
-            'couverts':     b.nombre_participants,
-            'lieu':         str(b.salle),
-            'horaires':     f"{b.heure_debut:%H:%M} – {b.heure_fin:%H:%M}",
-            'commentaire':  b.commentaire,
+            'date':           b.date,
+            'organisation':   b.organisation or b.nom_demandeur,
+            'type':           "Banquet d'ordre",
+            'couverts':       b.nombre_participants,
+            'est_estimation': False,
+            'lieu':           str(b.salle),
+            'horaires':       f"{b.heure_debut:%H:%M} – {b.heure_fin:%H:%M}",
+            'commentaire':    b.commentaire,
         })
     lignes.sort(key=lambda x: x['date'])
 
-    # Totaux par mois
+    # Totaux par mois — tous les mois de la saison, même vides
     MOIS_ORDRE = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
     MOIS_NOMS  = {1:'Janvier',2:'Février',3:'Mars',4:'Avril',5:'Mai',6:'Juin',
                   9:'Septembre',10:'Octobre',11:'Novembre',12:'Décembre'}
     totaux_mois = {}
     for m in MOIS_ORDRE:
         sous_liste = [l for l in lignes if l['date'].month == m]
-        if sous_liste:
-            totaux_mois[m] = {
-                'nom':      MOIS_NOMS[m],
-                'lignes':   sous_liste,
-                'total':    sum(l['couverts'] for l in sous_liste),
-            }
+        totaux_mois[m] = {
+            'nom':            MOIS_NOMS[m],
+            'lignes':         sous_liste,
+            'total':          sum(l['couverts'] for l in sous_liste),
+            'has_estimations': any(l['est_estimation'] for l in sous_liste),
+        }
 
     context = {
-        'lignes':       lignes,
-        'totaux_mois':  totaux_mois,
-        'total_saison': sum(l['couverts'] for l in lignes),
-        'annee':        annee_param,
-        'annees':       list(range(annee_courante - 2, annee_courante + 2)),
-        'saison_label': f"{annee_param}/{annee_param + 1}",
-        'mois_liste':   [(m, MOIS_NOMS[m]) for m in MOIS_ORDRE],
+        'lignes':        lignes,
+        'totaux_mois':   totaux_mois,
+        'total_saison':  sum(l['couverts'] for l in lignes),
+        'has_estimations': any(l['est_estimation'] for l in lignes),
+        'annee':         annee_param,
+        'annees':        list(range(annee_courante - 2, annee_courante + 2)),
+        'saison_label':  f"{annee_param}/{annee_param + 1}",
+        'mois_liste':    [(m, MOIS_NOMS[m]) for m in MOIS_ORDRE],
     }
     return render(request, 'administration/agapes_traiteur.html', context)
 
@@ -1253,20 +1269,24 @@ def agapes_export_excel(request):
 
     lignes = []
     for t in tenues:
+        couverts, est_estim = _couverts_admin(t)
+        couverts_affiche = f"~{couverts} (estim.)" if est_estim else couverts
         lignes.append((
-            t.date.strftime('%d/%m/%Y'),
+            t.date,
             t.loge.nom if t.loge else (t.nom_organisation or t.nom_demandeur),
             'Tenue + agapes',
-            t.nombre_repas,
+            couverts_affiche,
+            couverts,
             str(t.temple),
             f"{t.heure_debut:%H:%M} – {t.heure_fin:%H:%M}",
             t.commentaire,
         ))
     for b in banquets:
         lignes.append((
-            b.date.strftime('%d/%m/%Y'),
+            b.date,
             b.organisation or b.nom_demandeur,
             "Banquet d'ordre",
+            b.nombre_participants,
             b.nombre_participants,
             str(b.salle),
             f"{b.heure_debut:%H:%M} – {b.heure_fin:%H:%M}",
@@ -1303,9 +1323,10 @@ def agapes_export_excel(request):
                  9:'Septembre',10:'Octobre',11:'Novembre',12:'Décembre'}
     MOIS_ORDRE = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
 
+    # Tuple layout : (date_obj, organisation, type, couverts_affiche, couverts_num, lieu, horaires, commentaire)
     row_idx = 2
     for mois in MOIS_ORDRE:
-        mois_lignes = [l for l in lignes if l[0][3:5] == f"{mois:02d}"]
+        mois_lignes = [l for l in lignes if l[0].month == mois]
         if not mois_lignes:
             continue
         # Séparateur de mois
@@ -1315,16 +1336,17 @@ def agapes_export_excel(request):
         sep.fill = PatternFill("solid", fgColor="E2E8F0")
         sep.alignment = ctr; sep.border = thin
         row_idx += 1
-        # Lignes
+        # Lignes — 7 colonnes Excel : date, org, type, couverts, lieu, horaires, commentaire
         for l in mois_lignes:
-            for col, val in enumerate(l, 1):
+            excel_row = [l[0].strftime('%d/%m/%Y'), l[1], l[2], l[3], l[5], l[6], l[7]]
+            for col, val in enumerate(excel_row, 1):
                 c = ws.cell(row=row_idx, column=col, value=val)
                 c.border = thin
                 if col == 4:  # Couverts
                     c.alignment = ctr
             row_idx += 1
-        # Total mois
-        total = sum(l[3] for l in mois_lignes)
+        # Total mois (valeur numérique = index 4)
+        total = sum(l[4] for l in mois_lignes)
         ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=3)
         ws.cell(row=row_idx, column=1, value=f"Total {MOIS_NOMS[mois]}").font = total_font
         ws.cell(row=row_idx, column=1).fill = total_fill
@@ -1338,7 +1360,7 @@ def agapes_export_excel(request):
         row_idx += 1
 
     # Total saison
-    total_saison = sum(l[3] for l in lignes)
+    total_saison = sum(l[4] for l in lignes)
     row_idx += 1
     ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=3)
     ws.cell(row=row_idx, column=1, value=f"TOTAL SAISON {annee_param}/{annee_param+1}").font = Font(bold=True, color="C8A84B")
