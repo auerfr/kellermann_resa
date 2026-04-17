@@ -3,8 +3,9 @@ from django.db import models
 
 class Parametres(models.Model):
     mot_de_passe_annuel = models.CharField(max_length=100, default="KELLERMANN2026")
-    email_admin = models.EmailField()
-    email_from = models.EmailField(default="noreply@temple-reservations.fr")
+    email_admin    = models.EmailField()
+    email_traiteur = models.EmailField(blank=True, help_text="Copie automatique pour le traiteur sur agapes/banquets")
+    email_from     = models.EmailField(default="noreply@temple-reservations.fr")
     smtp_host = models.CharField(max_length=255, blank=True)
     smtp_port = models.IntegerField(default=587)
     smtp_user = models.CharField(max_length=255, blank=True)

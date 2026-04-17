@@ -185,13 +185,12 @@ document.addEventListener('DOMContentLoaded', function() {
         fetch(`/reservations/api/verifier-conflit/?temple=${encodeURIComponent(temple)}&date=${encodeURIComponent(date)}&heure_debut=${encodeURIComponent(heureDebut)}&heure_fin=${encodeURIComponent(heureFin)}`)
             .then(response => response.json())
             .then(data => {
+                let alertClass = 'alert-success';
                 if (data.conflit) {
-                    conflitMessage.innerHTML = `<div class="alert alert-warning" role="alert">${data.message}</div>`;
-                    conflitMessage.style.display = 'block';
-                } else {
-                    conflitMessage.innerHTML = `<div class="alert alert-success" role="alert">${data.message}</div>`;
-                    conflitMessage.style.display = 'block';
+                    alertClass = data.niveau === 'erreur' ? 'alert-danger' : 'alert-warning';
                 }
+                conflitMessage.innerHTML = `<div class="alert ${alertClass}" role="alert">${data.message}</div>`;
+                conflitMessage.style.display = 'block';
             })
             .catch(error => {
                 console.error('Erreur lors de la vérification:', error);

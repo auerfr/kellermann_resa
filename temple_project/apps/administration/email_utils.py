@@ -34,6 +34,14 @@ def get_email_admin():
     return settings.DEFAULT_FROM_EMAIL
 
 
+def get_email_traiteur():
+    """Retourne l'email traiteur si configuré, sinon None."""
+    params = _load_params()
+    if params and params.email_traiteur:
+        return params.email_traiteur
+    return None
+
+
 def send_mail_kellermann(subject, message, recipient_list, fail_silently=True, html_message=None):
     """Envoie un email via la configuration SMTP de Parametres."""
     params = _load_params()

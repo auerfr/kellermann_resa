@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Admin — Réservation directe{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="h3 mb-0">➕ Réservation directe</h1>
+            <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-sm btn-outline-secondary">← Tableau de bord</a>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header" style="background:#0F2137;color:white;">
+                <strong>Créer une réservation validée immédiatement</strong>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.type_resa.label }}</label>
+                        {{ form.type_resa }}
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ form.loge.label }}</label>
+                            {{ form.loge }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ form.organisation.label }}</label>
+                            {{ form.organisation }}
+                        </div>
+                    </div>
+
+                    <div id="bloc-temple" class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.temple.label }}</label>
+                        {{ form.temple }}
+                        {% if form.temple.errors %}<div class="text-danger small">{{ form.temple.errors }}</div>{% endif %}
+                    </div>
+
+                    <div id="bloc-salle" class="mb-3" style="display:none;">
+                        <label class="form-label fw-semibold">{{ form.salle.label }}</label>
+                        {{ form.salle }}
+                        {% if form.salle.errors %}<div class="text-danger small">{{ form.salle.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">{{ form.date.label }}</label>
+                            {{ form.date }}
+                            {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">{{ form.heure_debut.label }}</label>
+                            {{ form.heure_debut }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">{{ form.heure_fin.label }}</label>
+                            {{ form.heure_fin }}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.nombre_repas.label }}</label>
+                        {{ form.nombre_repas }}
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ form.nom_demandeur.label }}</label>
+                            {{ form.nom_demandeur }}
+                            {% if form.nom_demandeur.errors %}<div class="text-danger small">{{ form.nom_demandeur.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ form.email_demandeur.label }}</label>
+                            {{ form.email_demandeur }}
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">{{ form.note.label }}</label>
+                        {{ form.note }}
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success">✅ Créer et valider</button>
+                        <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">Annuler</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var sel = document.getElementById('id_type_resa');
+    var blocTemple = document.getElementById('bloc-temple');
+    var blocSalle  = document.getElementById('bloc-salle');
+    function toggle() {
+        if (sel.value === 'temple') {
+            blocTemple.style.display = '';
+            blocSalle.style.display  = 'none';
+        } else {
+            blocTemple.style.display = 'none';
+            blocSalle.style.display  = '';
+        }
+    }
+    sel.addEventListener('change', toggle);
+    toggle();
+})();
+</script>
+{% endblock %}

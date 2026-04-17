@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Traiteur — Bloquer un créneau{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Formulaire -->
+    <div class="col-lg-5">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="h3 mb-0">🔒 Bloquer un créneau</h1>
+            <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-sm btn-outline-secondary">← Retour</a>
+        </div>
+        <div class="card shadow-sm">
+            <div class="card-header" style="background:#7f1d1d;color:white;">
+                <strong>Nouveau blocage</strong>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.motif.label }}</label>
+                        {{ form.motif }}
+                        {% if form.motif.errors %}<div class="text-danger small">{{ form.motif.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">{{ form.date.label }}</label>
+                            {{ form.date }}
+                            {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">{{ form.heure_debut.label }}</label>
+                            {{ form.heure_debut }}
+                            {% if form.heure_debut.errors %}<div class="text-danger small">{{ form.heure_debut.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">{{ form.heure_fin.label }}</label>
+                            {{ form.heure_fin }}
+                            {% if form.heure_fin.errors %}<div class="text-danger small">{{ form.heure_fin.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">{{ form.salles.label }}</label>
+                        <div class="border rounded p-2" style="background:#fafafa;">
+                            {{ form.salles }}
+                        </div>
+                        {% if form.salles.errors %}<div class="text-danger small mt-1">{{ form.salles.errors }}</div>{% endif %}
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <button type="submit" class="btn btn-danger w-100">🔒 Bloquer ce créneau</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Blocages existants -->
+    <div class="col-lg-7">
+        <h2 class="h5 mb-3">Créneaux bloqués à venir</h2>
+        {% if blocages %}
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Horaires</th>
+                                <th>Salle(s)</th>
+                                <th>Motif</th>
+                                <th>Par</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for b in blocages %}
+                            <tr>
+                                <td><strong>{{ b.date|date:"d/m/Y" }}</strong></td>
+                                <td>{{ b.heure_debut|time:"H\hi" }} – {{ b.heure_fin|time:"H\hi" }}</td>
+                                <td>
+                                    {% for s in b.salles.all %}
+                                    <span class="badge" style="background:#3B82F6;">{{ s.nom }}</span>
+                                    {% endfor %}
+                                </td>
+                                <td>{{ b.motif }}</td>
+                                <td style="font-size:0.8rem;">{{ b.created_by.username }}</td>
+                                <td>
+                                    <form method="post" action="{% url 'traiteur:supprimer_blocage' b.pk %}"
+                                          onsubmit="return confirm('Supprimer ce blocage ?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">✕</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-muted">Aucun créneau bloqué à venir.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

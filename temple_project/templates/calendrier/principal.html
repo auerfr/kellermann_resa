@@ -50,6 +50,7 @@
     <button class="btn btn-outline-secondary btn-sm" onclick="toggleDispo()">🔍 Dispo</button>
     <a href="{% url 'reservations:demande' %}" class="btn btn-sm" style="background:#0F2137;color:white;">+ Temple</a>
     <a href="{% url 'reservations:demande_salle' %}" class="btn btn-sm btn-outline-primary">+ Salle</a>
+    <a href="{% url 'reservations:demande_banquet' %}" class="btn btn-sm btn-outline-warning">🍽 + Banquet</a>
     <a href="{% url 'reservations:demande_recurrence' %}" class="btn btn-sm btn-outline-secondary" title="Demander une réservation récurrente">+ Récurrence</a>
     <button class="btn btn-sm btn-outline-danger" onclick="togglePdfPanel()" title="Exporter le planning en PDF">📄 PDF</button>
   </div>

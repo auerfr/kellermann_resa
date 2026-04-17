@@ -295,7 +295,10 @@ def _couleur_reservation(r):
         return {"bg": "#FFFBEB", "border": "#F59E0B", "text": "#92400E"}
     if r.statut == "refusee":
         return {"bg": "#FFF1F2", "border": "#FB7185", "text": "#881337"}
-    # Validée
+    # Validée — Congrès / Session régionale
+    if r.type_reservation == "congres":
+        return {"bg": "#F5F3FF", "border": "#8B5CF6", "text": "#4C1D95"}
+    # Validée — Haut grade
     if r.loge and r.loge.type_loge == "haut_grade":
         return {"bg": "#F0FDF4", "border": "#4ADE80", "text": "#14532D"}
     return {"bg": "#EFF6FF", "border": "#60A5FA", "text": "#1E3A8A"}

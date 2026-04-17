@@ -6,7 +6,7 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "CHANGE-ME-IN-PRODUCTION-USE-ENV-VAR")
-DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
+DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,kellermanadmin.eu.pythonanywhere.com").split(",")
 
 INSTALLED_APPS = [
@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "temple_project.apps.exports.apps.ExportsConfig",
     "temple_project.apps.administration.apps.AdministrationConfig",
     "temple_project.apps.auth_custom.apps.AuthCustomConfig",
+    "temple_project.apps.traiteur.apps.TraiteurConfig",
 ]
 
 MIDDLEWARE = [

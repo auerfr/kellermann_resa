@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.conf import settings
-from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin
+from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin, get_email_traiteur
 from django.http import HttpResponse
 from datetime import date, timedelta
 import calendar
@@ -154,15 +154,15 @@ def valider_reservation_salle(request, pk):
 def _envoyer_email_decision(resa, action, commentaire_admin=''):
     validee = (action == 'valider')
     sujet = (
-        f"[Kellermann] Votre demande du {resa.date:%d/%m/%Y} a ete validee"
+        f"[Kellermann] Votre demande du {resa.date:%d/%m/%Y} a été validée"
         if validee else
-        f"[Kellermann] Votre demande du {resa.date:%d/%m/%Y} n'a pas pu etre accordee"
+        f"[Kellermann] Votre demande du {resa.date:%d/%m/%Y} n'a pas pu être accordée"
     )
     corps = f"""Bonjour {resa.nom_demandeur},
 
-{"Votre demande de reservation a ete validee." if validee else "Votre demande de reservation n'a pas pu etre acceptee."}
+{"Votre demande de réservation a été validée." if validee else "Votre demande de réservation n'a pas pu être acceptée."}
 
-Details :
+Détails :
   Temple    : {resa.temple}
   Date      : {resa.date:%d/%m/%Y}
   Horaires  : {resa.heure_debut:%H:%M} - {resa.heure_fin:%H:%M}
@@ -175,9 +175,15 @@ Details :
     corps += "\nFraternellement,\nL'administration des Temples Kellermann\n"
 
     try:
-        send_mail_kellermann(sujet, corps, [resa.email_demandeur], fail_silently=False)
+        destinataires = [resa.email_demandeur]
+        # CC traiteur si agapes validée
+        if resa.besoin_agapes and action == 'valider':
+            email_t = get_email_traiteur()
+            if email_t:
+                destinataires.append(email_t)
+        send_mail_kellermann(sujet, corps, destinataires, fail_silently=False)
     except Exception as e:
-        print(f"Erreur email decision : {e}")
+        print(f"Erreur email décision : {e}")
 
 
 @login_required
@@ -232,16 +238,16 @@ def _envoyer_email_decision_salle(resa, action, commentaire_admin=''):
 
     if is_cabinet:
         sujet = (
-            f"[Kellermann] Votre demande de cabinet du {resa.date:%d/%m/%Y} a ete validee"
+            f"[Kellermann] Votre demande de cabinet du {resa.date:%d/%m/%Y} a été validée"
             if validee else
-            f"[Kellermann] Votre demande de cabinet du {resa.date:%d/%m/%Y} n'a pas pu etre accordee"
+            f"[Kellermann] Votre demande de cabinet du {resa.date:%d/%m/%Y} n'a pas pu être accordée"
         )
         if validee:
             corps = f"""Bonjour {resa.nom_demandeur},
 
-Votre demande de cabinet de reflexion a ete validee.
+Votre demande de cabinet de réflexion a été validée.
 
-Cabinet attribue : {resa.salle.nom}
+Cabinet attribué : {resa.salle.nom}
 Date             : {resa.date:%d/%m/%Y}
 Horaires         : {resa.heure_debut:%H:%M} - {resa.heure_fin:%H:%M}
 Objet            : {resa.objet}
@@ -249,7 +255,7 @@ Objet            : {resa.objet}
         else:
             corps = f"""Bonjour {resa.nom_demandeur},
 
-Votre demande de cabinet de reflexion du {resa.date:%d/%m/%Y} n'a pas pu etre accordee.
+Votre demande de cabinet de réflexion du {resa.date:%d/%m/%Y} n'a pas pu être accordée.
 
 Date     : {resa.date:%d/%m/%Y}
 Horaires : {resa.heure_debut:%H:%M} - {resa.heure_fin:%H:%M}
@@ -257,15 +263,15 @@ Objet    : {resa.objet}
 """
     else:
         sujet = (
-            f"[Kellermann] Votre demande de salle du {resa.date:%d/%m/%Y} a ete validee"
+            f"[Kellermann] Votre demande de salle du {resa.date:%d/%m/%Y} a été validée"
             if validee else
-            f"[Kellermann] Votre demande de salle du {resa.date:%d/%m/%Y} n'a pas pu etre accordee"
+            f"[Kellermann] Votre demande de salle du {resa.date:%d/%m/%Y} n'a pas pu être accordée"
         )
         corps = f"""Bonjour {resa.nom_demandeur},
 
-{"Votre demande de reservation de salle a ete validee." if validee else "Votre demande de reservation de salle n'a pas pu etre acceptee."}
+{"Votre demande de réservation de salle a été validée." if validee else "Votre demande de réservation de salle n'a pas pu être acceptée."}
 
-Details :
+Détails :
   Salle     : {resa.salle}
   Date      : {resa.date:%d/%m/%Y}
   Horaires  : {resa.heure_debut:%H:%M} - {resa.heure_fin:%H:%M}
@@ -1035,8 +1041,9 @@ def parametres(request):
     params = Parametres.get_instance()
     if request.method == 'POST':
         params.mot_de_passe_annuel = request.POST.get('mot_de_passe_annuel', params.mot_de_passe_annuel)
-        params.email_admin = request.POST.get('email_admin', params.email_admin)
-        params.email_from = request.POST.get('email_from', params.email_from)
+        params.email_admin    = request.POST.get('email_admin',    params.email_admin)
+        params.email_traiteur = request.POST.get('email_traiteur', params.email_traiteur)
+        params.email_from     = request.POST.get('email_from',     params.email_from)
         params.smtp_host = request.POST.get('smtp_host', params.smtp_host)
         params.smtp_port = int(request.POST.get('smtp_port', params.smtp_port))
         params.smtp_user = request.POST.get('smtp_user', params.smtp_user)
@@ -1207,12 +1214,23 @@ def agapes_traiteur(request):
 
 @login_required
 def agapes_export_excel(request):
-    """Export Excel de la synthèse agapes/banquets."""
+    """Export Excel agapes/banquets — période et type filtrables."""
+    from datetime import datetime as dt
     today = date.today()
     annee_courante = today.year if today.month >= 9 else today.year - 1
-    annee_param = int(request.GET.get('annee', annee_courante))
-    debut_saison = date(annee_param, 9, 1)
-    fin_saison   = date(annee_param + 1, 6, 30)
+
+    # Paramètres de filtrage
+    annee_param  = int(request.GET.get('annee', annee_courante))
+    date_debut_s = request.GET.get('date_debut', '')
+    date_fin_s   = request.GET.get('date_fin', '')
+    type_export  = request.GET.get('type_export', 'tout')  # tout | agapes | banquet
+
+    try:
+        debut_saison = dt.strptime(date_debut_s, '%Y-%m-%d').date() if date_debut_s else date(annee_param, 9, 1)
+        fin_saison   = dt.strptime(date_fin_s,   '%Y-%m-%d').date() if date_fin_s   else date(annee_param + 1, 6, 30)
+    except ValueError:
+        debut_saison = date(annee_param, 9, 1)
+        fin_saison   = date(annee_param + 1, 6, 30)
 
     tenues = (
         Reservation.objects
@@ -1228,6 +1246,10 @@ def agapes_export_excel(request):
                 date__gte=debut_saison, date__lte=fin_saison)
         .order_by('date')
     )
+    if type_export == 'agapes':
+        banquets = banquets.none()
+    elif type_export == 'banquet':
+        tenues = tenues.none()
 
     lignes = []
     for t in tenues:
@@ -1330,7 +1352,8 @@ def agapes_export_excel(request):
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    response['Content-Disposition'] = f'attachment; filename="agapes_{annee_param}-{annee_param+1}.xlsx"'
+    periode_label = f"{debut_saison:%d%m%Y}-{fin_saison:%d%m%Y}"
+    response['Content-Disposition'] = f'attachment; filename="agapes_{periode_label}.xlsx"'
     wb.save(response)
     return response
 
@@ -1521,3 +1544,66 @@ def _nieme_jour_du_mois(annee, mois, n, jour):
         delta = (dernier.weekday() - jour) % 7
         cible = dernier - timedelta(days=delta)
         return cible if cible.month == mois else None
+
+
+# ── Réservation directe (admin) ───────────────────────────────────────────────
+
+@login_required
+def reservation_directe(request):
+    """Créer une réservation directement validée (sans workflow de validation)."""
+    from temple_project.apps.traiteur.forms import ReservationDirecteForm
+
+    form = ReservationDirecteForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        cd        = form.cleaned_data
+        type_resa = cd["type_resa"]
+        loge      = cd.get("loge")
+        org       = cd.get("organisation") or ""
+        nom_dem   = cd["nom_demandeur"]
+        email_dem = cd["email_demandeur"]
+        date_r    = cd["date"]
+        hd        = cd["heure_debut"]
+        hf        = cd["heure_fin"]
+        couverts  = cd.get("nombre_repas") or 0
+        note      = cd.get("note") or ""
+
+        if type_resa == "temple":
+            temple = cd["temple"]
+            Reservation.objects.create(
+                loge=loge,
+                nom_organisation=org,
+                temple=temple,
+                type_reservation="exceptionnelle",
+                sous_type="standard",
+                statut="validee",
+                date=date_r,
+                heure_debut=hd,
+                heure_fin=hf,
+                besoin_agapes=couverts > 0,
+                nombre_repas=couverts,
+                nom_demandeur=nom_dem,
+                email_demandeur=email_dem,
+                commentaire=note,
+            )
+            messages.success(request, "Réservation temple créée et validée.")
+        else:
+            salle = cd["salle"]
+            ReservationSalle.objects.create(
+                salle=salle,
+                date=date_r,
+                heure_debut=hd,
+                heure_fin=hf,
+                statut="validee",
+                nom_demandeur=nom_dem,
+                email_demandeur=email_dem,
+                organisation=loge.nom if loge else org,
+                objet="Agapes" if not note else note,
+                nombre_participants=couverts,
+                commentaire=note,
+            )
+            messages.success(request, "Réservation salle créée et validée.")
+
+        return redirect("administration:tableau_de_bord")
+
+    return render(request, "administration/reservation_directe.html", {"form": form})

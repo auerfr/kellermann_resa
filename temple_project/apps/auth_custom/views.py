@@ -76,8 +76,36 @@ def deconnexion(request):
     return response
 
 
+def login_traiteur(request):
+    """Login dédié au groupe Traiteur — distinct du login admin."""
+    if request.user.is_authenticated and (
+        request.user.is_staff
+        or request.user.groups.filter(name="Traiteur").exists()
+    ):
+        return redirect(request.GET.get("next", "/traiteur/"))
+
+    if request.method == "POST":
+        user = authenticate(
+            request,
+            username=request.POST.get("username", ""),
+            password=request.POST.get("password", "")
+        )
+        if user and (user.is_staff or user.groups.filter(name="Traiteur").exists()):
+            login(request, user)
+            return redirect(request.GET.get("next", "/traiteur/"))
+        messages.error(request, "Identifiants incorrects ou accès traiteur non autorisé.")
+
+    return render(request, "auth/login_traiteur.html")
+
+
 def visiteur_context(request):
-    """Context processor — rend visiteur_connecte disponible dans tous les templates."""
+    """Context processor — rend visiteur_connecte et traiteur_connecte disponibles dans tous les templates."""
+    est_traiteur = (
+        request.user.is_authenticated
+        and not request.user.is_staff
+        and request.user.groups.filter(name="Traiteur").exists()
+    )
     return {
-        "visiteur_connecte": request.COOKIES.get("kellermann_membre") == "1"
+        "visiteur_connecte":  request.COOKIES.get("kellermann_membre") == "1",
+        "traiteur_connecte":  est_traiteur,
     }

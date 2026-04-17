@@ -189,7 +189,25 @@
         </button>
         <div class="collapse navbar-collapse" id="navMenu">
             <ul class="navbar-nav me-auto mt-2 mt-lg-0">
-                {% if visiteur_connecte or user.is_staff %}
+                {% if traiteur_connecte %}
+                {# ── Menu Traiteur ── #}
+                <li class="nav-item">
+                    <a class="nav-link" href="/traiteur/">🍽 Tableau de bord</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/traiteur/calendrier/">📅 Calendrier agapes</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/traiteur/planning/">📋 Planning repas</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/traiteur/reserver/">➕ Réserver</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/traiteur/bloquer/">🔒 Bloquer</a>
+                </li>
+                {% elif visiteur_connecte or user.is_staff %}
+                {# ── Menu membre / admin ── #}
                 <li class="nav-item">
                     <a class="nav-link" href="/calendrier/">📅 Calendrier</a>
                 </li>
@@ -204,6 +222,8 @@
                         <li><a class="dropdown-item" href="{% url 'reservations:demande_banquet' %}">🍽 Banquet d'ordre</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="{% url 'reservations:demande_recurrence' %}">🔁 Demander une récurrence</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'traiteur:notification' %}">🔔 Notifier le traiteur</a></li>
                     </ul>
                 </li>
                 <li class="nav-item">
@@ -231,6 +251,17 @@
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="/admin/">Tableau de bord</a></li>
                         <li><a class="dropdown-item" href="/django-admin/">Django Admin</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="/auth/logout/">🚪 Déconnexion</a></li>
+                    </ul>
+                </li>
+                {% elif traiteur_connecte %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        🍽 {{ user.username }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="/traiteur/">Tableau de bord</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="/auth/logout/">🚪 Déconnexion</a></li>
                     </ul>

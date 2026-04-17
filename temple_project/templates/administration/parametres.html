@@ -24,11 +24,18 @@
         </div>
       </div>
       <div class="row g-3 mb-3">
-        <div class="col-md-6">
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Email traiteur
+            <span class="text-muted fw-normal small">(copie agapes/banquets)</span>
+          </label>
+          <input type="email" name="email_traiteur" value="{{ params.email_traiteur }}" class="form-control"
+                 placeholder="Laisser vide si non utilisé">
+        </div>
+        <div class="col-md-4">
           <label class="form-label fw-semibold">Email expéditeur</label>
           <input type="email" name="email_from" value="{{ params.email_from }}" class="form-control">
         </div>
-        <div class="col-md-6">
+        <div class="col-md-4">
           <label class="form-label fw-semibold">SMTP Host</label>
           <input type="text" name="smtp_host" value="{{ params.smtp_host }}" class="form-control">
         </div>

@@ -16,8 +16,9 @@
         {% endfor %}
       </select>
     </form>
-    <a href="{% url 'administration:agapes_export' %}?annee={{ annee }}"
-       class="btn btn-sm btn-outline-success">📥 Excel</a>
+    {# Export Excel avec filtres #}
+    <button class="btn btn-sm btn-outline-success" type="button"
+            data-bs-toggle="collapse" data-bs-target="#export-panel">📥 Excel ▾</button>
     <a href="{% url 'administration:agapes_export_pdf' %}?annee={{ annee }}&periode=hebdo"
        class="btn btn-sm btn-outline-danger">📄 PDF 7 jours</a>
     {# PDF mensuel — sélecteur de mois #}
@@ -33,6 +34,33 @@
       </button>
     </div>
     <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-sm btn-outline-secondary">← Retour</a>
+  </div>
+</div>
+
+{# Panneau export Excel filtrable #}
+<div class="collapse mb-3" id="export-panel">
+  <div class="card border-0 shadow-sm">
+    <div class="card-body py-2 px-3">
+      <form method="get" action="{% url 'administration:agapes_export' %}" class="d-flex flex-wrap gap-2 align-items-end">
+        <div>
+          <label class="form-label form-label-sm mb-1 fw-semibold">Du</label>
+          <input type="date" name="date_debut" class="form-control form-control-sm" style="width:150px;">
+        </div>
+        <div>
+          <label class="form-label form-label-sm mb-1 fw-semibold">Au</label>
+          <input type="date" name="date_fin" class="form-control form-control-sm" style="width:150px;">
+        </div>
+        <div>
+          <label class="form-label form-label-sm mb-1 fw-semibold">Type</label>
+          <select name="type_export" class="form-select form-select-sm" style="width:auto;">
+            <option value="tout">Tout</option>
+            <option value="agapes">Agapes temple uniquement</option>
+            <option value="banquet">Banquets uniquement</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-success btn-sm align-self-end">📥 Télécharger</button>
+      </form>
+    </div>
   </div>
 </div>
 

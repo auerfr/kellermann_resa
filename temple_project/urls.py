@@ -17,4 +17,5 @@ urlpatterns = [
     path("loges/",        include("temple_project.apps.loges.urls")),
     path("exports/",      include("temple_project.apps.exports.urls")),
     path("admin/",        include("temple_project.apps.administration.urls")),
+    path("traiteur/",     include("temple_project.apps.traiteur.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

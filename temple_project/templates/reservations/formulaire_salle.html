@@ -38,6 +38,8 @@
             </div>
           </div>
 
+          <div id="conflit-message" class="mb-3" style="display: none;"></div>
+
           {# Demandeur #}
           <div class="row g-3 mb-3">
             <div class="col-md-6">
@@ -135,6 +137,41 @@ function basculerOrg(libre) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  const conflitMessage = document.getElementById('conflit-message');
+  const salleSelect    = document.querySelector('[name="salle"]');
+  const dateInput      = document.querySelector('[name="date"]');
+  const heureDebutInput = document.querySelector('[name="heure_debut"]');
+  const heureFinInput   = document.querySelector('[name="heure_fin"]');
+
+  function verifierConflitSalle() {
+    const salle     = salleSelect ? salleSelect.value : '';
+    const date      = dateInput.value;
+    const heureDebut = heureDebutInput.value;
+    const heureFin   = heureFinInput.value;
+
+    if (!salle || !date || !heureDebut || !heureFin) {
+      conflitMessage.style.display = 'none';
+      return;
+    }
+
+    fetch(`/reservations/api/verifier-conflit/?salle=${encodeURIComponent(salle)}&date=${encodeURIComponent(date)}&heure_debut=${encodeURIComponent(heureDebut)}&heure_fin=${encodeURIComponent(heureFin)}`)
+      .then(r => r.json())
+      .then(data => {
+        let alertClass = 'alert-success';
+        if (data.conflit) {
+          alertClass = data.niveau === 'erreur' ? 'alert-danger' : 'alert-warning';
+        }
+        conflitMessage.innerHTML = `<div class="alert ${alertClass}" role="alert">${data.message}</div>`;
+        conflitMessage.style.display = 'block';
+      })
+      .catch(() => { conflitMessage.style.display = 'none'; });
+  }
+
+  if (salleSelect) salleSelect.addEventListener('change', verifierConflitSalle);
+  if (dateInput)   dateInput.addEventListener('change', verifierConflitSalle);
+  if (heureDebutInput) heureDebutInput.addEventListener('change', verifierConflitSalle);
+  if (heureFinInput)   heureFinInput.addEventListener('change', verifierConflitSalle);
+
   var orgInput = document.querySelector('[name="organisation"]');
   if (orgInput && orgInput.value.trim()) {
     var sel = document.getElementById('loge-selector');

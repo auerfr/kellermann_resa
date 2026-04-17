@@ -2,7 +2,7 @@ import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.http import JsonResponse
-from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin
+from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin, get_email_traiteur
 from django.db.models import Q, Sum
 from .emails import envoyer_email_nouvelle_demande
 from .models import Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence, RegleRecurrence, Temple, DemandeAccesPortail
@@ -255,18 +255,27 @@ def api_cabinets_disponibles(request):
 
 
 def demande_banquet(request):
-    salle_banquet = SalleReunion.objects.filter(type_salle='agapes', actif=True).first()
-    if not salle_banquet:
+    salle_principale = SalleReunion.objects.filter(type_salle='agapes', actif=True).exclude(nom__icontains='Salle Humide').first()
+    salle_humide = SalleReunion.objects.filter(type_salle='agapes', actif=True, nom__icontains='Salle Humide').first()
+    if not salle_principale:
+        salle_principale = SalleReunion.objects.filter(type_salle='agapes', actif=True).first()
+    if not salle_principale:
         messages.error(request, "Aucune salle de banquet n'est disponible.")
         return redirect('reservations:demande')
 
     if request.method == "POST":
         form = DemandeBanquetForm(request.POST)
         if form.is_valid():
-            # Vérifier la disponibilité de la salle
             date = form.cleaned_data['date']
             heure_debut = form.cleaned_data['heure_debut']
             heure_fin = form.cleaned_data['heure_fin']
+            pref = form.cleaned_data.get('salle_preference', 'oie_grill')
+
+            # Choisir la salle selon la préférence
+            if pref == 'salle_humide' and salle_humide:
+                salle_banquet = salle_humide
+            else:
+                salle_banquet = salle_principale
 
             # Vérifier s'il y a déjà une réservation sur ce créneau
             conflit = ReservationSalle.objects.filter(
@@ -278,8 +287,16 @@ def demande_banquet(request):
             ).exists()
 
             if conflit:
-                messages.error(request, "La salle n'est pas disponible sur ce créneau.")
-                return render(request, "reservations/formulaire_banquet.html", {"form": form})
+                messages.error(request, f"La salle « {salle_banquet.nom} » n'est pas disponible sur ce créneau.")
+                return render(request, "reservations/formulaire_banquet.html", {
+                    "form": form, "salle_humide_dispo": bool(salle_humide),
+                })
+
+            commentaire_complet = form.cleaned_data['commentaire']
+            if pref == 'salle_humide':
+                commentaire_complet = (
+                    "[Préférence : Salle Humide — sous réserve d'accord du traiteur]\n" + commentaire_complet
+                ).strip()
 
             # Créer la réservation
             resa = ReservationSalle.objects.create(
@@ -292,23 +309,29 @@ def demande_banquet(request):
                 email_demandeur=form.cleaned_data['email_demandeur'],
                 organisation=str(form.cleaned_data['loge']),
                 objet="Banquet d'ordre",
-                nombre_participants=form.cleaned_data['nombre_repas'],  # Utiliser nombre_repas pour participants
-                nombre_cabinets=1,  # Pas applicable pour banquet
-                commentaire=form.cleaned_data['commentaire']
+                nombre_participants=form.cleaned_data['nombre_repas'],
+                nombre_cabinets=1,
+                commentaire=commentaire_complet,
             )
 
             # Envoyer un email de confirmation
+            destinataires = [form.cleaned_data['email_demandeur']]
+            email_t = get_email_traiteur()
+            if email_t:
+                destinataires.append(email_t)
             send_mail_kellermann(
                 subject="Confirmation de votre demande de banquet d'ordre",
                 message=(
-                    f"Votre demande de banquet d'ordre pour le {date} "
+                    f"Votre demande de banquet d'ordre pour le {date:%d/%m/%Y} "
                     f"de {heure_debut} à {heure_fin} a bien été reçue.\n"
+                    f"Salle : {salle_banquet.nom}"
+                    + (" (sous réserve d'accord du traiteur)" if pref == 'salle_humide' else "") + "\n"
                     f"Nombre de repas : {form.cleaned_data['nombre_repas']}\n"
                     f"Référence : {resa.uuid}\n"
                     f"Vous pouvez suivre votre demande sur : "
                     f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(resa.uuid) + '/')}"
                 ),
-                recipient_list=[form.cleaned_data['email_demandeur']],
+                recipient_list=destinataires,
             )
 
             messages.success(request, "Votre demande de banquet d'ordre a été soumise avec succès.")
@@ -316,7 +339,9 @@ def demande_banquet(request):
     else:
         form = DemandeBanquetForm()
 
-    return render(request, "reservations/formulaire_banquet.html", {"form": form})
+    return render(request, "reservations/formulaire_banquet.html", {
+        "form": form, "salle_humide_dispo": bool(salle_humide),
+    })
 
 
 def confirmation_banquet(request, uuid):
@@ -421,28 +446,41 @@ def suivi_recurrence(request, uuid):
 
 def api_verifier_conflit(request):
     """API pour vérifier les conflits de réservation en temps réel."""
-    temple = request.GET.get('temple')
     date = request.GET.get('date')
     heure_debut = request.GET.get('heure_debut')
     heure_fin = request.GET.get('heure_fin')
+    temple = request.GET.get('temple')
+    salle = request.GET.get('salle')
 
-    if not all([temple, date, heure_debut, heure_fin]):
+    if not all([date, heure_debut, heure_fin]) or not (temple or salle):
         return JsonResponse({'conflit': False, 'message': ''})
 
-    # Vérifier les conflits
-    conflits = Reservation.objects.filter(
-        temple=temple,
-        date=date,
-        statut__in=['validee', 'attente'],
-    ).filter(
-        Q(heure_debut__lt=heure_fin, heure_fin__gt=heure_debut)
-    ).exclude(statut='refusee')
+    chevauchement = Q(heure_debut__lt=heure_fin, heure_fin__gt=heure_debut)
 
-    conflit = conflits.exists()
+    if temple:
+        base_qs = Reservation.objects.filter(temple=temple, date=date).filter(chevauchement)
+        validees = base_qs.filter(statut='validee').exists()
+        en_attente = base_qs.filter(statut='attente').exists()
+    else:
+        base_qs = ReservationSalle.objects.filter(salle=salle, date=date).filter(chevauchement)
+        validees = base_qs.filter(statut='validee').exists()
+        en_attente = base_qs.filter(statut='attente').exists()
 
+    if validees:
+        return JsonResponse({
+            'conflit': True,
+            'niveau': 'erreur',
+            'message': '🔴 Ce créneau est déjà validé et occupé.',
+        })
+    if en_attente:
+        return JsonResponse({
+            'conflit': True,
+            'niveau': 'avertissement',
+            'message': '⚠️ Une demande est en cours de traitement pour ce créneau — priorité au premier demandeur.',
+        })
     return JsonResponse({
-        'conflit': conflit,
-        'message': '⚠️ Attention — Ce créneau est déjà occupé sur ce temple. Votre demande sera soumise mais pourrait être refusée.' if conflit else '✅ Ce créneau semble disponible.'
+        'conflit': False,
+        'message': '✅ Ce créneau semble disponible.',
     })
 
 

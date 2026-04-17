@@ -6,13 +6,31 @@
 
     <div class="mb-4">
       <h1 class="h3" style="color:#0F2137;">🍽 Demande de banquet d'ordre</h1>
-      <p class="text-muted">Remplissez ce formulaire pour réserver la salle "L'Oie et le Grill" pour un banquet d'ordre. Vous recevrez une confirmation par email.</p>
+      <p class="text-muted">Remplissez ce formulaire pour réserver une salle pour votre banquet d'ordre. Vous recevrez une confirmation par email.</p>
     </div>
 
     <div class="card shadow-sm border-0">
       <div class="card-body p-4">
         <form method="post" novalidate>
           {% csrf_token %}
+
+          {# Salle souhaitée #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Salle souhaitée</label>
+            <div>
+              {% for widget in form.salle_preference %}
+              <div class="form-check form-check-inline">
+                {{ widget.tag }}
+                <label class="form-check-label" for="{{ widget.id_for_label }}">{{ widget.choice_label }}</label>
+              </div>
+              {% endfor %}
+            </div>
+            {% if salle_humide_dispo %}
+            <div id="note-salle-humide" class="form-text text-warning mt-1" style="display:none;">
+              ⚠️ La Salle Humide est disponible sur accord du traiteur uniquement. Votre demande reste soumise à validation.
+            </div>
+            {% endif %}
+          </div>
 
           {# Loge + date #}
           <div class="row g-3 mb-3">
@@ -73,4 +91,18 @@
     </div>
   </div>
 </div>
+{% if salle_humide_dispo %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const note = document.getElementById('note-salle-humide');
+  const radios = document.querySelectorAll('input[name="salle_preference"]');
+  function toggleNote() {
+    const checked = document.querySelector('input[name="salle_preference"]:checked');
+    if (note) note.style.display = (checked && checked.value === 'salle_humide') ? 'block' : 'none';
+  }
+  radios.forEach(r => r.addEventListener('change', toggleNote));
+  toggleNote();
+});
+</script>
+{% endif %}
 {% endblock %}

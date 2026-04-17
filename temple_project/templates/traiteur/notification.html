@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Notifier le traiteur{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="h3 mb-0">🔔 Notifier le traiteur</h1>
+            <a href="/calendrier/" class="btn btn-sm btn-outline-secondary">← Calendrier</a>
+        </div>
+
+        <div class="alert alert-info py-2" style="font-size:0.88rem;">
+            Utilisez ce formulaire pour signaler un changement de nombre de convives
+            (ex : visiteurs supplémentaires, annulations…). Le traiteur sera alerté immédiatement.
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header" style="background:#0F2137;color:white;">
+                <strong>Signalement changement de couverts</strong>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.loge.label }}</label>
+                        {{ form.loge }}
+                        {% if form.loge.errors %}<div class="text-danger small">{{ form.loge.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.date_tenue.label }}</label>
+                        {{ form.date_tenue }}
+                        {% if form.date_tenue.errors %}<div class="text-danger small">{{ form.date_tenue.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.nombre_couverts.label }}</label>
+                        {{ form.nombre_couverts }}
+                        <div class="form-text">Indiquez le nombre <em>total</em> prévu (y compris les visiteurs).</div>
+                        {% if form.nombre_couverts.errors %}<div class="text-danger small">{{ form.nombre_couverts.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.commentaire.label }}</label>
+                        {{ form.commentaire }}
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">{{ form.email_contact.label }}</label>
+                        {{ form.email_contact }}
+                        <div class="form-text">Vous recevrez une confirmation à cette adresse.</div>
+                        {% if form.email_contact.errors %}<div class="text-danger small">{{ form.email_contact.errors }}</div>{% endif %}
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <button type="submit" class="btn btn-warning w-100 fw-semibold">
+                        🔔 Envoyer la notification
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.conf import settings
 from temple_project.apps.loges.models import Loge
 
 
@@ -159,6 +160,7 @@ class Reservation(models.Model):
     TYPE_CHOICES = [
         ("reguliere",     "Régulière"),
         ("exceptionnelle","Exceptionnelle"),
+        ("congres",       "Congrès / Session régionale"),
     ]
     SOUS_TYPE_CHOICES = [
         ("standard", "Standard"),
@@ -298,3 +300,25 @@ class ReservationSalle(models.Model):
 
     def __str__(self):
         return f"{self.salle} – {self.date} {self.heure_debut} ({self.nom_demandeur})"
+
+
+class BlocageCreneaux(models.Model):
+    """Blocage d'un créneau sur une ou plusieurs salles agapes (visible en rouge dans le calendrier)."""
+    date        = models.DateField()
+    heure_debut = models.TimeField()
+    heure_fin   = models.TimeField()
+    salles      = models.ManyToManyField(SalleReunion, blank=True, related_name="blocages")
+    temples     = models.ManyToManyField(Temple, blank=True, related_name="blocages")
+    motif       = models.CharField(max_length=300)
+    created_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="blocages_crees"
+    )
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Blocage de créneau"
+        verbose_name_plural = "Blocages de créneaux"
+        ordering = ["date", "heure_debut"]
+
+    def __str__(self):
+        return f"Blocage {self.date} {self.heure_debut}–{self.heure_fin} : {self.motif}"

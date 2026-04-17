@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Traiteur — Tableau de bord{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <h1 class="h3 mb-0">🍽 Espace Traiteur</h1>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="{% url 'traiteur:reserver' %}" class="btn btn-sm btn-success">➕ Réservation directe</a>
+        <a href="{% url 'traiteur:bloquer' %}" class="btn btn-sm btn-danger">🔒 Bloquer un créneau</a>
+    </div>
+</div>
+
+<!-- Alertes notifications couverts -->
+{% if notifications %}
+<div class="mb-4">
+    {% for notif in notifications %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-start gap-2 mb-2" role="alert">
+        <div>
+            <strong>🔔 Notification couverts</strong> —
+            <strong>{{ notif.loge }}</strong> —
+            Tenue du <strong>{{ notif.date_tenue|date:"d/m/Y" }}</strong> —
+            <strong>{{ notif.nombre_couverts }} couverts</strong>
+            {% if notif.commentaire %}<br><small class="text-muted">{{ notif.commentaire }}</small>{% endif %}
+            <br><small class="text-muted">Reçu {{ notif.created_at|date:"d/m H\hi" }} · Contact : {{ notif.email_contact }}</small>
+        </div>
+        <form method="post" action="{% url 'traiteur:marquer_notification_lue' notif.pk %}" class="flex-shrink-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-dark" title="Marquer comme lue">✓ Lu</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Statistiques rapides -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card text-center border-0 shadow-sm">
+            <div class="card-body py-3">
+                <div style="font-size:1.8rem;font-weight:700;color:#0F2137;">{{ nb_agapes_mois }}</div>
+                <div class="text-muted small">Agapes (30 j.)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center border-0 shadow-sm">
+            <div class="card-body py-3">
+                <div style="font-size:1.8rem;font-weight:700;color:#EF4444;">{{ blocages|length }}</div>
+                <div class="text-muted small">Blocages à venir</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card text-center border-0 shadow-sm {% if nb_notifications %}border-warning{% endif %}">
+            <div class="card-body py-3">
+                <div style="font-size:1.8rem;font-weight:700;color:{% if nb_notifications %}#D97706{% else %}#94A3B8{% endif %};">
+                    {{ nb_notifications }}
+                </div>
+                <div class="text-muted small">Notif. non lues</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Prochaines agapes -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header" style="background:#0F2137;color:white;">
+        <strong>📅 Prochaines agapes (30 jours)</strong>
+    </div>
+    <div class="card-body p-0">
+        {% if prochaines_agapes %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Loge / Organisation</th>
+                        <th>Temple</th>
+                        <th>Horaires</th>
+                        <th class="text-center">Couverts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in prochaines_agapes %}
+                    <tr>
+                        <td data-label="Date"><strong>{{ r.date|date:"D d/m" }}</strong></td>
+                        <td data-label="Loge">{{ r.loge.nom|default:r.nom_organisation|default:r.nom_demandeur }}</td>
+                        <td data-label="Temple">{{ r.temple }}</td>
+                        <td data-label="Horaires">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</td>
+                        <td data-label="Couverts" class="text-center">
+                            {% if r.nombre_repas %}
+                            <span class="badge" style="background:#0F2137;font-size:0.9rem;">{{ r.nombre_repas }}</span>
+                            {% elif r.loge and r.loge.effectif_moyen_agapes %}
+                            <em class="text-muted" title="Estimation effectif moyen">~{{ r.loge.effectif_moyen_agapes }}</em>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted p-3 mb-0">Aucune agapes prévue dans les 30 prochains jours.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Blocages actifs -->
+{% if blocages %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header" style="background:#7f1d1d;color:white;">
+        <strong>🔒 Créneaux bloqués à venir</strong>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr><th>Date</th><th>Horaires</th><th>Salle(s)</th><th>Motif</th></tr>
+                </thead>
+                <tbody>
+                    {% for b in blocages %}
+                    <tr>
+                        <td>{{ b.date|date:"d/m/Y" }}</td>
+                        <td>{{ b.heure_debut|time:"H\hi" }} – {{ b.heure_fin|time:"H\hi" }}</td>
+                        <td>{% for s in b.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+                        <td>{{ b.motif }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'traiteur:calendrier' %}" class="btn btn-outline-secondary">📅 Calendrier complet</a>
+    <a href="{% url 'traiteur:planning' %}" class="btn btn-outline-secondary">📋 Planning mensuel</a>
+</div>
+{% endblock %}

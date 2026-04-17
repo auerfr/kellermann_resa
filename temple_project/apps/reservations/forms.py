@@ -160,10 +160,21 @@ class DemandeCabinetsForm(forms.Form):
 
 
 class DemandeBanquetForm(forms.Form):
+    SALLE_CHOICES = [
+        ("oie_grill", "L'Oie et le Grill"),
+        ("salle_humide", "Salle Humide"),
+    ]
+
     loge = forms.ModelChoiceField(
         queryset=None,  # Sera défini dans __init__
         label="Loge",
         widget=forms.Select(attrs={"class": "form-select"})
+    )
+    salle_preference = forms.ChoiceField(
+        choices=SALLE_CHOICES,
+        label="Salle souhaitée",
+        initial="oie_grill",
+        widget=forms.RadioSelect(),
     )
     date = forms.DateField(
         label="Date",

@@ -27,4 +27,5 @@ urlpatterns = [
     path("backup/", views.telecharger_backup, name="backup"),
     path("restaurer/", views.restaurer_backup, name="restaurer_backup"),
     path("portail/<int:pk>/valider/", views.valider_acces_portail, name="valider_acces_portail"),
+    path("reservation-directe/", views.reservation_directe, name="reservation_directe"),
 ]
