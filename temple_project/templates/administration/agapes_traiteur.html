@@ -123,8 +123,13 @@
           </td>
           <td class="text-center fw-bold" style="color:#0F2137;font-size:1.05rem;">
             {% if ligne.est_estimation %}
-              <span class="text-warning" title="Estimation basée sur l'effectif moyen de la loge">~{{ ligne.couverts }}</span>
-              <br><small class="text-muted fw-normal" style="font-size:10px;">estim.</small>
+              {% if ligne.couverts %}
+                <span class="text-warning" title="Estimation basée sur l'effectif moyen de la loge">~{{ ligne.couverts }}</span>
+                <br><small class="text-muted fw-normal" style="font-size:10px;">estim.</small>
+              {% else %}
+                <span class="text-danger" title="Effectif non renseigné sur la fiche loge">~?</span>
+                <br><small class="text-muted fw-normal" style="font-size:10px;">non renseigné</small>
+              {% endif %}
             {% else %}
               {{ ligne.couverts }}
             {% endif %}
@@ -183,8 +188,13 @@
           </td>
           <td class="text-center fw-bold" style="color:#0F2137;font-size:1.05rem;">
             {% if ligne.est_estimation %}
-              <span class="text-warning" title="Estimation basée sur l'effectif moyen de la loge">~{{ ligne.couverts }}</span>
-              <br><small class="text-muted fw-normal" style="font-size:10px;">estim.</small>
+              {% if ligne.couverts %}
+                <span class="text-warning" title="Estimation basée sur l'effectif moyen de la loge">~{{ ligne.couverts }}</span>
+                <br><small class="text-muted fw-normal" style="font-size:10px;">estim.</small>
+              {% else %}
+                <span class="text-danger" title="Effectif non renseigné sur la fiche loge">~?</span>
+                <br><small class="text-muted fw-normal" style="font-size:10px;">non renseigné</small>
+              {% endif %}
             {% else %}
               {{ ligne.couverts }}
             {% endif %}

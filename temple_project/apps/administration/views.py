@@ -1128,6 +1128,11 @@ def salle_supprimer(request, pk):
 
 
 def _couverts_admin(t):
+    """(valeur_int, est_estimation)
+    est_estimation=True + valeur=0  →  non renseigné (afficher '~?')
+    est_estimation=True + valeur>0  →  estimation via effectif_moyen_agapes
+    est_estimation=False            →  valeur confirmée
+    """
     nombre = getattr(t, 'nombre_repas', 0) or 0
     if nombre > 0:
         return (nombre, False)
@@ -1136,7 +1141,8 @@ def _couverts_admin(t):
         effectif = getattr(loge, 'effectif_moyen_agapes', 0) or 0
         if effectif > 0:
             return (effectif, True)
-    return (0, False)
+    # Aucune donnée disponible — signalé comme estimation inconnue
+    return (0, True)
 
 
 @login_required
@@ -1221,7 +1227,7 @@ def agapes_traiteur(request):
         'total_saison':  sum(l['couverts'] for l in lignes),
         'has_estimations': any(l['est_estimation'] for l in lignes),
         'annee':         annee_param,
-        'annees':        list(range(annee_courante - 2, annee_courante + 2)),
+        'annees':        list(range(annee_courante - 2, annee_courante + 4)),
         'saison_label':  f"{annee_param}/{annee_param + 1}",
         'mois_liste':    [(m, MOIS_NOMS[m]) for m in MOIS_ORDRE],
     }
