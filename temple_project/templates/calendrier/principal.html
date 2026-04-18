@@ -59,31 +59,57 @@
 {# Panneau PDF planning #}
 <div id="pdf-panel" class="card border-0 shadow-sm mb-3" style="display:none;">
   <div class="card-body py-2 px-3">
-    <div class="d-flex flex-wrap gap-2 align-items-center">
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
       <span class="small fw-semibold" style="color:#0F2137;">Planning PDF :</span>
+      <div class="btn-group btn-group-sm" role="group">
+        <input type="radio" class="btn-check" name="pdf-mode" id="pdf-mode-mois"   value="mois"   checked onchange="majPdfPanel()">
+        <label class="btn btn-outline-secondary" for="pdf-mode-mois">Mois</label>
+        <input type="radio" class="btn-check" name="pdf-mode" id="pdf-mode-saison" value="saison" onchange="majPdfPanel()">
+        <label class="btn btn-outline-secondary" for="pdf-mode-saison">Saison Sep→Jun</label>
+        <input type="radio" class="btn-check" name="pdf-mode" id="pdf-mode-perso"  value="perso"  onchange="majPdfPanel()">
+        <label class="btn btn-outline-secondary" for="pdf-mode-perso">Personnalisée</label>
+      </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
       <select id="pdf-cal-temple" class="form-select form-select-sm" style="width:auto;">
         <option value="">Tous les temples</option>
         {% for temple in temples %}<option value="{{ temple.pk }}">{{ temple }}</option>{% endfor %}
       </select>
-      <select id="pdf-cal-mois" class="form-select form-select-sm" style="width:auto;">
-        <option value="9">Septembre</option>
-        <option value="10">Octobre</option>
-        <option value="11">Novembre</option>
-        <option value="12">Décembre</option>
-        <option value="1">Janvier</option>
-        <option value="2">Février</option>
-        <option value="3">Mars</option>
-        <option value="4">Avril</option>
-        <option value="5">Mai</option>
-        <option value="6">Juin</option>
-      </select>
-      <select id="pdf-cal-annee" class="form-select form-select-sm" style="width:auto;">
-        {% with y=annee_courante %}
-        <option value="{{ y }}">{{ y }}</option>
-        <option value="{{ y|add:1 }}">{{ y|add:1 }}</option>
-        <option value="{{ y|add:-1 }}">{{ y|add:-1 }}</option>
-        {% endwith %}
-      </select>
+      <span id="pdf-wrap-mois" class="d-flex gap-2">
+        <select id="pdf-cal-mois" class="form-select form-select-sm" style="width:auto;">
+          <option value="9">Septembre</option>
+          <option value="10">Octobre</option>
+          <option value="11">Novembre</option>
+          <option value="12">Décembre</option>
+          <option value="1">Janvier</option>
+          <option value="2">Février</option>
+          <option value="3">Mars</option>
+          <option value="4">Avril</option>
+          <option value="5">Mai</option>
+          <option value="6">Juin</option>
+        </select>
+        <select id="pdf-cal-annee" class="form-select form-select-sm" style="width:auto;">
+          {% with y=annee_courante %}
+          <option value="{{ y }}">{{ y }}</option>
+          <option value="{{ y|add:1 }}">{{ y|add:1 }}</option>
+          <option value="{{ y|add:-1 }}">{{ y|add:-1 }}</option>
+          {% endwith %}
+        </select>
+      </span>
+      <span id="pdf-wrap-saison" style="display:none;">
+        <select id="pdf-saison-annee" class="form-select form-select-sm" style="width:auto;">
+          {% with y=annee_courante %}
+          <option value="{{ y }}">Saison {{ y }}–{{ y|add:1 }}</option>
+          <option value="{{ y|add:1 }}">Saison {{ y|add:1 }}–{{ y|add:2 }}</option>
+          <option value="{{ y|add:-1 }}">Saison {{ y|add:-1 }}–{{ y }}</option>
+          {% endwith %}
+        </select>
+      </span>
+      <span id="pdf-wrap-perso" class="d-flex gap-1 align-items-center" style="display:none;">
+        <input type="date" id="pdf-date-debut" class="form-control form-control-sm" style="width:auto;">
+        <span class="small text-muted">→</span>
+        <input type="date" id="pdf-date-fin"   class="form-control form-control-sm" style="width:auto;">
+      </span>
       <button class="btn btn-sm btn-danger" onclick="exportPdfPlanning()">📄 Télécharger</button>
       <button class="btn btn-sm btn-outline-secondary" onclick="togglePdfPanel()">✕</button>
     </div>
@@ -297,11 +323,28 @@ function togglePdfPanel() {
   var p = document.getElementById("pdf-panel");
   p.style.display = (p.style.display === 'none') ? 'block' : 'none';
 }
+function majPdfPanel() {
+  var mode = document.querySelector('input[name="pdf-mode"]:checked').value;
+  document.getElementById('pdf-wrap-mois').style.display   = (mode === 'mois')   ? '' : 'none';
+  document.getElementById('pdf-wrap-saison').style.display = (mode === 'saison') ? '' : 'none';
+  document.getElementById('pdf-wrap-perso').style.display  = (mode === 'perso')  ? '' : 'none';
+}
 function exportPdfPlanning() {
-  var t = document.getElementById("pdf-cal-temple").value;
-  var m = document.getElementById("pdf-cal-mois").value;
-  var a = document.getElementById("pdf-cal-annee").value;
-  var url = "{% url 'exports:planning_pdf' %}?mois=" + m + "&annee=" + a + (t ? "&temple=" + t : "");
+  var mode = document.querySelector('input[name="pdf-mode"]:checked').value;
+  var t    = document.getElementById('pdf-cal-temple').value;
+  var url  = "{% url 'exports:planning_pdf' %}?mode=" + mode;
+  if (mode === 'mois') {
+    url += '&mois='  + document.getElementById('pdf-cal-mois').value;
+    url += '&annee=' + document.getElementById('pdf-cal-annee').value;
+  } else if (mode === 'saison') {
+    url += '&annee=' + document.getElementById('pdf-saison-annee').value;
+  } else {
+    var dd = document.getElementById('pdf-date-debut').value;
+    var df = document.getElementById('pdf-date-fin').value;
+    if (!dd || !df) { alert('Veuillez saisir les deux dates.'); return; }
+    url += '&date_debut=' + dd + '&date_fin=' + df;
+  }
+  if (t) url += '&temple=' + t;
   window.location = url;
 }
 

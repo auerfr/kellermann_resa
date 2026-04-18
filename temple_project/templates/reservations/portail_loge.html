@@ -1,42 +1,210 @@
 {% extends "base.html" %}
 {% block title %}Portail — {{ demande.nom_loge_display }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .card-action { transition: transform .15s, box-shadow .15s; cursor: pointer; }
+  .card-action:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,.13) !important; }
+  .sep-today td { background: #F1F5F9 !important; color: #64748B; font-size: 12px;
+                  letter-spacing: .08em; text-transform: uppercase; text-align: center;
+                  border-top: 2px dashed #CBD5E1; border-bottom: 2px dashed #CBD5E1; }
+  .row-passee td { opacity: .55; }
+  @media (max-width: 575px) {
+    .col-mobile-hide { display: none !important; }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-lg-9">
 
-    <div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+    {# ── En-tête ──────────────────────────────────────────────────────────── #}
+    <div class="mb-3 d-flex justify-content-between align-items-start flex-wrap gap-2">
       <div>
         <h1 class="h3 mb-1" style="color:#0F2137;">⚒ Espace loge</h1>
         <p class="text-muted small mb-0">{{ demande.nom_loge_display }} — T∴F∴ {{ demande.nom_venerable }}</p>
       </div>
-      <a href="{% url 'reservations:demande' %}" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;">
-        + Nouvelle demande
-      </a>
+      <a href="{% url 'reservations:demande' %}" class="btn btn-sm fw-semibold"
+         style="background:#0F2137;color:#C8A84B;">+ Nouvelle demande</a>
     </div>
 
-    {# Réservations à venir #}
-    <div class="card shadow-sm border-0 mb-4">
-      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
-        Prochaines tenues validées
+    {# ── Bandeau alerte validation ouverte ────────────────────────────────── #}
+    {% if validation and validation.statut == 'ouverte' %}
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4 px-3 py-3"
+         style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:8px;">
+      <div>
+        <strong style="color:#92400E;">📋 Validation de saison en attente</strong>
+        <span class="d-block small" style="color:#78350F;">
+          L'équipe Kellermann attend votre réponse pour la saison
+          {{ validation.annee }}–{{ validation.annee|add:1 }}.
+        </span>
       </div>
+      <a href="#section-validation" class="btn btn-sm fw-semibold"
+         style="background:#92400E;color:white;white-space:nowrap;">
+        Valider mes tenues →
+      </a>
+    </div>
+    {% endif %}
+
+    {# ── Encart résumé ────────────────────────────────────────────────────── #}
+    <div class="row g-3 mb-4">
+
+      {# Prochaine tenue #}
+      <div class="col-md-6 col-lg-7">
+        <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #0F2137 !important;">
+          <div class="card-body py-3 px-4">
+            <p class="mb-1" style="color:#94A3B8;font-size:11px;text-transform:uppercase;letter-spacing:.07em;">
+              Prochaine tenue
+            </p>
+            {% if prochaine_tenue %}
+            <div class="fw-bold mb-1" style="color:#0F2137;font-size:1.1rem;">
+              {{ prochaine_tenue.date|date:"l d F Y" }}
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="badge" style="background:#0F2137;color:#C8A84B;">
+                {{ prochaine_tenue.temple }}
+              </span>
+              <span class="small text-muted">
+                {{ prochaine_tenue.heure_debut|time:"H:i" }} – {{ prochaine_tenue.heure_fin|time:"H:i" }}
+              </span>
+              <span class="small text-muted">{{ prochaine_tenue.get_type_reservation_display }}</span>
+            </div>
+            {% else %}
+            <div class="text-muted small mt-1">Aucune tenue validée à venir cette saison.</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# Stats droite #}
+      <div class="col-md-6 col-lg-5">
+        <div class="row g-3 h-100">
+
+          {# Nb restantes #}
+          <div class="col-6">
+            <div class="card border-0 shadow-sm h-100 text-center">
+              <div class="card-body py-3 px-2">
+                <p class="mb-1" style="color:#94A3B8;font-size:11px;text-transform:uppercase;letter-spacing:.07em;">
+                  Tenues restantes
+                </p>
+                <div class="fw-bold" style="color:#0F2137;font-size:2.2rem;line-height:1.1;">
+                  {{ nb_restantes }}
+                </div>
+                <div class="text-muted small">saison {{ annee_saison }}–{{ annee_saison|add:1 }}</div>
+              </div>
+            </div>
+          </div>
+
+          {# Statut validation #}
+          <div class="col-6">
+            <div class="card border-0 shadow-sm h-100 text-center
+              {% if validation and validation.statut == 'ouverte' %}
+              " style="border-left:3px solid #F59E0B !important;
+              {% elif validation and validation.statut == 'soumise' %}
+              " style="border-left:3px solid #22C55E !important;
+              {% else %}
+              "style="
+              {% endif %}">
+              <div class="card-body py-3 px-2 d-flex flex-column justify-content-center">
+                <p class="mb-2" style="color:#94A3B8;font-size:11px;text-transform:uppercase;letter-spacing:.07em;">
+                  Validation saison
+                </p>
+                {% if validation and validation.statut == 'ouverte' %}
+                  <span class="badge mb-2" style="background:#FEF3C7;color:#92400E;font-size:12px;">⏳ En attente</span>
+                  <a href="#section-validation" class="btn btn-sm"
+                     style="background:#F59E0B;color:white;font-size:11px;">Répondre →</a>
+                {% elif validation and validation.statut == 'soumise' %}
+                  <span class="badge" style="background:#DCFCE7;color:#166534;font-size:12px;">✓ Soumise</span>
+                  <div class="text-muted" style="font-size:11px;margin-top:4px;">
+                    {{ validation.date_reponse|date:"d/m/Y" }}
+                  </div>
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    {# ── Tableau tenues de la saison ──────────────────────────────────────── #}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+           style="background:#0F2137;">
+        <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+          Tenues de la saison
+        </span>
+        <form method="get" class="d-flex align-items-center gap-2 mb-0">
+          <label class="text-white small mb-0" style="white-space:nowrap;">Saison :</label>
+          <select name="saison" class="form-select form-select-sm" style="width:auto;"
+                  onchange="this.form.submit()">
+            {% for s in saisons_disponibles %}
+            <option value="{{ s }}" {% if s == annee_saison %}selected{% endif %}>
+              {{ s }}–{{ s|add:1 }}{% if s == annee_courante %} (en cours){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+
       {% if reservations %}
       <div class="table-responsive">
-        <table class="table table-hover mb-0">
+        <table class="table table-hover mb-0" style="font-size:14px;">
           <thead style="background:#F8FAFC;">
             <tr>
               <th class="text-muted small ps-3">Date</th>
-              <th class="text-muted small">Temple</th>
+              <th class="text-muted small col-mobile-hide">Temple</th>
               <th class="text-muted small">Horaires</th>
-              <th class="text-muted small">Type</th>
+              <th class="text-muted small col-mobile-hide">Type</th>
+              <th class="text-muted small">Statut</th>
             </tr>
           </thead>
           <tbody>
-            {% for r in reservations %}
+            {# Tenues passées #}
+            {% for r in reservations_passees %}
+            <tr class="row-passee">
+              <td class="ps-3" style="color:#0F2137;">{{ r.date|date:"D d/m/Y" }}</td>
+              <td class="col-mobile-hide">
+                <span class="badge" style="background:#0F2137;">{{ r.temple }}</span>
+              </td>
+              <td class="small text-muted">{{ r.heure_debut|time:"H:i" }} – {{ r.heure_fin|time:"H:i" }}</td>
+              <td class="small text-muted col-mobile-hide">{{ r.get_type_reservation_display }}</td>
+              <td>
+                {% if r.statut == 'validee' %}
+                  <span class="badge bg-success">Validée</span>
+                {% elif r.statut == 'attente' %}
+                  <span class="badge bg-warning text-dark">En attente</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+
+            {# Séparateur Aujourd'hui #}
+            {% if reservations_passees and reservations_futures %}
+            <tr class="sep-today">
+              <td colspan="5">— Aujourd'hui —</td>
+            </tr>
+            {% endif %}
+
+            {# Tenues à venir #}
+            {% for r in reservations_futures %}
             <tr>
               <td class="fw-semibold ps-3" style="color:#0F2137;">{{ r.date|date:"l d F Y" }}</td>
-              <td><span class="badge" style="background:#0F2137;">{{ r.temple }}</span></td>
+              <td class="col-mobile-hide">
+                <span class="badge" style="background:#0F2137;">{{ r.temple }}</span>
+              </td>
               <td class="small">{{ r.heure_debut|time:"H:i" }} – {{ r.heure_fin|time:"H:i" }}</td>
-              <td class="small text-muted">{{ r.get_type_reservation_display }}</td>
+              <td class="small text-muted col-mobile-hide">{{ r.get_type_reservation_display }}</td>
+              <td>
+                {% if r.statut == 'validee' %}
+                  <span class="badge bg-success">Validée</span>
+                {% elif r.statut == 'attente' %}
+                  <span class="badge bg-warning text-dark">En attente</span>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -44,31 +212,274 @@
       </div>
       {% else %}
       <div class="card-body text-center text-muted py-4">
-        Aucune tenue validée à venir.
+        Aucune tenue pour la saison {{ annee_saison }}–{{ annee_saison|add:1 }}.
       </div>
       {% endif %}
+
+      <div class="card-footer bg-transparent text-end py-2">
+        <a href="{% url 'exports:planning_loge_pdf' token=demande.token %}?annee={{ annee_saison }}"
+           class="btn btn-sm btn-outline-secondary">
+          📄 Télécharger ce planning (PDF)
+        </a>
+      </div>
     </div>
 
-    {# Actions #}
-    <div class="card shadow-sm border-0">
-      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+    {# ── Validation de saison ─────────────────────────────────────────────── #}
+    {% if validation %}
+    <div class="card shadow-sm border-0 mb-4" id="section-validation"
+         style="border-left:4px solid #C8A84B;">
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
+           style="background:#0F2137;">
+        <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+          📋 Validation saison {{ validation.annee }}–{{ validation.annee|add:1 }}
+        </span>
+        {% if validation.statut == 'soumise' %}
+        <span class="badge bg-success">Soumise</span>
+        {% else %}
+        <span class="badge" style="background:#F59E0B;color:white;">En attente de votre réponse</span>
+        {% endif %}
+      </div>
+
+      {% if validation.statut == 'soumise' %}
+      {# ── Confirmation après soumission ─────────────────────────────────── #}
+      <div class="card-body">
+        <div class="text-center py-3 mb-4">
+          <div style="font-size:3rem;line-height:1;">✅</div>
+          <h5 class="mt-2 mb-1" style="color:#166534;">Validation enregistrée</h5>
+          <p class="text-muted small mb-0">
+            Soumise le {{ validation.date_reponse|date:"d/m/Y à H:i" }}.
+            L'équipe Kellermann en prendra connaissance prochainement.
+          </p>
+        </div>
+
+        {# Résumé chiffré #}
+        <div class="row g-2 mb-4 text-center">
+          <div class="col-4">
+            <div class="rounded p-2" style="background:#F0FDF4;">
+              <div class="fw-bold" style="color:#166534;font-size:1.6rem;">
+                {{ validation.nb_ok }}
+              </div>
+              <div class="small" style="color:#166534;">Confirmée(s)</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="rounded p-2" style="background:#FEFCE8;">
+              <div class="fw-bold" style="color:#92400E;font-size:1.6rem;">
+                {{ validation.nb_deplacer }}
+              </div>
+              <div class="small" style="color:#92400E;">À déplacer</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="rounded p-2" style="background:#FEF2F2;">
+              <div class="fw-bold" style="color:#991B1B;font-size:1.6rem;">
+                {{ validation.nb_annuler }}
+              </div>
+              <div class="small" style="color:#991B1B;">À annuler</div>
+            </div>
+          </div>
+        </div>
+
+        {% if validation.commentaire_loge %}
+        <p class="text-muted small mb-3">
+          <em>Votre commentaire :</em> {{ validation.commentaire_loge }}
+        </p>
+        {% endif %}
+
+        {# Détail repliable #}
+        <div>
+          <button class="btn btn-sm btn-outline-secondary mb-2" type="button"
+                  data-bs-toggle="collapse" data-bs-target="#detail-validation">
+            Voir le détail ligne par ligne
+          </button>
+          <div class="collapse" id="detail-validation">
+            <div class="table-responsive">
+              <table class="table table-sm mb-0" style="font-size:13px;">
+                <thead style="background:#F8FAFC;">
+                  <tr>
+                    <th class="text-muted small">Date</th>
+                    <th class="text-muted small">Temple</th>
+                    <th class="text-muted small">Horaires</th>
+                    <th class="text-muted small">Votre avis</th>
+                    <th class="text-muted small">Commentaire</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for ligne in validation.lignes.all %}
+                  <tr style="background:{% if ligne.avis == 'ok' %}#F0FDF4{% elif ligne.avis == 'deplacer' %}#FEFCE8{% elif ligne.avis == 'annuler' %}#FEF2F2{% else %}#F8FAFC{% endif %};">
+                    <td class="fw-semibold">{{ ligne.date|date:"d/m/Y" }}</td>
+                    <td class="small">{{ ligne.temple_nom }}</td>
+                    <td class="small" style="white-space:nowrap;">{{ ligne.heure_debut|time:"H:i" }}–{{ ligne.heure_fin|time:"H:i" }}</td>
+                    <td>
+                      {% if ligne.avis == 'ok' %}
+                        <span class="badge" style="background:#D1FAE5;color:#065F46;">✓ Confirmée</span>
+                      {% elif ligne.avis == 'deplacer' %}
+                        <span class="badge" style="background:#FEF9C3;color:#92400E;">↻ À déplacer</span>
+                      {% elif ligne.avis == 'annuler' %}
+                        <span class="badge" style="background:#FEE2E2;color:#991B1B;">✕ À annuler</span>
+                      {% else %}
+                        <span class="badge bg-secondary">— Non répondu</span>
+                      {% endif %}
+                    </td>
+                    <td class="small text-muted">{{ ligne.commentaire|default:"—" }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% else %}
+      {# ── Formulaire de validation ──────────────────────────────────────── #}
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          Pour chaque tenue prévisionnelle de la saison
+          <strong>{{ validation.annee }}–{{ validation.annee|add:1 }}</strong>
+          (01/09/{{ validation.annee }} → 30/06/{{ validation.annee|add:1 }}),
+          indiquez si elle est confirmée, à déplacer ou à annuler.
+          Un commentaire est requis pour toute demande de modification.
+        </p>
+
+        <form method="post" id="form-validation-saison">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="soumettre_validation">
+
+          {# Compteurs + bouton haut #}
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3
+                       px-3 py-2 rounded" style="background:#F8FAFC;border:1px solid #E2E8F0;">
+            <div class="d-flex gap-3 flex-wrap">
+              <span class="badge" style="background:#D1FAE5;color:#065F46;font-size:13px;" id="cnt-ok-top">
+                ✓ <span id="n-ok">0</span> confirmée(s)
+              </span>
+              <span class="badge" style="background:#FEF9C3;color:#92400E;font-size:13px;" id="cnt-dep-top">
+                ↻ <span id="n-deplacer">0</span> à déplacer
+              </span>
+              <span class="badge" style="background:#FEE2E2;color:#991B1B;font-size:13px;" id="cnt-ann-top">
+                ✕ <span id="n-annuler">0</span> à annuler
+              </span>
+            </div>
+            <button type="button" class="btn btn-outline-success btn-sm px-3"
+                    onclick="toutConfirmer()">
+              ✓ Tout confirmer
+            </button>
+          </div>
+
+          {# Tableau #}
+          <div class="table-responsive mb-3">
+            <table class="table table-sm" style="font-size:13px;" id="table-validation">
+              <thead style="background:#0F2137;position:sticky;top:0;z-index:1;">
+                <tr>
+                  <th style="color:#C8A84B;">Date</th>
+                  <th style="color:#C8A84B;">Temple</th>
+                  <th style="color:#C8A84B;">Horaires</th>
+                  <th style="color:#C8A84B;">Avis</th>
+                  <th style="color:#C8A84B;">
+                    Commentaire
+                    <small class="opacity-75">(requis si déplacement/annulation)</small>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for ligne in validation.lignes.all %}
+                <tr class="val-row" id="row-{{ ligne.pk }}">
+                  <td class="fw-semibold align-middle" style="white-space:nowrap;">
+                    {{ ligne.date|date:"D d/m/Y" }}
+                  </td>
+                  <td class="align-middle small">{{ ligne.temple_nom }}</td>
+                  <td class="align-middle small" style="white-space:nowrap;">
+                    {{ ligne.heure_debut|time:"H:i" }}–{{ ligne.heure_fin|time:"H:i" }}
+                  </td>
+                  <td class="align-middle">
+                    <select name="avis_{{ ligne.pk }}"
+                            class="form-select form-select-sm avis-select"
+                            data-row="{{ ligne.pk }}" style="min-width:130px;">
+                      <option value="ok"
+                        {% if ligne.avis == 'ok' or ligne.avis == 'attente' %}selected{% endif %}>
+                        ✓ Confirmée
+                      </option>
+                      <option value="deplacer"
+                        {% if ligne.avis == 'deplacer' %}selected{% endif %}>
+                        ↻ À déplacer
+                      </option>
+                      <option value="annuler"
+                        {% if ligne.avis == 'annuler' %}selected{% endif %}>
+                        ✕ À annuler
+                      </option>
+                    </select>
+                  </td>
+                  <td class="align-middle">
+                    <input type="text" name="commentaire_{{ ligne.pk }}"
+                           value="{{ ligne.commentaire }}"
+                           class="form-control form-control-sm commentaire-field"
+                           id="comment-{{ ligne.pk }}"
+                           placeholder="Précisez…">
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          {# Commentaire global #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Commentaire général (optionnel)</label>
+            <textarea name="commentaire_global" class="form-control form-control-sm" rows="2"
+                      placeholder="Informations complémentaires pour l'équipe Kellermann…"></textarea>
+          </div>
+
+          {# Boutons bas #}
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-outline-success btn-sm px-3"
+                    onclick="toutConfirmer()">
+              ✓ Tout confirmer
+            </button>
+            <button type="submit" class="btn px-4 fw-semibold"
+                    style="background:#0F2137;color:white;"
+                    onclick="return confirm('Confirmer la soumission de votre validation de saison ?')">
+              📤 Soumettre ma validation
+            </button>
+          </div>
+        </form>
+      </div>
+      {% endif %}{# statut #}
+    </div>
+    {% endif %}{# validation #}
+
+    {# ── Faire une demande ────────────────────────────────────────────────── #}
+    <div class="card shadow-sm border-0 mb-2">
+      <div class="card-header"
+           style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
         Faire une demande
       </div>
       <div class="card-body p-4">
         <div class="row g-3">
           <div class="col-md-4">
-            <a href="{% url 'reservations:demande' %}" class="btn btn-outline-primary w-100 py-3">
-              🏛 Réserver un temple
+            <a href="{% url 'reservations:demande' %}" class="text-decoration-none">
+              <div class="card border-0 shadow-sm card-action text-center px-3 py-4">
+                <div style="font-size:2rem;">🏛</div>
+                <div class="fw-semibold mt-2" style="color:#0F2137;">Réserver un temple</div>
+                <div class="small text-muted mt-1">Déposer une demande de tenue maçonnique pour une date précise.</div>
+              </div>
             </a>
           </div>
           <div class="col-md-4">
-            <a href="{% url 'reservations:demande_recurrence' %}" class="btn btn-outline-secondary w-100 py-3">
-              🔁 Demander une récurrence
+            <a href="{% url 'reservations:demande_recurrence' %}" class="text-decoration-none">
+              <div class="card border-0 shadow-sm card-action text-center px-3 py-4">
+                <div style="font-size:2rem;">🔁</div>
+                <div class="fw-semibold mt-2" style="color:#0F2137;">Demander une récurrence</div>
+                <div class="small text-muted mt-1">Planifier des tenues régulières sur toute une saison.</div>
+              </div>
             </a>
           </div>
           <div class="col-md-4">
-            <a href="{% url 'reservations:demande_cabinets' %}" class="btn btn-outline-dark w-100 py-3">
-              🚪 Réserver des cabinets
+            <a href="{% url 'reservations:demande_cabinets' %}" class="text-decoration-none">
+              <div class="card border-0 shadow-sm card-action text-center px-3 py-4">
+                <div style="font-size:2rem;">🚪</div>
+                <div class="fw-semibold mt-2" style="color:#0F2137;">Réserver des cabinets</div>
+                <div class="small text-muted mt-1">Réserver des cabinets de réflexion pour vos travaux préparatoires.</div>
+              </div>
             </a>
           </div>
         </div>
@@ -77,4 +488,65 @@
 
   </div>
 </div>
+
+{% if validation and validation.statut == 'ouverte' %}
+<script>
+const BG = { ok: '#F0FDF4', deplacer: '#FEFCE8', annuler: '#FEF2F2' };
+
+function majLigne(select) {
+  const pk      = select.dataset.row;
+  const avis    = select.value;
+  const row     = document.getElementById('row-' + pk);
+  const comment = document.getElementById('comment-' + pk);
+  row.style.background    = BG[avis] || '';
+  comment.style.display   = (avis === 'ok') ? 'none' : '';
+  if (avis === 'ok') comment.value = '';
+}
+
+function majCompteurs() {
+  const selects = document.querySelectorAll('.avis-select');
+  let ok = 0, deplacer = 0, annuler = 0;
+  selects.forEach(s => {
+    if      (s.value === 'ok')       ok++;
+    else if (s.value === 'deplacer') deplacer++;
+    else                             annuler++;
+  });
+  document.getElementById('n-ok').textContent       = ok;
+  document.getElementById('n-deplacer').textContent = deplacer;
+  document.getElementById('n-annuler').textContent  = annuler;
+}
+
+function toutConfirmer() {
+  document.querySelectorAll('.avis-select').forEach(s => {
+    s.value = 'ok';
+    majLigne(s);
+  });
+  majCompteurs();
+}
+
+document.querySelectorAll('.avis-select').forEach(s => {
+  s.addEventListener('change', function () { majLigne(this); majCompteurs(); });
+  majLigne(s);
+});
+majCompteurs();
+
+document.getElementById('form-validation-saison').addEventListener('submit', function (e) {
+  const manquants = [];
+  document.querySelectorAll('.avis-select').forEach(s => {
+    if (s.value !== 'ok') {
+      const c = document.getElementById('comment-' + s.dataset.row);
+      if (!c.value.trim()) manquants.push(c);
+    }
+  });
+  if (manquants.length) {
+    e.preventDefault();
+    manquants[0].focus();
+    manquants.forEach(c => c.classList.add('is-invalid'));
+    alert('Merci d\'indiquer un commentaire pour chaque tenue à déplacer ou annuler.');
+    manquants.forEach(c => c.addEventListener('input',
+      () => c.classList.remove('is-invalid'), { once: true }));
+  }
+});
+</script>
+{% endif %}
 {% endblock %}

@@ -7,10 +7,170 @@
     <h1 class="h3 mb-1" style="color:#0F2137;">📅 Gestion saison</h1>
     <p class="text-muted small mb-0">Administration des saisons maçonniques</p>
   </div>
-  <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+  <div class="d-flex gap-2">
+    <a href="{% url 'administration:validation_saison_admin' %}" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;">
+      📋 Validation loges
+    </a>
+    <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+  </div>
 </div>
 
-<!-- Statistiques -->
+{% if preview_lignes %}
+{# ═══════════════════════════════════════════════════════════════════════════ #}
+{# PANNEAU PRÉVISUALISATION                                                    #}
+{# ═══════════════════════════════════════════════════════════════════════════ #}
+
+<div class="alert alert-info d-flex align-items-center gap-2 mb-3">
+  <span class="fs-5">🔍</span>
+  <div>
+    <strong>Prévisualisation saison {{ preview_annee }}-{{ preview_annee|add:1 }}</strong>
+    <span class="text-muted ms-2 small">01/09/{{ preview_annee }} → 30/06/{{ preview_annee|add:1 }}</span>
+    <br>Aucune modification en base n'a encore été effectuée.
+    Cochez les tenues à générer puis cliquez sur <em>Confirmer</em>.
+  </div>
+</div>
+
+{# Résumé #}
+<div class="row g-3 mb-4">
+  <div class="col-4">
+    <div class="card border-0 shadow-sm text-center h-100" style="border-left:4px solid #16A34A !important;">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold" style="color:#16A34A;">{{ preview_nb_ok }}</div>
+        <div class="text-muted small">À créer <span class="text-success">(nouvelles)</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card border-0 shadow-sm text-center h-100" style="border-left:4px solid #D97706 !important;">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold" style="color:#D97706;">{{ preview_nb_existe }}</div>
+        <div class="text-muted small">Remplace existantes</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <div class="card border-0 shadow-sm text-center h-100" style="border-left:4px solid #DC2626 !important;">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold" style="color:#DC2626;">{{ preview_nb_conflit }}</div>
+        <div class="text-muted small">Conflits <span class="text-danger">(ignorés)</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# Exports #}
+<div class="d-flex gap-2 mb-3">
+  <a href="{% url 'administration:preview_saison_excel' %}?annee={{ preview_annee }}"
+     class="btn btn-sm btn-outline-success">📥 Excel</a>
+  <a href="{% url 'administration:preview_saison_pdf' %}?annee={{ preview_annee }}"
+     class="btn btn-sm btn-outline-danger">📄 PDF</a>
+  <button class="btn btn-sm btn-outline-secondary" onclick="toggleTous(true)">☑ Tout cocher</button>
+  <button class="btn btn-sm btn-outline-secondary" onclick="toggleTous(false)">☐ Tout décocher</button>
+  <span class="ms-auto text-muted small align-self-center" id="nb-coches"></span>
+</div>
+
+{# Tableau avec checkboxes #}
+<form method="post" id="form-confirm">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="generer_saison_confirme">
+  <input type="hidden" name="annee_cible" value="{{ preview_annee }}">
+
+  <div class="card shadow-sm border-0 mb-4">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0" id="table-preview">
+        <thead style="background:#0F2137;position:sticky;top:0;z-index:1;">
+          <tr>
+            <th style="color:#C8A84B;width:36px;"></th>
+            <th style="color:#C8A84B;font-size:11px;">DATE</th>
+            <th style="color:#C8A84B;font-size:11px;">JOUR</th>
+            <th style="color:#C8A84B;font-size:11px;">LOGE</th>
+            <th style="color:#C8A84B;font-size:11px;">TEMPLE</th>
+            <th style="color:#C8A84B;font-size:11px;">HORAIRES</th>
+            <th style="color:#C8A84B;font-size:11px;">STATUT</th>
+            <th style="color:#C8A84B;font-size:11px;">DÉTAIL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ligne in preview_lignes %}
+          <tr style="background:{% if ligne.statut == 'ok' %}#F0FDF4{% elif ligne.statut == 'existe_deja' %}#FEFCE8{% else %}#FEF2F2{% endif %};">
+            <td class="text-center align-middle">
+              <input type="checkbox" name="lignes_selectionnees"
+                     value="{{ ligne.cle }}"
+                     {% if ligne.statut != 'conflit' %}checked{% endif %}
+                     class="form-check-input cb-ligne"
+                     {% if ligne.statut == 'conflit' %}title="Conflit — décoché par défaut"{% endif %}>
+            </td>
+            <td class="fw-semibold small" style="white-space:nowrap;">{{ ligne.date|date:"d/m/Y" }}</td>
+            <td class="small text-muted">{{ ligne.jour }}</td>
+            <td class="small">{{ ligne.loge }}</td>
+            <td class="small">{{ ligne.temple }}</td>
+            <td class="small" style="white-space:nowrap;">{{ ligne.heure_debut|time:"H:i" }}–{{ ligne.heure_fin|time:"H:i" }}</td>
+            <td class="small">
+              {% if ligne.statut == 'ok' %}
+                <span class="badge" style="background:#D1FAE5;color:#065F46;">✓ À créer</span>
+              {% elif ligne.statut == 'existe_deja' %}
+                <span class="badge" style="background:#FEF9C3;color:#92400E;">↻ Remplace</span>
+              {% else %}
+                <span class="badge" style="background:#FEE2E2;color:#991B1B;">⚠ Conflit</span>
+              {% endif %}
+            </td>
+            <td class="small text-muted">{{ ligne.conflict_detail|default:"—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# Option retours loges #}
+  {% with nb_soumises=preview_annee|stringformat:"s" %}
+  <div class="alert alert-light border mb-3 py-2">
+    <div class="form-check mb-0">
+      <input class="form-check-input" type="checkbox" name="appliquer_retours" value="1" id="cb-retours">
+      <label class="form-check-label fw-semibold small" for="cb-retours">
+        Appliquer les retours loges
+        <span class="text-muted fw-normal">— exclure automatiquement les tenues marquées «&nbsp;À annuler&nbsp;» par les loges</span>
+      </label>
+    </div>
+    <div class="mt-1 ms-4">
+      <a href="{% url 'administration:validation_saison_admin' %}?annee={{ preview_annee }}"
+         class="small text-primary">
+        Voir le dashboard de validation →
+      </a>
+    </div>
+  </div>
+  {% endwith %}
+
+  <div class="d-flex gap-3 mb-5">
+    <button type="submit" class="btn px-4 fw-semibold" style="background:#0F2137;color:white;">
+      ✅ Confirmer la génération
+    </button>
+    <a href="{% url 'administration:gestion_saison' %}" class="btn btn-outline-secondary">
+      ✕ Annuler
+    </a>
+  </div>
+</form>
+
+<script>
+function toggleTous(etat) {
+  document.querySelectorAll('.cb-ligne').forEach(cb => cb.checked = etat);
+  majCompteur();
+}
+function majCompteur() {
+  const total = document.querySelectorAll('.cb-ligne').length;
+  const coches = document.querySelectorAll('.cb-ligne:checked').length;
+  document.getElementById('nb-coches').textContent = coches + ' / ' + total + ' sélectionnée(s)';
+}
+document.querySelectorAll('.cb-ligne').forEach(cb => cb.addEventListener('change', majCompteur));
+document.addEventListener('DOMContentLoaded', majCompteur);
+</script>
+
+<hr class="my-4">
+<h5 class="text-muted mb-3">Autres actions</h5>
+{% endif %}{# /preview_lignes #}
+
+{% if not preview_lignes %}
+{# Statistiques — masquées pendant la prévisualisation pour garder le focus #}
 <div class="row g-3 mb-4">
   {% for saison in saisons %}
   <div class="col-6 col-md-3">
@@ -25,9 +185,10 @@
   </div>
   {% endfor %}
 </div>
+{% endif %}
 
 <div class="row g-4">
-  <!-- Supprimer une saison -->
+  {# ── Supprimer une saison ── #}
   <div class="col-md-6">
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-warning text-white">
@@ -35,7 +196,7 @@
       </div>
       <div class="card-body">
         <p class="text-muted small mb-3">
-          Supprime uniquement les réservations automatiques (générées par les règles) de la saison maçonnique sélectionnée.<br>
+          Supprime uniquement les réservations automatiques (générées par les règles).<br>
           <strong>Les réservations manuelles sont conservées.</strong>
         </p>
         <form method="post">
@@ -49,7 +210,8 @@
               {% endfor %}
             </select>
           </div>
-          <button type="submit" class="btn btn-warning" onclick="return confirm('Confirmer la suppression des réservations automatiques de cette saison ?')">
+          <button type="submit" class="btn btn-warning"
+            onclick="return confirm('Confirmer la suppression des réservations automatiques de cette saison ?')">
             Supprimer saison
           </button>
         </form>
@@ -57,7 +219,7 @@
     </div>
   </div>
 
-  <!-- Générer une nouvelle saison -->
+  {# ── Générer (avec prévisualisation) ── #}
   <div class="col-md-6">
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-success text-white">
@@ -65,12 +227,12 @@
       </div>
       <div class="card-body">
         <p class="text-muted small mb-3">
-          Régénère intelligemment toutes les tenues selon les règles actives.<br>
-          Remplace les anciennes réservations automatiques et évite les conflits avec les manuelles.
+          Calcule toutes les tenues selon les règles actives et affiche une
+          <strong>prévisualisation détaillée</strong> avant toute écriture.
         </p>
         <form method="post">
           {% csrf_token %}
-          <input type="hidden" name="action" value="generer_saison">
+          <input type="hidden" name="action" value="previsualiser_saison">
           <div class="mb-3">
             <label class="form-label">Année cible</label>
             <select name="annee_cible" class="form-select" required>
@@ -79,16 +241,16 @@
               {% endfor %}
             </select>
           </div>
-          <button type="submit" class="btn btn-success" onclick="return confirm('Confirmer la génération de la saison ? Les anciennes réservations automatiques seront remplacées.')">
-            Générer saison
-          </button>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">🔍 Prévisualiser</button>
+          </div>
         </form>
       </div>
     </div>
   </div>
 </div>
 
-<!-- Reset complet -->
+{# ── Reset complet ── #}
 <div class="row mt-4">
   <div class="col-12">
     <div class="card border-danger">
@@ -97,8 +259,8 @@
       </div>
       <div class="card-body">
         <div class="alert alert-danger">
-          <strong>Attention :</strong> Cette action supprime <strong>TOUTES</strong> les réservations automatiques de <strong>TOUTES</strong> les saisons.<br>
-          Les réservations manuelles sont conservées. Cette action est irréversible.
+          <strong>Attention :</strong> Supprime <strong>TOUTES</strong> les réservations automatiques de <strong>TOUTES</strong> les saisons.<br>
+          Les réservations manuelles sont conservées. Action irréversible.
         </div>
         <form method="post">
           {% csrf_token %}
@@ -109,9 +271,7 @@
               <input type="text" name="confirmation" class="form-control" placeholder="CONFIRMER" required>
             </div>
             <div class="col-md-4">
-              <button type="submit" class="btn btn-danger w-100">
-                Reset complet
-              </button>
+              <button type="submit" class="btn btn-danger w-100">Reset complet</button>
             </div>
           </div>
         </form>
@@ -120,7 +280,7 @@
   </div>
 </div>
 
-<!-- Sauvegarde -->
+{# ── Sauvegarde ── #}
 <div class="row mt-4">
   <div class="col-12">
     <div class="card border-0 shadow-sm">
@@ -128,9 +288,7 @@
         <h5 class="mb-0">💾 Sauvegarde</h5>
       </div>
       <div class="card-body">
-        <p class="text-muted small mb-3">
-          Téléchargez une copie de la base de données. Conservez ce fichier en lieu sûr.
-        </p>
+        <p class="text-muted small mb-3">Téléchargez une copie de la base de données.</p>
         <div class="row g-3 align-items-center">
           <div class="col-md-6">
             <p class="mb-1"><strong>Dernière modification :</strong></p>
@@ -140,15 +298,11 @@
             <form method="post">
               {% csrf_token %}
               <input type="hidden" name="action" value="backup">
-              <button type="submit" class="btn btn-info w-100">
-                📥 Télécharger
-              </button>
+              <button type="submit" class="btn btn-info w-100">📥 Télécharger</button>
             </form>
           </div>
           <div class="col-md-3">
-            <a href="{% url 'administration:restaurer_backup' %}" class="btn btn-warning w-100">
-              📤 Restaurer
-            </a>
+            <a href="{% url 'administration:restaurer_backup' %}" class="btn btn-warning w-100">📤 Restaurer</a>
           </div>
         </div>
       </div>

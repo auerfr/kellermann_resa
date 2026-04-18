@@ -8,4 +8,5 @@ urlpatterns = [
     path("excel/", views.export_excel, name="excel"),
     path("reporting/", views.reporting, name="reporting"),
     path("planning/pdf/", views.planning_pdf, name="planning_pdf"),
+    path("portail/<str:token>/planning.pdf", views.planning_loge_pdf, name="planning_loge_pdf"),
 ]

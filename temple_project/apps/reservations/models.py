@@ -322,3 +322,79 @@ class BlocageCreneaux(models.Model):
 
     def __str__(self):
         return f"Blocage {self.date} {self.heure_debut}–{self.heure_fin} : {self.motif}"
+
+
+# ── Workflow de validation de saison par les loges ────────────────────────────
+
+class ValidationSaison(models.Model):
+    """Suivi de la validation d'une saison projetée pour une loge donnée."""
+    STATUT_CHOICES = [
+        ('attente',  'En attente'),   # créée, email pas encore envoyé
+        ('ouverte',  'Ouverte'),      # email envoyé, loge peut répondre
+        ('soumise',  'Soumise'),      # loge a soumis sa réponse
+        ('traitee',  'Traitée'),      # admin a pris en compte
+    ]
+
+    loge             = models.ForeignKey(
+        Loge, on_delete=models.CASCADE, related_name='validations_saison'
+    )
+    annee            = models.PositiveSmallIntegerField(
+        help_text="Année de début de saison (ex. 2025 pour 2025-2026)"
+    )
+    statut           = models.CharField(max_length=10, choices=STATUT_CHOICES, default='attente')
+    date_envoi       = models.DateTimeField(null=True, blank=True)
+    date_reponse     = models.DateTimeField(null=True, blank=True)
+    commentaire_loge = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Validation de saison"
+        verbose_name_plural = "Validations de saison"
+        unique_together = [('loge', 'annee')]
+        ordering = ['annee', 'loge__nom']
+
+    def __str__(self):
+        return f"{self.loge} – Saison {self.annee}-{self.annee + 1} [{self.get_statut_display()}]"
+
+    def nb_anomalies(self):
+        return self.lignes.filter(avis__in=['deplacer', 'annuler']).count()
+
+    def nb_annuler(self):
+        return self.lignes.filter(avis='annuler').count()
+
+    def nb_deplacer(self):
+        return self.lignes.filter(avis='deplacer').count()
+
+    def nb_ok(self):
+        return self.lignes.filter(avis='ok').count()
+
+
+class ValidationSaisonLigne(models.Model):
+    """Avis de la loge sur une tenue projetée de sa saison."""
+    AVIS_CHOICES = [
+        ('attente',  'Non répondu'),   # valeur initiale — loge n'a pas encore répondu
+        ('ok',       'Confirmée'),
+        ('deplacer', 'À déplacer'),
+        ('annuler',  'À annuler'),
+    ]
+
+    validation  = models.ForeignKey(
+        ValidationSaison, on_delete=models.CASCADE, related_name='lignes'
+    )
+    regle       = models.ForeignKey(
+        RegleRecurrence, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='validation_lignes'
+    )
+    date        = models.DateField()
+    heure_debut = models.TimeField()
+    heure_fin   = models.TimeField()
+    temple_nom  = models.CharField(max_length=200)  # snapshot au moment de l'ouverture
+    avis        = models.CharField(max_length=10, choices=AVIS_CHOICES, default='attente')
+    commentaire = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Ligne de validation de saison"
+        verbose_name_plural = "Lignes de validation de saison"
+        ordering = ['date']
+
+    def __str__(self):
+        return f"{self.validation.loge} – {self.date} [{self.get_avis_display()}]"

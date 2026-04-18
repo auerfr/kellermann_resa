@@ -5,7 +5,11 @@ from django.http import JsonResponse
 from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin, get_email_traiteur
 from django.db.models import Q, Sum
 from .emails import envoyer_email_nouvelle_demande
-from .models import Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence, RegleRecurrence, Temple, DemandeAccesPortail
+from .models import (
+    Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence,
+    RegleRecurrence, Temple, DemandeAccesPortail,
+    ValidationSaison, ValidationSaisonLigne,
+)
 from temple_project.apps.loges.models import Loge
 from .forms import DemandeReservationForm, DemandeReservationSalleForm, DemandeCabinetsForm, DemandeBanquetForm
 
@@ -570,19 +574,124 @@ def confirmation_contact(request):
 
 
 def portail_loge(request, token):
-    demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
-
     from datetime import date as date_cls
-    today = date_cls.today()
+    from django.utils import timezone
 
+    demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    today   = date_cls.today()
+    loge    = demande.loge
+
+    # ── Saison courante (par défaut) ─────────────────────────────────────────
+    annee_courante = today.year if today.month >= 9 else today.year - 1
+
+    # ── Saison sélectionnée (GET ?saison=, sinon courante) ───────────────────
+    try:
+        annee_saison = int(request.GET.get('saison', annee_courante))
+    except (ValueError, TypeError):
+        annee_saison = annee_courante
+
+    # Les 3 options proposées dans le sélecteur
+    saisons_disponibles = [annee_courante - 1, annee_courante, annee_courante + 1]
+
+    debut_saison = date_cls(annee_saison, 9, 1)
+    fin_saison   = date_cls(annee_saison + 1, 6, 30)
+
+    # ── Réservations : saison complète sélectionnée, validée ou en attente ───
     reservations = Reservation.objects.filter(
-        loge=demande.loge,
-        date__gte=today,
-        statut='validee',
-    ).select_related('temple').order_by('date') if demande.loge else Reservation.objects.none()
+        loge=loge,
+        date__gte=debut_saison,
+        date__lte=fin_saison,
+        statut__in=['validee', 'attente'],
+    ).select_related('temple').order_by('date') if loge else Reservation.objects.none()
+
+    # Séparation passé / futur pour le tableau et les encarts
+    reservations_passees = reservations.filter(date__lt=today)
+    reservations_futures = reservations.filter(date__gte=today)
+    prochaine_tenue  = reservations_futures.filter(statut='validee').first()
+    nb_restantes     = reservations_futures.filter(statut='validee').count()
+
+    # ── Validation de saison ─────────────────────────────────────────────────
+    # La validation est indépendante du sélecteur de saison : on cherche
+    # toute validation ouverte/soumise pour la loge, sans toucher à annee_saison.
+    validation = None
+    if loge:
+        validation = ValidationSaison.objects.filter(
+            loge=loge,
+            statut__in=['ouverte', 'soumise'],
+        ).prefetch_related('lignes').order_by('-annee').first()
+
+    if request.method == 'POST' and request.POST.get('action') == 'soumettre_validation':
+        if not loge or not validation or validation.statut != 'ouverte':
+            messages.error(request, "Aucune validation ouverte pour votre loge.")
+            return redirect('reservations:portail_loge', token=token)
+
+        commentaire_global = request.POST.get('commentaire_global', '').strip()
+
+        for ligne in validation.lignes.all():
+            avis        = request.POST.get(f'avis_{ligne.pk}', 'ok')
+            commentaire = request.POST.get(f'commentaire_{ligne.pk}', '').strip()
+            if avis not in ('ok', 'deplacer', 'annuler'):
+                avis = 'ok'
+            ligne.avis        = avis
+            ligne.commentaire = commentaire
+            ligne.save()
+
+        validation.commentaire_loge = commentaire_global
+        validation.statut           = 'soumise'
+        validation.date_reponse     = timezone.now()
+        validation.save()
+
+        # Email de confirmation à la loge
+        if loge.email:
+            nb_ok       = validation.lignes.filter(avis='ok').count()
+            nb_deplacer = validation.lignes.filter(avis='deplacer').count()
+            nb_annuler  = validation.lignes.filter(avis='annuler').count()
+            send_mail_kellermann(
+                subject=f"Votre validation de saison {annee_saison}-{annee_saison + 1} a bien été enregistrée",
+                message=(
+                    f"Bonjour,\n\n"
+                    f"Votre validation du calendrier pour la saison "
+                    f"{annee_saison}-{annee_saison + 1} a bien été reçue.\n\n"
+                    f"Récapitulatif :\n"
+                    f"  - {nb_ok} tenue(s) confirmée(s)\n"
+                    f"  - {nb_deplacer} tenue(s) a deplacer\n"
+                    f"  - {nb_annuler} tenue(s) a annuler\n"
+                    + (f"\nVotre commentaire : {commentaire_global}\n" if commentaire_global else "")
+                    + f"\nMerci pour votre retour.\n\nBien fraternellement,\nLes Temples Kellermann"
+                ),
+                recipient_list=[loge.email],
+            )
+
+        # Notification admin
+        email_admin = get_email_admin()
+        if email_admin:
+            send_mail_kellermann(
+                subject=f"[Validation saison] {loge.nom} a soumis sa reponse",
+                message=(
+                    f"{loge.nom} a valide son calendrier pour la saison "
+                    f"{annee_saison}-{annee_saison + 1}.\n\n"
+                    f"  - confirmees : {nb_ok}\n"
+                    f"  - a deplacer : {nb_deplacer}\n"
+                    f"  - a annuler  : {nb_annuler}\n"
+                    + (f"\nCommentaire loge : {commentaire_global}" if commentaire_global else "")
+                ),
+                recipient_list=[email_admin],
+            )
+
+        messages.success(request, "Votre validation a bien été enregistrée. Merci !")
+        return redirect('reservations:portail_loge', token=token)
 
     return render(request, 'reservations/portail_loge.html', {
-        'demande':      demande,
-        'reservations': reservations,
-        'loge':         demande.loge,
+        'demande':               demande,
+        'reservations':          reservations,
+        'reservations_passees':  reservations_passees,
+        'reservations_futures':  reservations_futures,
+        'prochaine_tenue':       prochaine_tenue,
+        'nb_restantes':          nb_restantes,
+        'loge':                  loge,
+        'validation':            validation,
+        'annee_saison':          annee_saison,
+        'annee_courante':        annee_courante,
+        'saisons_disponibles':   saisons_disponibles,
+        'today':                 today,
     })

@@ -24,8 +24,11 @@ urlpatterns = [
     path("agapes/export/", views.agapes_export_excel, name="agapes_export"),
     path("agapes/export/pdf/", views.agapes_export_pdf, name="agapes_export_pdf"),
     path("saison/", views.gestion_saison, name="gestion_saison"),
+    path("saison/preview/excel/", views.preview_saison_excel, name="preview_saison_excel"),
+    path("saison/preview/pdf/", views.preview_saison_pdf, name="preview_saison_pdf"),
     path("backup/", views.telecharger_backup, name="backup"),
     path("restaurer/", views.restaurer_backup, name="restaurer_backup"),
     path("portail/<int:pk>/valider/", views.valider_acces_portail, name="valider_acces_portail"),
     path("reservation-directe/", views.reservation_directe, name="reservation_directe"),
+    path("saison/validation/", views.validation_saison_admin, name="validation_saison_admin"),
 ]

@@ -54,13 +54,16 @@
   <div class="card border-0 shadow-sm">
     <div class="card-body py-2 px-3">
       <form method="get" action="{% url 'administration:agapes_export' %}" class="d-flex flex-wrap gap-2 align-items-end">
+        <input type="hidden" name="annee" value="{{ annee }}">
         <div>
           <label class="form-label form-label-sm mb-1 fw-semibold">Du</label>
-          <input type="date" name="date_debut" class="form-control form-control-sm" style="width:150px;">
+          <input type="date" name="date_debut" class="form-control form-control-sm" style="width:150px;"
+                 value="{{ annee }}-09-01">
         </div>
         <div>
           <label class="form-label form-label-sm mb-1 fw-semibold">Au</label>
-          <input type="date" name="date_fin" class="form-control form-control-sm" style="width:150px;">
+          <input type="date" name="date_fin" class="form-control form-control-sm" style="width:150px;"
+                 value="{{ annee|add:1 }}-06-30">
         </div>
         <div>
           <label class="form-label form-label-sm mb-1 fw-semibold">Type</label>

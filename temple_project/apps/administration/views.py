@@ -10,7 +10,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from temple_project.apps.reservations.models import (
-    Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle, DemandeAccesPortail
+    Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle,
+    DemandeAccesPortail, ValidationSaison, ValidationSaisonLigne,
 )
 from temple_project.apps.loges.models import Loge, Obedience
 from .models import Parametres
@@ -737,6 +738,90 @@ def reset_calendrier(request):
 
 # ── Gestion saison ────────────────────────────────────────────────────────────
 
+_JOURS_FR = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+
+
+def _dates_saison(regle, annee):
+    """
+    Retourne toutes les dates de la règle dans la saison annee → annee+1
+    (01/09/annee → 30/06/annee+1), en respectant date_debut/date_fin de la règle.
+    """
+    debut_saison = date(annee, 9, 1)
+    fin_saison   = date(annee + 1, 6, 30)
+    dates = []
+    # Sep–Déc de l'année annee
+    for d in _calculer_dates_regle(regle, annee):
+        if d >= debut_saison:
+            dates.append(d)
+    # Jan–Jun de l'année annee+1
+    for d in _calculer_dates_regle(regle, annee + 1):
+        if d <= fin_saison:
+            dates.append(d)
+    # Filtre dates_debut/fin de la règle
+    return [
+        d for d in dates
+        if not (regle.date_fin and d > regle.date_fin)
+        and not (regle.date_debut and d < regle.date_debut)
+    ]
+
+
+def _dry_run_saison(annee):
+    """
+    Simule la génération d'une saison sans aucune écriture en base.
+    Couvre 01/09/annee → 30/06/annee+1.
+    Retourne une liste de dicts triée par date :
+      statut  'ok'          → sera créée (nouvelle)
+              'existe_deja' → réservation auto déjà présente, sera remplacée
+              'conflit'     → conflit avec une réservation manuelle, sera ignorée
+    """
+    regles = RegleRecurrence.objects.filter(actif=True).select_related('loge', 'temple')
+    lignes = []
+    for regle in regles:
+        for d in _dates_saison(regle, annee):
+            cle = f"{regle.pk}:{d.isoformat()}"
+
+            # Conflit avec réservation NON-auto sur le même créneau ?
+            conflit_qs = Reservation.objects.filter(
+                temple=regle.temple,
+                date=d,
+                statut__in=['validee', 'attente'],
+                heure_debut__lt=regle.heure_fin,
+                heure_fin__gt=regle.heure_debut,
+            ).exclude(regle_source=regle).select_related('loge')
+
+            if conflit_qs.exists():
+                c = conflit_qs.first()
+                statut = 'conflit'
+                conflict_detail = (
+                    f"{c.loge.nom if c.loge else c.nom_demandeur} "
+                    f"({c.get_statut_display()}, "
+                    f"{c.heure_debut:%H:%M}–{c.heure_fin:%H:%M})"
+                )
+            elif Reservation.objects.filter(regle_source=regle, date=d).exists():
+                statut = 'existe_deja'
+                conflict_detail = ''
+            else:
+                statut = 'ok'
+                conflict_detail = ''
+
+            lignes.append({
+                'regle_id':       regle.pk,
+                'regle_label':    str(regle),
+                'loge':           regle.loge,
+                'temple':         regle.temple,
+                'date':           d,
+                'jour':           _JOURS_FR[d.weekday()],
+                'heure_debut':    regle.heure_debut,
+                'heure_fin':      regle.heure_fin,
+                'statut':         statut,
+                'conflict_detail': conflict_detail,
+                'cle':            cle,
+            })
+
+    lignes.sort(key=lambda x: x['date'])
+    return lignes
+
+
 @login_required
 def gestion_saison(request):
     # Statistiques par saison
@@ -841,11 +926,645 @@ def gestion_saison(request):
         elif action == 'backup':
             return telecharger_backup(request)
 
+        elif action == 'previsualiser_saison':
+            annee_cible = int(request.POST.get('annee_cible'))
+            lignes_preview = _dry_run_saison(annee_cible)
+            nb_ok      = sum(1 for l in lignes_preview if l['statut'] == 'ok')
+            nb_existe  = sum(1 for l in lignes_preview if l['statut'] == 'existe_deja')
+            nb_conflit = sum(1 for l in lignes_preview if l['statut'] == 'conflit')
+            return render(request, 'administration/gestion_saison.html', {
+                'saisons':         saisons,
+                'current_year':    current_year,
+                'annees':          list(range(current_year - 1, current_year + 4)),
+                'db_last_modified': _get_db_last_modified(),
+                'preview_lignes':  lignes_preview,
+                'preview_annee':   annee_cible,
+                'preview_nb_ok':   nb_ok,
+                'preview_nb_existe': nb_existe,
+                'preview_nb_conflit': nb_conflit,
+            })
+
+        elif action == 'generer_saison_confirme':
+            annee_cible   = int(request.POST.get('annee_cible'))
+            selectionnees = set(request.POST.getlist('lignes_selectionnees'))
+            appliquer_retours = request.POST.get('appliquer_retours') == '1'
+            regles = RegleRecurrence.objects.filter(actif=True).select_related('loge', 'temple')
+            cree = conflit = ignore = ignore_retour = 0
+
+            # Pré-charger les lignes de validation marquées 'annuler' pour cette saison
+            # Clé : (regle_id, date_iso) → True si la loge a demandé l'annulation
+            annulations_loge: set = set()
+            if appliquer_retours:
+                for ligne in ValidationSaisonLigne.objects.filter(
+                    validation__annee=annee_cible,
+                    validation__statut__in=['soumise', 'traitee'],
+                    avis='annuler',
+                ).select_related('regle'):
+                    if ligne.regle_id:
+                        annulations_loge.add((ligne.regle_id, ligne.date.isoformat()))
+
+            for regle in regles:
+                for d in _dates_saison(regle, annee_cible):
+                    cle = f"{regle.pk}:{d.isoformat()}"
+                    if cle not in selectionnees:
+                        ignore += 1
+                        continue
+
+                    # Retour loge : annulation demandée → on skip
+                    if appliquer_retours and (regle.pk, d.isoformat()) in annulations_loge:
+                        ignore_retour += 1
+                        continue
+
+                    Reservation.objects.filter(regle_source=regle, date=d).delete()
+
+                    if Reservation.objects.filter(
+                        temple=regle.temple, date=d, statut__in=['validee', 'attente'],
+                        heure_debut__lt=regle.heure_fin, heure_fin__gt=regle.heure_debut,
+                    ).exclude(regle_source=regle).exists():
+                        conflit += 1
+                        continue
+
+                    Reservation.objects.create(
+                        loge=regle.loge, temple=regle.temple, date=d,
+                        heure_debut=regle.heure_debut, heure_fin=regle.heure_fin,
+                        type_reservation='reguliere', statut='validee',
+                        nom_demandeur='Generation automatique',
+                        email_demandeur=regle.loge.email or settings.DEFAULT_FROM_EMAIL,
+                        regle_source=regle,
+                    )
+                    cree += 1
+
+            parts = [f"{cree} tenue(s) créée(s)"]
+            if ignore:
+                parts.append(f"{ignore} ignorée(s) (décochées)")
+            if ignore_retour:
+                parts.append(f"{ignore_retour} annulée(s) sur demande loge")
+            if conflit:
+                parts.append(f"{conflit} conflit(s) détecté(s)")
+            messages.success(request, f"Saison {annee_cible} : {', '.join(parts)}.")
+            return redirect('administration:gestion_saison')
+
     return render(request, 'administration/gestion_saison.html', {
-        'saisons': saisons,
-        'current_year': current_year,
-        'annees': list(range(current_year - 1, current_year + 4)),
+        'saisons':         saisons,
+        'current_year':    current_year,
+        'annees':          list(range(current_year - 1, current_year + 4)),
         'db_last_modified': _get_db_last_modified(),
+    })
+
+
+@login_required
+def preview_saison_excel(request):
+    """Export Excel du dry-run groupé par loge."""
+    from collections import defaultdict
+    annee  = int(request.GET.get('annee', date.today().year))
+    lignes = _dry_run_saison(annee)
+
+    saison_label  = f"{annee}-{annee + 1}"
+    periode_label = f"01/09/{annee} → 30/06/{annee + 1}"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Saison {saison_label}"
+
+    # ── Styles ──────────────────────────────────────────────────────────────────
+    navy_fill  = PatternFill("solid", fgColor="0F2137")
+    loge_fill  = PatternFill("solid", fgColor="1E3A5F")
+    col_fill   = PatternFill("solid", fgColor="E2E8F0")
+    total_fill = PatternFill("solid", fgColor="F1F5F9")
+    grand_fill = PatternFill("solid", fgColor="0F2137")
+    fill_ok      = PatternFill("solid", fgColor="D1FAE5")
+    fill_existe  = PatternFill("solid", fgColor="FEF9C3")
+    fill_conflit = PatternFill("solid", fgColor="FEE2E2")
+
+    thin  = Border(left=Side(style='thin'), right=Side(style='thin'),
+                   top=Side(style='thin'),  bottom=Side(style='thin'))
+    ctr   = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left  = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+
+    NCOLS = 7  # Date | Jour | Temple | Horaires | Règle | Statut | Détail
+    col_widths = [13, 10, 22, 13, 34, 22, 36]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    def _cell(r, c, val='', font=None, fill=None, align=None, border=thin):
+        cell = ws.cell(row=r, column=c, value=val)
+        if font:   cell.font      = font
+        if fill:   cell.fill      = fill
+        if align:  cell.alignment = align
+        if border: cell.border    = border
+        return cell
+
+    def _merge_row(r, val, font, fill, height=18):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=NCOLS)
+        _cell(r, 1, val, font=font, fill=fill, align=ctr)
+        for c in range(2, NCOLS + 1):
+            ws.cell(row=r, column=c).fill  = fill
+            ws.cell(row=r, column=c).border = thin
+        ws.row_dimensions[r].height = height
+
+    # ── En-tête document ────────────────────────────────────────────────────────
+    row = 1
+    _merge_row(row, "TEMPLES KELLERMANN",
+               Font(bold=True, size=14, color="C8A84B"), navy_fill, height=26)
+    row += 1
+    _merge_row(row, f"Prévisualisation saison {saison_label}  ·  {periode_label}",
+               Font(bold=True, size=11, color="FFFFFF"), navy_fill, height=20)
+    row += 1
+
+    nb_ok      = sum(1 for l in lignes if l['statut'] == 'ok')
+    nb_existe  = sum(1 for l in lignes if l['statut'] == 'existe_deja')
+    nb_conflit = sum(1 for l in lignes if l['statut'] == 'conflit')
+    _merge_row(row, f"✓ {nb_ok} à créer   ·   ↻ {nb_existe} remplace existantes   ·   ⚠ {nb_conflit} conflits ignorés",
+               Font(size=9, color="0F2137"), PatternFill("solid", fgColor="F0F9FF"), height=16)
+    row += 2  # ligne vide
+
+    # ── Regroupement par loge ───────────────────────────────────────────────────
+    groupes: dict = defaultdict(list)
+    for l in lignes:
+        groupes[l['loge'].nom if l['loge'] else '— Sans loge —'].append(l)
+    groupes_tries = sorted(groupes.items(), key=lambda x: x[0])
+
+    COL_HEADERS = ["Date", "Jour", "Temple", "Horaires", "Règle de récurrence", "Statut", "Détail conflit"]
+    STATUT_LABELS = {'ok': '✓ À créer', 'existe_deja': '↻ Remplace', 'conflit': '⚠ Conflit'}
+
+    for loge_nom, loge_lignes in groupes_tries:
+        nb_loge = len(loge_lignes)
+
+        # En-tête loge
+        _merge_row(row, f"  {loge_nom.upper()}  —  {nb_loge} tenue{'s' if nb_loge > 1 else ''}",
+                   Font(bold=True, size=10, color="FFFFFF"), loge_fill, height=18)
+        row += 1
+
+        # En-têtes colonnes
+        for c, h in enumerate(COL_HEADERS, 1):
+            _cell(row, c, h,
+                  font=Font(bold=True, size=9, color="0F2137"),
+                  fill=col_fill, align=ctr)
+        ws.row_dimensions[row].height = 15
+        row += 1
+
+        # Lignes de données
+        loge_lignes_sorted = sorted(loge_lignes, key=lambda x: x['date'])
+        for l in loge_lignes_sorted:
+            fill = {'ok': fill_ok, 'existe_deja': fill_existe, 'conflit': fill_conflit}[l['statut']]
+            font_data = Font(size=9, color="991B1B" if l['statut'] == 'conflit' else "000000")
+            vals = [
+                l['date'].strftime('%d/%m/%Y'),
+                l['jour'],
+                str(l['temple']),
+                f"{l['heure_debut']:%H:%M}–{l['heure_fin']:%H:%M}",
+                l['regle_label'],
+                STATUT_LABELS[l['statut']],
+                l['conflict_detail'] or '',
+            ]
+            for c, v in enumerate(vals, 1):
+                _cell(row, c, v, font=font_data, fill=fill,
+                      align=ctr if c in (1, 2, 4, 6) else left)
+            ws.row_dimensions[row].height = 14
+            row += 1
+
+        # Total loge
+        nb_ok_l      = sum(1 for l in loge_lignes if l['statut'] == 'ok')
+        nb_existe_l  = sum(1 for l in loge_lignes if l['statut'] == 'existe_deja')
+        nb_conflit_l = sum(1 for l in loge_lignes if l['statut'] == 'conflit')
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=NCOLS)
+        _cell(row, 1,
+              f"Total {loge_nom} : {nb_loge} tenue(s)   "
+              f"[✓ {nb_ok_l}  ↻ {nb_existe_l}  ⚠ {nb_conflit_l}]",
+              font=Font(bold=True, size=9, color="0F2137"),
+              fill=total_fill, align=left)
+        for c in range(2, NCOLS + 1):
+            ws.cell(row=row, column=c).fill   = total_fill
+            ws.cell(row=row, column=c).border = thin
+        ws.row_dimensions[row].height = 14
+        row += 2  # saut entre loges
+
+    # ── Grand total ─────────────────────────────────────────────────────────────
+    _merge_row(row,
+               f"TOTAL SAISON {saison_label}  :  {len(lignes)} tenues   "
+               f"[✓ {nb_ok} à créer   ↻ {nb_existe} remplace   ⚠ {nb_conflit} conflits]",
+               Font(bold=True, size=11, color="C8A84B"), grand_fill, height=22)
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = (
+        f'attachment; filename="kellermann_saison_{saison_label}.xlsx"')
+    wb.save(response)
+    return response
+
+
+@login_required
+def preview_saison_pdf(request):
+    """Export PDF du dry-run groupé par loge."""
+    from io import BytesIO
+    from collections import defaultdict
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer
+
+    annee = int(request.GET.get('annee', date.today().year))
+    lignes = _dry_run_saison(annee)
+
+    saison_label  = f"{annee}-{annee + 1}"
+    periode_label = f"01/09/{annee} \u2192 30/06/{annee + 1}"
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+
+    navy        = colors.HexColor('#0F2137')
+    gold        = colors.HexColor('#C8A84B')
+    loge_color  = colors.HexColor('#1E3A5F')
+    col_bg      = colors.HexColor('#E2E8F0')
+    total_bg    = colors.HexColor('#DBEAFE')
+    fill_ok     = colors.HexColor('#D1FAE5')
+    fill_existe = colors.HexColor('#FEF9C3')
+    fill_conflit= colors.HexColor('#FEE2E2')
+    green_dark  = colors.HexColor('#166534')
+    yellow_dark = colors.HexColor('#92400E')
+    red_dark    = colors.HexColor('#991B1B')
+    grid_color  = colors.HexColor('#CBD5E1')
+
+    nb_ok      = sum(1 for l in lignes if l['statut'] == 'ok')
+    nb_existe  = sum(1 for l in lignes if l['statut'] == 'existe_deja')
+    nb_conflit = sum(1 for l in lignes if l['statut'] == 'conflit')
+
+    STATUT_LABELS = {'ok': '\u2713 \u00c0 cr\u00e9er', 'existe_deja': '\u21bb Remplace', 'conflit': '\u26a0 Conflit'}
+    COL_HEADERS   = ["Date", "Jour", "Temple", "Horaires", "R\u00e8gle de r\u00e9currence", "Statut", "D\u00e9tail conflit"]
+
+    # Columns: Date | Jour | Temple | Horaires | Règle | Statut | Conflit
+    col_widths = [2.2*cm, 1.5*cm, 6.2*cm, 2.4*cm, 7.2*cm, 2.5*cm, 4.2*cm]
+    NCOLS      = len(col_widths)
+    total_w    = sum(col_widths)
+
+    story = []
+
+    # ── En-tête document ────────────────────────────────────────────────────────
+    header_data = [
+        ["TEMPLES KELLERMANN"],
+        [f"Pr\u00e9visualisation saison {saison_label}  \u00b7  {periode_label}"],
+        [f"\u2713 {nb_ok} \u00e0 cr\u00e9er   \u00b7   \u21bb {nb_existe} remplace existantes   \u00b7   \u26a0 {nb_conflit} conflits ignor\u00e9s"],
+    ]
+    header_table = Table(header_data, colWidths=[total_w])
+    header_table.setStyle(TableStyle([
+        ('BACKGROUND',   (0,0), (-1,0), navy),
+        ('TEXTCOLOR',    (0,0), (-1,0), gold),
+        ('FONTNAME',     (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE',     (0,0), (-1,0), 16),
+        ('BACKGROUND',   (0,1), (-1,1), navy),
+        ('TEXTCOLOR',    (0,1), (-1,1), colors.white),
+        ('FONTNAME',     (0,1), (-1,1), 'Helvetica-Bold'),
+        ('FONTSIZE',     (0,1), (-1,1), 11),
+        ('BACKGROUND',   (0,2), (-1,2), colors.HexColor('#EFF6FF')),
+        ('TEXTCOLOR',    (0,2), (-1,2), navy),
+        ('FONTSIZE',     (0,2), (-1,2), 9),
+        ('ALIGN',        (0,0), (-1,-1), 'CENTER'),
+        ('VALIGN',       (0,0), (-1,-1), 'MIDDLE'),
+        ('TOPPADDING',   (0,0), (-1,0), 6),
+        ('BOTTOMPADDING',(0,0), (-1,0), 6),
+        ('TOPPADDING',   (0,1), (-1,1), 4),
+        ('BOTTOMPADDING',(0,1), (-1,1), 4),
+        ('TOPPADDING',   (0,2), (-1,2), 3),
+        ('BOTTOMPADDING',(0,2), (-1,2), 3),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 0.3*cm))
+
+    # ── Regroupement par loge ───────────────────────────────────────────────────
+    groupes: dict = defaultdict(list)
+    for l in lignes:
+        groupes[l['loge'].nom if l['loge'] else '\u2014 Sans loge \u2014'].append(l)
+    groupes_tries = sorted(groupes.items(), key=lambda x: x[0])
+
+    for loge_nom, loge_lignes in groupes_tries:
+        nb_loge      = len(loge_lignes)
+        nb_ok_l      = sum(1 for l in loge_lignes if l['statut'] == 'ok')
+        nb_existe_l  = sum(1 for l in loge_lignes if l['statut'] == 'existe_deja')
+        nb_conflit_l = sum(1 for l in loge_lignes if l['statut'] == 'conflit')
+
+        loge_lignes_sorted = sorted(loge_lignes, key=lambda x: x['date'])
+        data       = []
+        style_cmds = []
+
+        # Ligne 0 — en-tête loge
+        data.append([f"  {loge_nom.upper()}  \u2014  {nb_loge} tenue{'s' if nb_loge > 1 else ''}"] + [''] * (NCOLS - 1))
+        style_cmds += [
+            ('SPAN',         (0,0), (NCOLS-1, 0)),
+            ('BACKGROUND',   (0,0), (-1,0), loge_color),
+            ('TEXTCOLOR',    (0,0), (-1,0), colors.white),
+            ('FONTNAME',     (0,0), (-1,0), 'Helvetica-Bold'),
+            ('FONTSIZE',     (0,0), (-1,0), 10),
+            ('ALIGN',        (0,0), (-1,0), 'LEFT'),
+            ('VALIGN',       (0,0), (-1,0), 'MIDDLE'),
+            ('TOPPADDING',   (0,0), (-1,0), 5),
+            ('BOTTOMPADDING',(0,0), (-1,0), 5),
+        ]
+
+        # Ligne 1 — en-têtes colonnes
+        data.append(COL_HEADERS)
+        style_cmds += [
+            ('BACKGROUND',   (0,1), (-1,1), col_bg),
+            ('TEXTCOLOR',    (0,1), (-1,1), navy),
+            ('FONTNAME',     (0,1), (-1,1), 'Helvetica-Bold'),
+            ('FONTSIZE',     (0,1), (-1,1), 8),
+            ('ALIGN',        (0,1), (-1,1), 'CENTER'),
+            ('VALIGN',       (0,1), (-1,1), 'MIDDLE'),
+            ('TOPPADDING',   (0,1), (-1,1), 3),
+            ('BOTTOMPADDING',(0,1), (-1,1), 3),
+        ]
+
+        # Lignes de données
+        for i, l in enumerate(loge_lignes_sorted):
+            ri = 2 + i
+            data.append([
+                l['date'].strftime('%d/%m/%Y'),
+                l['jour'][:3],
+                str(l['temple']),
+                f"{l['heure_debut']:%H:%M}\u2013{l['heure_fin']:%H:%M}",
+                l['regle_label'],
+                STATUT_LABELS[l['statut']],
+                l['conflict_detail'] or '',
+            ])
+            if l['statut'] == 'ok':
+                style_cmds.append(('BACKGROUND', (0,ri), (-1,ri), fill_ok))
+                style_cmds.append(('TEXTCOLOR',  (5,ri), (5,ri),  green_dark))
+            elif l['statut'] == 'existe_deja':
+                style_cmds.append(('BACKGROUND', (0,ri), (-1,ri), fill_existe))
+                style_cmds.append(('TEXTCOLOR',  (5,ri), (5,ri),  yellow_dark))
+            else:
+                style_cmds.append(('BACKGROUND', (0,ri), (-1,ri), fill_conflit))
+                style_cmds.append(('TEXTCOLOR',  (0,ri), (-1,ri), red_dark))
+                style_cmds.append(('FONTNAME',   (0,ri), (-1,ri), 'Helvetica-Bold'))
+
+        # Ligne total loge
+        ti = len(data)
+        data.append(
+            [f"Total {loge_nom} : {nb_loge} tenue(s)   "
+             f"[\u2713 {nb_ok_l}  \u21bb {nb_existe_l}  \u26a0 {nb_conflit_l}]"]
+            + [''] * (NCOLS - 1)
+        )
+        style_cmds += [
+            ('SPAN',         (0,ti), (NCOLS-1, ti)),
+            ('BACKGROUND',   (0,ti), (-1,ti), total_bg),
+            ('TEXTCOLOR',    (0,ti), (-1,ti), navy),
+            ('FONTNAME',     (0,ti), (-1,ti), 'Helvetica-Bold'),
+            ('FONTSIZE',     (0,ti), (-1,ti), 8),
+            ('ALIGN',        (0,ti), (-1,ti), 'LEFT'),
+            ('TOPPADDING',   (0,ti), (-1,ti), 4),
+            ('BOTTOMPADDING',(0,ti), (-1,ti), 4),
+        ]
+
+        # Style global données
+        style_cmds += [
+            ('FONTSIZE',     (0,2), (-1,ti-1), 7.5),
+            ('VALIGN',       (0,2), (-1,ti-1), 'MIDDLE'),
+            ('ALIGN',        (0,2), (-1,ti-1), 'LEFT'),
+            ('ALIGN',        (0,2), (0,ti-1),  'CENTER'),
+            ('ALIGN',        (1,2), (1,ti-1),  'CENTER'),
+            ('ALIGN',        (3,2), (3,ti-1),  'CENTER'),
+            ('ALIGN',        (5,2), (5,ti-1),  'CENTER'),
+            ('TOPPADDING',   (0,2), (-1,ti-1), 2),
+            ('BOTTOMPADDING',(0,2), (-1,ti-1), 2),
+            ('GRID',         (0,1), (-1,-1), 0.3, grid_color),
+        ]
+
+        loge_table = Table(data, colWidths=col_widths, repeatRows=2)
+        loge_table.setStyle(TableStyle(style_cmds))
+        story.append(loge_table)
+        story.append(Spacer(1, 0.2*cm))
+
+    # ── Grand total ─────────────────────────────────────────────────────────────
+    grand_data = [
+        [f"TOTAL SAISON {saison_label}  :  {len(lignes)} tenues   "
+         f"[\u2713 {nb_ok} \u00e0 cr\u00e9er   \u21bb {nb_existe} remplace   \u26a0 {nb_conflit} conflits]"]
+        + [''] * (NCOLS - 1)
+    ]
+    grand_table = Table(grand_data, colWidths=col_widths)
+    grand_table.setStyle(TableStyle([
+        ('SPAN',         (0,0), (NCOLS-1, 0)),
+        ('BACKGROUND',   (0,0), (-1,0), navy),
+        ('TEXTCOLOR',    (0,0), (-1,0), gold),
+        ('FONTNAME',     (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE',     (0,0), (-1,0), 11),
+        ('ALIGN',        (0,0), (-1,0), 'CENTER'),
+        ('VALIGN',       (0,0), (-1,0), 'MIDDLE'),
+        ('TOPPADDING',   (0,0), (-1,0), 8),
+        ('BOTTOMPADDING',(0,0), (-1,0), 8),
+    ]))
+    story.append(grand_table)
+
+    doc.build(story)
+    buf.seek(0)
+    response = HttpResponse(buf, content_type='application/pdf')
+    response['Content-Disposition'] = (
+        f'attachment; filename="kellermann_saison_{saison_label}.pdf"')
+    return response
+
+
+@login_required
+def validation_saison_admin(request):
+    """Dashboard de validation de saison par les loges."""
+    from django.utils import timezone
+
+    current_year = date.today().year
+    annees = list(range(current_year - 1, current_year + 4))
+    annee = int(request.GET.get('annee', current_year))
+    saison_label  = f"{annee}-{annee + 1}"
+    periode_label = f"01/09/{annee} → 30/06/{annee + 1}"
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'ouvrir_validation':
+            # ── ÉTAPE 1 : calcul + création des fiches, AUCUN email ──────────
+            annee_cible = int(request.POST.get('annee_cible', annee))
+            lignes_dry  = _dry_run_saison(annee_cible)
+
+            from collections import defaultdict
+            lignes_par_loge = defaultdict(list)
+            for l in lignes_dry:
+                if l['statut'] in ('ok', 'existe_deja') and l['loge']:
+                    lignes_par_loge[l['loge']].append(l)
+
+            nb_cree = nb_maj = nb_skip_soumise = 0
+            for loge, loge_lignes in lignes_par_loge.items():
+                val, created = ValidationSaison.objects.get_or_create(
+                    loge=loge, annee=annee_cible,
+                    defaults={'statut': 'attente'},
+                )
+                if not created and val.statut == 'soumise':
+                    nb_skip_soumise += 1
+                    continue
+
+                # (Re)créer les lignes sans toucher au statut ni aux emails
+                val.lignes.all().delete()
+                ValidationSaisonLigne.objects.bulk_create([
+                    ValidationSaisonLigne(
+                        validation=val,
+                        regle_id=l['regle_id'],
+                        date=l['date'],
+                        heure_debut=l['heure_debut'],
+                        heure_fin=l['heure_fin'],
+                        temple_nom=str(l['temple']),
+                    )
+                    for l in sorted(loge_lignes, key=lambda x: x['date'])
+                ])
+
+                # Statut attente uniquement si nouveau ou remis à zéro
+                if created or val.statut not in ('ouverte', 'traitee'):
+                    val.statut = 'attente'
+                val.save()
+                if created:
+                    nb_cree += 1
+                else:
+                    nb_maj += 1
+
+            parts = [f"{len(lignes_par_loge)} fiche(s) calculée(s)"]
+            if nb_cree:
+                parts.append(f"{nb_cree} nouvelle(s)")
+            if nb_maj:
+                parts.append(f"{nb_maj} mise(s) à jour")
+            if nb_skip_soumise:
+                parts.append(f"{nb_skip_soumise} déjà soumise(s) — non modifiée(s)")
+            messages.info(request,
+                "Récapitulatif calculé — aucun email envoyé. "
+                "Vérifiez le tableau ci-dessous puis cliquez sur «\u00a0Envoyer les emails\u00a0». "
+                f"({', '.join(parts)})")
+            return redirect(f"{request.path}?annee={annee_cible}")
+
+        elif action == 'envoyer_emails':
+            # ── ÉTAPE 2 : envoi des emails aux loges sélectionnées ───────────
+            annee_cible  = int(request.POST.get('annee_cible', annee))
+            periode_cible = f"01/09/{annee_cible} → 30/06/{annee_cible + 1}"
+            pks_selectionnes = set(
+                int(x) for x in request.POST.getlist('validation_pks') if x.isdigit()
+            )
+            if not pks_selectionnes:
+                messages.warning(request, "Aucune loge sélectionnée.")
+                return redirect(f"{request.path}?annee={annee_cible}")
+            validations_attente = ValidationSaison.objects.filter(
+                pk__in=pks_selectionnes, annee=annee_cible, statut='attente'
+            ).select_related('loge')
+
+            nb_email = nb_sans_email = nb_sans_token = 0
+            for val in validations_attente:
+                loge = val.loge
+                nb_tenues = val.lignes.count()
+
+                if loge.email:
+                    demande = DemandeAccesPortail.objects.filter(
+                        loge=loge, statut='validee'
+                    ).order_by('-created_at').first()
+                    if demande:
+                        portail_url = (
+                            f"{settings.SITE_URL.rstrip('/')}"
+                            f"/reservations/portail/{demande.token}/"
+                        ) if hasattr(settings, 'SITE_URL') else f"/reservations/portail/{demande.token}/"
+                        send_mail_kellermann(
+                            subject=f"Validation de votre calendrier — Saison {annee_cible}-{annee_cible + 1}",
+                            message=(
+                                f"Bonjour,\n\n"
+                                f"Nous vous invitons à valider le calendrier prévisionnel de vos tenues "
+                                f"pour la saison {annee_cible}-{annee_cible + 1} ({periode_cible}).\n\n"
+                                f"{nb_tenues} tenue(s) sont planifiées pour votre loge.\n\n"
+                                f"Accédez à votre espace loge pour confirmer, signaler un déplacement "
+                                f"ou une annulation :\n{portail_url}\n\n"
+                                f"Bien fraternellement,\nLes Temples Kellermann"
+                            ),
+                            recipient_list=[loge.email],
+                        )
+                        val.statut     = 'ouverte'
+                        val.date_envoi = timezone.now()
+                        nb_email += 1
+                    else:
+                        # Email présent mais pas de token portail
+                        val.statut = 'ouverte'
+                        nb_sans_token += 1
+                else:
+                    val.statut = 'ouverte'
+                    nb_sans_email += 1
+
+                val.save()
+
+            parts = [f"{nb_email} email(s) envoyé(s)"]
+            if nb_sans_token:
+                parts.append(f"{nb_sans_token} sans token portail")
+            if nb_sans_email:
+                parts.append(f"{nb_sans_email} sans adresse email")
+            messages.success(request, "Emails envoyés — " + ", ".join(parts) + ".")
+            return redirect(f"{request.path}?annee={annee_cible}")
+
+        elif action == 'marquer_traitee':
+            pk = int(request.POST.get('validation_pk'))
+            val = ValidationSaison.objects.get(pk=pk)
+            val.statut = 'traitee'
+            val.save()
+            messages.success(request, f"{val.loge} — saison {val.annee}-{val.annee + 1} marquée comme traitée.")
+            return redirect(f"{request.path}?annee={annee}")
+
+        elif action == 'reinitialiser':
+            pk = int(request.POST.get('validation_pk'))
+            val = ValidationSaison.objects.get(pk=pk)
+            val.statut = 'ouverte'
+            val.commentaire_loge = ''
+            val.date_reponse = None
+            val.lignes.update(avis='ok', commentaire='')
+            val.save()
+            messages.success(request, f"Validation de {val.loge} réinitialisée.")
+            return redirect(f"{request.path}?annee={annee}")
+
+    # ── GET ──────────────────────────────────────────────────────────────────────
+    validations = (
+        ValidationSaison.objects
+        .filter(annee=annee)
+        .select_related('loge')
+        .prefetch_related('lignes')
+        .order_by('loge__nom')
+    )
+
+    # Statistiques globales
+    nb_total   = validations.count()
+    nb_attente = validations.filter(statut='attente').count()
+    nb_ouverte = validations.filter(statut='ouverte').count()
+    nb_soumise = validations.filter(statut='soumise').count()
+    nb_traitee = validations.filter(statut='traitee').count()
+    nb_anomalies_total = sum(v.nb_anomalies() for v in validations)
+
+    # Loges avec au moins une tenue projetée pour cette année
+    # mais sans fiche ValidationSaison — on réutilise le dry-run
+    # uniquement si des fiches existent déjà (évite le calcul à froid)
+    loges_validees = set(validations.values_list('loge_id', flat=True))
+    if validations.exists():
+        lignes_dry = _dry_run_saison(annee)
+        loges_avec_tenues = {
+            l['loge'].pk
+            for l in lignes_dry
+            if l['statut'] in ('ok', 'existe_deja') and l['loge']
+        }
+        loges_manquantes = Loge.objects.filter(
+            pk__in=loges_avec_tenues - loges_validees
+        ).order_by('nom')
+    else:
+        loges_manquantes = Loge.objects.none()
+
+    validations_attente_list = [v for v in validations if v.statut == 'attente']
+
+    return render(request, 'administration/validation_saison.html', {
+        'annee':                   annee,
+        'annees':                  annees,
+        'saison_label':            saison_label,
+        'periode_label':           periode_label,
+        'validations':             validations,
+        'validations_attente_list': validations_attente_list,
+        'nb_total':                nb_total,
+        'nb_attente':              nb_attente,
+        'nb_ouverte':              nb_ouverte,
+        'nb_soumise':              nb_soumise,
+        'nb_traitee':              nb_traitee,
+        'nb_anomalies_total':      nb_anomalies_total,
+        'loges_manquantes':        loges_manquantes,
     })
 
 
@@ -1302,7 +2021,7 @@ def agapes_export_excel(request):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = f"Agapes {annee_param}-{annee_param + 1}"
+    ws.title = f"Agapes {debut_saison:%d/%m/%Y}-{fin_saison:%d/%m/%Y}"[:31]
 
     # Styles
     hf    = Font(bold=True, color="C8A84B")
@@ -1326,13 +2045,18 @@ def agapes_export_excel(request):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
     MOIS_NOMS = {1:'Janvier',2:'Février',3:'Mars',4:'Avril',5:'Mai',6:'Juin',
-                 9:'Septembre',10:'Octobre',11:'Novembre',12:'Décembre'}
-    MOIS_ORDRE = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
+                 7:'Juillet',8:'Août',9:'Septembre',10:'Octobre',11:'Novembre',12:'Décembre'}
+
+    # Construire l'ordre des mois couverts par la période réelle
+    mois_presents = sorted({l[0].month for l in lignes}, key=lambda m: (m < debut_saison.month, m))
+    # Fallback saison classique si aucune donnée
+    if not mois_presents:
+        mois_presents = []
 
     # Tuple layout : (date_obj, organisation, type, couverts_affiche, couverts_num, lieu, horaires, commentaire)
     row_idx = 2
-    for mois in MOIS_ORDRE:
-        mois_lignes = [l for l in lignes if l[0].month == mois]
+    for mois in mois_presents:
+        mois_lignes = sorted([l for l in lignes if l[0].month == mois], key=lambda l: l[0])
         if not mois_lignes:
             continue
         # Séparateur de mois
@@ -1369,7 +2093,7 @@ def agapes_export_excel(request):
     total_saison = sum(l[4] for l in lignes)
     row_idx += 1
     ws.merge_cells(start_row=row_idx, start_column=1, end_row=row_idx, end_column=3)
-    ws.cell(row=row_idx, column=1, value=f"TOTAL SAISON {annee_param}/{annee_param+1}").font = Font(bold=True, color="C8A84B")
+    ws.cell(row=row_idx, column=1, value=f"TOTAL  {debut_saison:%d/%m/%Y} → {fin_saison:%d/%m/%Y}").font = Font(bold=True, color="C8A84B")
     ws.cell(row=row_idx, column=1).fill = PatternFill("solid", fgColor="0F2137")
     ws.cell(row=row_idx, column=1).border = thin
     ts = ws.cell(row=row_idx, column=4, value=total_saison)
