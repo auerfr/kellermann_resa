@@ -1,81 +1,242 @@
 {% extends "base.html" %}
 {% block title %}Tableau de bord{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ── Wrapper page ─────────────────────────────────────────────────────── */
+  .tdb-wrap {
+    background: #F8FAFC;
+    margin: -1.5rem;
+    padding: 1.75rem 1.5rem 2.5rem;
+    min-height: calc(100vh - 60px);
+  }
+
+  /* ── KPI cards ────────────────────────────────────────────────────────── */
+  .kpi-card {
+    border-radius: 16px !important;
+    border: none !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,.15);
+    transition: transform .15s, box-shadow .15s;
+    cursor: default;
+  }
+  .kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 28px rgba(0,0,0,.20) !important;
+  }
+
+  /* ── Section cards ────────────────────────────────────────────────────── */
+  .tdb-card {
+    border-radius: 12px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  .tdb-card-header {
+    border-radius: 12px 12px 0 0 !important;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(0,0,0,.06);
+  }
+
+  /* ── Tables ───────────────────────────────────────────────────────────── */
+  .tdb-table thead th {
+    font-size: 11px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 10px 12px;
+    border-bottom: none;
+  }
+  .tdb-table thead th:first-child { padding-left: 20px; }
+  .tdb-table tbody td {
+    padding: 11px 12px;
+    vertical-align: middle;
+    border-bottom: 1px solid #F1F5F9;
+    font-size: 13px;
+  }
+  .tdb-table tbody td:first-child { padding-left: 20px; }
+  .tdb-table tbody tr:last-child td { border-bottom: none; }
+  .tdb-table tbody tr:nth-child(odd) { background: #FAFAFA; }
+  .tdb-table tbody tr:nth-child(even) { background: #FFFFFF; }
+  .tdb-table tbody tr:hover td { background: #F0F9FF !important; }
+
+  /* ── Badge statut ─────────────────────────────────────────────────────── */
+  .badge-validee  { background:#DCFCE7; color:#166534; font-size:12px; font-weight:600; padding:3px 8px; border-radius:6px; }
+  .badge-attente  { background:#FEF9C3; color:#92400E; font-size:12px; font-weight:600; padding:3px 8px; border-radius:6px; }
+  .badge-refusee  { background:#FEE2E2; color:#991B1B; font-size:12px; font-weight:600; padding:3px 8px; border-radius:6px; }
+</style>
+{% endblock %}
+
 {% block content %}
+<div class="tdb-wrap">
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+{# ── En-tête ──────────────────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
-    <h1 class="h3 mb-1" style="color:#0F2137;">⚒ Tableau de bord</h1>
-    <p class="text-muted small mb-0">Administration des temples et réservations</p>
+    <h1 class="h3 mb-1 fw-semibold" style="color:#0F2137;">⚒ Administration</h1>
+    <p class="text-muted small mb-0">Gestion des temples, réservations et saisons</p>
   </div>
-  <div class="d-flex gap-2 flex-wrap">
-    <a href="{% url 'administration:parametres' %}" class="btn btn-outline-info btn-sm">⚙ Paramètres</a>
-    <a href="{% url 'administration:import_excel' %}" class="btn btn-outline-primary btn-sm">📂 Importer Excel</a>
-    <a href="{% url 'administration:template_excel' %}" class="btn btn-outline-success btn-sm">📥 Template vierge</a>
-    <a href="{% url 'administration:export_excel' %}" class="btn btn-outline-success btn-sm">📤 Exporter données</a>
-    <a href="{% url 'administration:regles_liste' %}" class="btn btn-outline-secondary btn-sm">📋 Règles</a>
-    <a href="{% url 'administration:salles_liste' %}" class="btn btn-outline-warning btn-sm">🏛 Salles</a>
-    <a href="{% url 'administration:agapes_traiteur' %}" class="btn btn-outline-warning btn-sm">🍽 Agapes</a>
-    <a href="{% url 'administration:reservation_directe' %}" class="btn btn-success btn-sm">➕ Réservation directe</a>
-    <a href="{% url 'administration:gestion_saison' %}" class="btn btn-outline-dark btn-sm">📅 Saison</a>
-    <a href="{% url 'administration:backup' %}" class="btn btn-outline-success btn-sm">💾 Backup</a>
-    <a href="{% url 'administration:regenerer' %}" class="btn btn-warning btn-sm">🔄 Regénérer</a>
-    <a href="{% url 'administration:reset_calendrier' %}" class="btn btn-danger btn-sm">🗑 Nettoyage</a>
-    <a href="{% url 'administration:journal' %}" class="btn btn-outline-secondary btn-sm">📋 Journal de traçabilité</a>
+
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+
+    {# CTA principal — vert bien visible #}
+    <a href="{% url 'administration:reservation_directe' %}"
+       class="btn btn-success btn-sm fw-semibold px-3">
+      ➕ Réservation directe
+    </a>
+
+    {# Données #}
+    <div class="dropdown">
+      <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+              data-bs-toggle="dropdown" aria-expanded="false">
+        📊 Données
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0" style="min-width:190px;border-radius:10px;">
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:import_excel' %}">📂 Importer Excel</a></li>
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:export_excel' %}">📤 Exporter données</a></li>
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:template_excel' %}">📥 Template vierge</a></li>
+      </ul>
+    </div>
+
+    {# Gestion #}
+    <div class="dropdown">
+      <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+              data-bs-toggle="dropdown" aria-expanded="false">
+        ⚙️ Gestion
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0" style="min-width:175px;border-radius:10px;">
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:parametres' %}">⚙️ Paramètres</a></li>
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:salles_liste' %}">🏛 Salles</a></li>
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:regles_liste' %}">📋 Règles</a></li>
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:backup' %}">💾 Backup</a></li>
+      </ul>
+    </div>
+
+    {# Saison #}
+    <div class="dropdown">
+      <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
+              data-bs-toggle="dropdown" aria-expanded="false">
+        📅 Saison
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0" style="min-width:185px;border-radius:10px;">
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:gestion_saison' %}">📅 Gestion saison</a></li>
+        <li><a class="dropdown-item small py-2" href="{% url 'administration:regenerer' %}">🔄 Régénérer</a></li>
+        <li><hr class="dropdown-divider my-1"></li>
+        <li><a class="dropdown-item small py-2 text-danger" href="{% url 'administration:reset_calendrier' %}">🗑 Nettoyage</a></li>
+      </ul>
+    </div>
+
+    {# Isolés #}
+    <a href="{% url 'administration:agapes_traiteur' %}" class="btn btn-outline-secondary btn-sm">🍽 Agapes</a>
+    <a href="{% url 'administration:journal' %}" class="btn btn-outline-secondary btn-sm">📋 Journal</a>
+
   </div>
 </div>
 
+{# ── KPI cards ────────────────────────────────────────────────────────────── #}
 <div class="row g-3 mb-4">
+
+  {# Réservations #}
   <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm h-100">
-      <div class="card-body py-3">
-        <div class="fs-2 fw-bold" style="color:{% if nb_attente_salles > 0 %}#F59E0B{% else %}#22C55E{% endif %};">{{ nb_attente_salles }}</div>
-        <div class="text-muted small">Salles attente</div>
+    <div class="card border-0 h-100 kpi-card"
+         style="background:linear-gradient(135deg,#1E40AF,#3B82F6);">
+      <div class="card-body p-4 d-flex flex-column justify-content-between">
+        <div class="text-end" style="font-size:2rem;opacity:.7;line-height:1;">🏛</div>
+        <div>
+          <div style="font-size:2.8rem;font-weight:700;color:white;line-height:1;margin-bottom:6px;">
+            {{ nb_reservations }}
+          </div>
+          <div style="color:rgba(255,255,255,.85);font-size:13px;font-weight:500;">
+            Réservations
+          </div>
+        </div>
       </div>
     </div>
   </div>
+
+  {# En attente #}
   <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm h-100">
-      <div class="card-body py-3">
-        <div class="fs-2 fw-bold text-primary">{{ nb_loges }}</div>
-        <div class="text-muted small">Loges</div>
+    <div class="card border-0 h-100 kpi-card"
+         style="background:linear-gradient(135deg,#D97706,#F59E0B);">
+      <div class="card-body p-4 d-flex flex-column justify-content-between">
+        <div class="text-end" style="font-size:2rem;opacity:.7;line-height:1;">⏳</div>
+        <div>
+          <div style="font-size:2.8rem;font-weight:700;color:white;line-height:1;margin-bottom:6px;">
+            {{ nb_attente_salles }}
+          </div>
+          <div style="color:rgba(255,255,255,.85);font-size:13px;font-weight:500;">
+            En attente
+          </div>
+        </div>
       </div>
     </div>
   </div>
+
+  {# Loges #}
   <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm h-100">
-      <div class="card-body py-3">
-        <div class="fs-2 fw-bold text-success">{{ nb_reservations }}</div>
-        <div class="text-muted small">Réservations</div>
+    <div class="card border-0 h-100 kpi-card"
+         style="background:linear-gradient(135deg,#059669,#34D399);">
+      <div class="card-body p-4 d-flex flex-column justify-content-between">
+        <div class="text-end" style="font-size:2rem;opacity:.7;line-height:1;">✅</div>
+        <div>
+          <div style="font-size:2.8rem;font-weight:700;color:white;line-height:1;margin-bottom:6px;">
+            {{ nb_loges }}
+          </div>
+          <div style="color:rgba(255,255,255,.85);font-size:13px;font-weight:500;">
+            Loges actives
+          </div>
+        </div>
       </div>
     </div>
   </div>
+
+  {# Règles #}
   <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm h-100">
-      <div class="card-body py-3">
-        <div class="fs-2 fw-bold text-info">{{ nb_regles }}</div>
-        <div class="text-muted small">Règles actives</div>
+    <div class="card border-0 h-100 kpi-card"
+         style="background:linear-gradient(135deg,#7C3AED,#A78BFA);">
+      <div class="card-body p-4 d-flex flex-column justify-content-between">
+        <div class="text-end" style="font-size:2rem;opacity:.7;line-height:1;">📋</div>
+        <div>
+          <div style="font-size:2.8rem;font-weight:700;color:white;line-height:1;margin-bottom:6px;">
+            {{ nb_regles }}
+          </div>
+          <div style="color:rgba(255,255,255,.85);font-size:13px;font-weight:500;">
+            Règles actives
+          </div>
+        </div>
       </div>
     </div>
   </div>
+
 </div>
 
+{# ── Alerte tout est à jour ───────────────────────────────────────────────── #}
+{% if not attente and not attente_salles and not demandes_portail %}
+<div class="d-flex align-items-center gap-2 mb-4 px-4 py-3"
+     style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;">
+  <span style="font-size:18px;">✅</span>
+  <span class="small fw-semibold" style="color:#166534;">Aucune demande en attente — tout est à jour !</span>
+</div>
+{% endif %}
+
+{# ── Demandes temple en attente ───────────────────────────────────────────── #}
 {% if attente %}
-<div class="card shadow-sm mb-4 border-warning border-opacity-50">
-  <div class="card-header d-flex justify-content-between align-items-center" style="background:#FFFBEB;">
-    <h5 class="mb-0" style="color:#92400E;">⏳ Demandes en attente ({{ nb_attente }})</h5>
-    <span class="badge bg-warning text-dark">Action requise</span>
+<div class="card border-0 mb-4 tdb-card" style="border-left:4px solid #F59E0B !important;">
+  <div class="tdb-card-header d-flex justify-content-between align-items-center"
+       style="background:#FFFBEB;">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fw-semibold" style="color:#92400E;font-size:14px;">⏳ Demandes temple en attente</span>
+      <span class="badge rounded-pill" style="background:#F59E0B;color:white;font-size:11px;">{{ nb_attente }}</span>
+    </div>
+    <span style="font-size:11px;color:#B45309;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Action requise</span>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
-      <thead style="background:#0F2137;">
+    <table class="table mb-0 tdb-table">
+      <thead style="background:#FEF3C7;">
         <tr>
-          <th style="color:#C8A84B;font-size:11px;">LOGE</th>
-          <th style="color:#C8A84B;font-size:11px;">DATE</th>
-          <th style="color:#C8A84B;font-size:11px;">TEMPLE</th>
-          <th style="color:#C8A84B;font-size:11px;">TYPE</th>
-          <th style="color:#C8A84B;font-size:11px;">DEMANDEUR</th>
-          <th style="color:#C8A84B;font-size:11px;">REÇU LE</th>
-          <th style="color:#C8A84B;font-size:11px;">ACTION</th>
+          <th style="color:#92400E;">Loge</th>
+          <th style="color:#92400E;">Date</th>
+          <th style="color:#92400E;">Temple</th>
+          <th style="color:#92400E;">Demandeur</th>
+          <th style="color:#92400E;">Reçu le</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -83,48 +244,62 @@
         <tr>
           <td class="fw-semibold" style="color:#0F2137;">{{ r.loge.abreviation }}</td>
           <td>{{ r.date|date:"d/m/Y" }}</td>
-          <td><span class="badge" style="background:#0F2137;">{{ r.temple }}</span></td>
-          <td class="small text-muted">{{ r.get_type_reservation_display }}</td>
-          <td class="small">{{ r.nom_demandeur }}</td>
-          <td class="small text-muted">{{ r.created_at|date:"d/m à H:i" }}</td>
-          <td><a href="{% url 'administration:valider_reservation' r.pk %}" class="btn btn-sm btn-warning fw-semibold">Traiter →</a></td>
+          <td>
+            <span class="badge" style="background:#0F2137;color:#C8A84B;font-size:12px;">
+              {{ r.temple }}
+            </span>
+          </td>
+          <td class="text-muted">{{ r.nom_demandeur }}</td>
+          <td class="text-muted">{{ r.created_at|date:"d/m à H:i" }}</td>
+          <td class="text-end pe-4">
+            <a href="{% url 'administration:valider_reservation' r.pk %}"
+               class="btn btn-sm btn-outline-warning fw-semibold" style="font-size:12px;">
+              Traiter →
+            </a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
-{% else %}
-<div class="alert alert-success d-flex align-items-center mb-4">
-  <span class="me-2">✅</span> Aucune demande en attente — tout est à jour !
-</div>
 {% endif %}
 
+{# ── Demandes d'accès portail ─────────────────────────────────────────────── #}
 {% if demandes_portail %}
-<div class="card shadow-sm mb-4 border-info border-opacity-50">
-  <div class="card-header d-flex justify-content-between align-items-center" style="background:#EFF6FF;">
-    <h5 class="mb-0" style="color:#1E40AF;">🔑 Demandes d'accès portail ({{ nb_demandes_portail }})</h5>
-    <span class="badge bg-info text-dark">Action requise</span>
+<div class="card border-0 mb-4 tdb-card" style="border-left:4px solid #3B82F6 !important;">
+  <div class="tdb-card-header d-flex justify-content-between align-items-center"
+       style="background:#EFF6FF;">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fw-semibold" style="color:#1E40AF;font-size:14px;">🔑 Accès portail en attente</span>
+      <span class="badge rounded-pill" style="background:#3B82F6;color:white;font-size:11px;">{{ nb_demandes_portail }}</span>
+    </div>
+    <span style="font-size:11px;color:#1D4ED8;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Action requise</span>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
-      <thead style="background:#0F2137;">
+    <table class="table mb-0 tdb-table">
+      <thead style="background:#DBEAFE;">
         <tr>
-          <th style="color:#C8A84B;font-size:11px;">LOGE</th>
-          <th style="color:#C8A84B;font-size:11px;">VÉNÉRABLE</th>
-          <th style="color:#C8A84B;font-size:11px;">EMAIL</th>
-          <th style="color:#C8A84B;font-size:11px;">REÇU LE</th>
-          <th style="color:#C8A84B;font-size:11px;">ACTION</th>
+          <th style="color:#1E40AF;">Loge</th>
+          <th style="color:#1E40AF;">Vénérable</th>
+          <th style="color:#1E40AF;">Email</th>
+          <th style="color:#1E40AF;">Reçu le</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for d in demandes_portail %}
         <tr>
           <td class="fw-semibold" style="color:#0F2137;">{{ d.nom_loge_display }}</td>
-          <td class="small">{{ d.nom_venerable }}</td>
-          <td class="small"><a href="mailto:{{ d.email }}">{{ d.email }}</a></td>
-          <td class="small text-muted">{{ d.created_at|date:"d/m à H:i" }}</td>
-          <td><a href="{% url 'administration:valider_acces_portail' d.pk %}" class="btn btn-sm btn-info fw-semibold">Traiter →</a></td>
+          <td>{{ d.nom_venerable }}</td>
+          <td><a href="mailto:{{ d.email }}" class="text-muted">{{ d.email }}</a></td>
+          <td class="text-muted">{{ d.created_at|date:"d/m à H:i" }}</td>
+          <td class="text-end pe-4">
+            <a href="{% url 'administration:valider_acces_portail' d.pk %}"
+               class="btn btn-sm btn-outline-primary fw-semibold" style="font-size:12px;">
+              Traiter →
+            </a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -133,23 +308,27 @@
 </div>
 {% endif %}
 
+{# ── Demandes salles en attente ───────────────────────────────────────────── #}
 {% if attente_salles %}
-<div class="card shadow-sm mb-4 border-warning border-opacity-50">
-  <div class="card-header d-flex justify-content-between align-items-center" style="background:#FFFBEB;">
-    <h5 class="mb-0" style="color:#92400E;">⏳ Demandes de salles en attente ({{ nb_attente_salles }})</h5>
-    <span class="badge bg-warning text-dark">Action requise</span>
+<div class="card border-0 mb-4 tdb-card" style="border-left:4px solid #F59E0B !important;">
+  <div class="tdb-card-header d-flex justify-content-between align-items-center"
+       style="background:#FFFBEB;">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fw-semibold" style="color:#92400E;font-size:14px;">⏳ Demandes salles en attente</span>
+      <span class="badge rounded-pill" style="background:#F59E0B;color:white;font-size:11px;">{{ nb_attente_salles }}</span>
+    </div>
+    <span style="font-size:11px;color:#B45309;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Action requise</span>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
-      <thead style="background:#0F2137;">
+    <table class="table mb-0 tdb-table">
+      <thead style="background:#FEF3C7;">
         <tr>
-          <th style="color:#C8A84B;font-size:11px;">LOGE</th>
-          <th style="color:#C8A84B;font-size:11px;">DATE</th>
-          <th style="color:#C8A84B;font-size:11px;">SALLE</th>
-          <th style="color:#C8A84B;font-size:11px;">TYPE</th>
-          <th style="color:#C8A84B;font-size:11px;">DEMANDEUR</th>
-          <th style="color:#C8A84B;font-size:11px;">REÇU LE</th>
-          <th style="color:#C8A84B;font-size:11px;">ACTION</th>
+          <th style="color:#92400E;">Organisation</th>
+          <th style="color:#92400E;">Date</th>
+          <th style="color:#92400E;">Salle</th>
+          <th style="color:#92400E;">Demandeur</th>
+          <th style="color:#92400E;">Reçu le</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -157,11 +336,19 @@
         <tr>
           <td class="fw-semibold" style="color:#0F2137;">{{ r.organisation }}</td>
           <td>{{ r.date|date:"d/m/Y" }}</td>
-          <td><span class="badge" style="background:#0F2137;">{{ r.salle.nom }}</span></td>
-          <td class="small text-muted">{{ r.salle.get_type_salle_display }}</td>
-          <td class="small">{{ r.nom_demandeur }}</td>
-          <td class="small text-muted">{{ r.created_at|date:"d/m à H:i" }}</td>
-          <td><a href="{% url 'administration:valider_reservation_salle' r.pk %}" class="btn btn-sm btn-warning fw-semibold">Traiter →</a></td>
+          <td>
+            <span class="badge" style="background:#0F2137;color:#C8A84B;font-size:12px;">
+              {{ r.salle.nom }}
+            </span>
+          </td>
+          <td class="text-muted">{{ r.nom_demandeur }}</td>
+          <td class="text-muted">{{ r.created_at|date:"d/m à H:i" }}</td>
+          <td class="text-end pe-4">
+            <a href="{% url 'administration:valider_reservation_salle' r.pk %}"
+               class="btn btn-sm btn-outline-warning fw-semibold" style="font-size:12px;">
+              Traiter →
+            </a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -170,39 +357,53 @@
 </div>
 {% endif %}
 
-<div class="card shadow-sm border-0">
-  <div class="card-header bg-white">
-    <h5 class="mb-0" style="color:#0F2137;">Réservations récentes</h5>
+{# ── Réservations récentes ────────────────────────────────────────────────── #}
+<div class="card border-0 tdb-card">
+  <div class="tdb-card-header d-flex justify-content-between align-items-center"
+       style="background:white;">
+    <span class="fw-semibold" style="color:#0F2137;font-size:14px;">Réservations récentes</span>
+    <a href="{% url 'exports:reporting' %}" class="small text-muted text-decoration-none"
+       style="font-size:12px;">
+      Voir le reporting →
+    </a>
   </div>
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
+    <table class="table mb-0 tdb-table">
       <thead style="background:#F8FAFC;">
         <tr>
-          <th class="text-muted small">Loge</th>
-          <th class="text-muted small">Date</th>
-          <th class="text-muted small">Temple</th>
-          <th class="text-muted small">Type</th>
-          <th class="text-muted small">Statut</th>
+          <th style="color:#94A3B8;">Loge</th>
+          <th style="color:#94A3B8;">Date</th>
+          <th style="color:#94A3B8;">Temple</th>
+          <th style="color:#94A3B8;">Statut</th>
         </tr>
       </thead>
       <tbody>
         {% for r in recentes %}
         <tr>
-          <td class="small fw-semibold">{{ r.loge.abreviation }}</td>
-          <td class="small">{{ r.date|date:"d/m/Y" }}</td>
-          <td class="small">{{ r.temple }}</td>
-          <td class="small text-muted">{{ r.get_type_reservation_display }}</td>
+          <td class="fw-semibold" style="color:#0F2137;">{{ r.loge.abreviation }}</td>
+          <td class="text-muted">{{ r.date|date:"d/m/Y" }}</td>
+          <td class="text-muted">{{ r.temple }}</td>
           <td>
-            {% if r.statut == 'validee' %}<span class="badge bg-success">Validée</span>
-            {% elif r.statut == 'attente' %}<span class="badge bg-warning text-dark">Attente</span>
-            {% else %}<span class="badge bg-danger">Refusée</span>{% endif %}
+            {% if r.statut == 'validee' %}
+              <span class="badge-validee">Validée</span>
+            {% elif r.statut == 'attente' %}
+              <span class="badge-attente">En attente</span>
+            {% else %}
+              <span class="badge-refusee">Refusée</span>
+            {% endif %}
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="text-center text-muted py-3">Aucune réservation.</td></tr>
+        <tr>
+          <td colspan="4" class="text-center text-muted py-4" style="font-size:13px;">
+            Aucune réservation récente.
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+</div>{# /tdb-wrap #}
 {% endblock %}

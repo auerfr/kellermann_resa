@@ -1,321 +1,450 @@
 {% extends "base.html" %}
 {% block title %}Reporting{% endblock %}
 
-{% block content %}
+{% block extra_css %}
+<style>
+  .rp-wrap {
+    background: #F8FAFC;
+    margin: -1.5rem;
+    padding: 1.75rem 1.5rem 2.5rem;
+    min-height: calc(100vh - 60px);
+  }
+  .kpi-card {
+    transition: transform .15s, box-shadow .15s;
+  }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.09) !important;
+  }
+  .trend-up   { color: #16A34A; font-size: 11px; font-weight: 600; }
+  .trend-down { color: #DC2626; font-size: 11px; font-weight: 600; }
+  .trend-neu  { color: #94A3B8; font-size: 11px; font-weight: 500; }
+  .section-title {
+    color: #0F2137;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+</style>
+{% endblock %}
 
-<!-- En-tete -->
-<div class="d-flex justify-content-between align-items-center mb-4">
+{% block content %}
+<div class="rp-wrap">
+
+{# ── En-tête ──────────────────────────────────────────────────────────────── #}
+<div class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
   <div>
     <h1 class="h3 mb-1" style="color:#0F2137;">Reporting</h1>
     <p class="text-muted small mb-0">Saison {{ saison_label }}</p>
   </div>
-  <div>
-    <form method="get" class="d-flex gap-2 align-items-center">
-      <label class="text-muted small me-1 mb-0">Saison</label>
-      <select name="annee" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-        <option value="2023" {% if annee == 2023 %}selected{% endif %}>2023–2024</option>
-        <option value="2024" {% if annee == 2024 %}selected{% endif %}>2024–2025</option>
-        <option value="2025" {% if annee == 2025 %}selected{% endif %}>2025–2026</option>
-        <option value="2026" {% if annee == 2026 %}selected{% endif %}>2026–2027</option>
+  <form method="get" class="d-flex gap-2 align-items-center">
+    <label class="text-muted small mb-0">Saison</label>
+    <select name="annee" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+      <option value="2023" {% if annee == 2023 %}selected{% endif %}>2023–2024</option>
+      <option value="2024" {% if annee == 2024 %}selected{% endif %}>2024–2025</option>
+      <option value="2025" {% if annee == 2025 %}selected{% endif %}>2025–2026</option>
+      <option value="2026" {% if annee == 2026 %}selected{% endif %}>2026–2027</option>
+    </select>
+  </form>
+</div>
+
+{# ── KPI principaux ───────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-5">
+
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
+      <div class="card-body text-center py-4 px-3">
+        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#0F2137;">{{ stats.total }}</div>
+        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Réservations totales</div>
+        {% if stats.total > 0 %}
+        <div class="trend-up">↑ saison en cours</div>
+        {% else %}
+        <div class="trend-neu">— aucune donnée</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
+      <div class="card-body text-center py-4 px-3">
+        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#16A34A;">{{ stats.validees }}</div>
+        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Validées</div>
+        {% if stats.total > 0 %}
+          {% if stats.taux_validation >= 75 %}
+          <div class="trend-up">↑ {{ stats.taux_validation }}% validation</div>
+          {% else %}
+          <div class="trend-down">↓ {{ stats.taux_validation }}% validation</div>
+          {% endif %}
+        {% else %}
+        <div class="trend-neu">—</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
+      <div class="card-body text-center py-4 px-3">
+        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#F59E0B;">{{ stats.attente }}</div>
+        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">En attente</div>
+        {% if stats.attente > 0 %}
+        <div class="trend-down">↓ à traiter</div>
+        {% else %}
+        <div class="trend-up">↑ tout traité</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
+      <div class="card-body text-center py-4 px-3">
+        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#DC2626;">{{ stats.refusees }}</div>
+        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Refusées</div>
+        {% if stats.total > 0 %}
+          {% if stats.refusees == 0 %}
+          <div class="trend-up">↑ aucun refus</div>
+          {% else %}
+          <div class="trend-down">↓ {{ stats.refusees }} refus</div>
+          {% endif %}
+        {% else %}
+        <div class="trend-neu">—</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ── KPI secondaires ──────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-5">
+
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
+      <div class="card-body text-center py-4 px-3">
+        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#C8A84B;">{{ stats.taux_validation }}%</div>
+        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Taux de validation</div>
+        {% if stats.taux_validation >= 75 %}
+        <div class="trend-up">↑ bon taux</div>
+        {% elif stats.taux_validation >= 50 %}
+        <div class="trend-neu">→ taux moyen</div>
+        {% else %}
+        <div class="trend-down">↓ taux faible</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
+      <div class="card-body text-center py-4 px-3">
+        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#7C3AED;">{{ stats.total_repas }}</div>
+        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Repas agapes</div>
+        {% if stats.total_repas > 0 %}
+        <div class="trend-up">↑ agapes actives</div>
+        {% else %}
+        <div class="trend-neu">— aucun repas</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
+      <div class="card-body text-center py-4 px-3">
+        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#0891B2;">
+          {{ stats.total_personnes|default:"—" }}
+        </div>
+        <div style="font-size:12px;color:#94A3B8;font-weight:500;">Total personnes</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ── Graphiques ───────────────────────────────────────────────────────────── #}
+<div class="row g-4 mb-5">
+
+  {# Bar chart #}
+  <div class="col-12 col-lg-8">
+    <div class="card shadow-sm border-0 h-100 rounded-3">
+      <div class="card-header px-4 py-3 rounded-top"
+           style="background:#0F2137;border-bottom:none;">
+        <span class="section-title" style="color:#C8A84B;">
+          Évolution mensuelle — réservations validées
+        </span>
+      </div>
+      <div class="card-body px-4 py-4" style="background:white;">
+        <div style="position:relative;height:200px;">
+          <canvas id="reservationsChart"
+                  style="height:200px !important;max-height:200px;"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Donut chart #}
+  <div class="col-12 col-lg-4">
+    <div class="card shadow-sm border-0 h-100 rounded-3">
+      <div class="card-header px-4 py-3 rounded-top"
+           style="background:#0F2137;border-bottom:none;">
+        <span class="section-title" style="color:#C8A84B;">
+          Répartition par temple
+        </span>
+      </div>
+      <div class="card-body py-4 px-3" style="background:white;">
+        <div class="row align-items-center g-0">
+          <div class="col-7 d-flex justify-content-center align-items-center">
+            <div style="position:relative;width:100%;max-width:180px;">
+              <canvas id="templesChart"
+                      style="max-height:220px;"></canvas>
+            </div>
+          </div>
+          <div class="col-5">
+            <div id="temples-legend" style="font-size:12px;line-height:1.6;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{# ── Tableau par obédience ────────────────────────────────────────────────── #}
+<div class="card shadow-sm border-0 mb-5 rounded-3">
+  <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
+    <span class="section-title" style="color:#C8A84B;">
+      Réservations par obédience
+    </span>
+  </div>
+  <div class="card-body p-0" style="background:white;">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#F8FAFC;">
+          <tr>
+            <th class="ps-4 py-3" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;font-weight:600;">Obédience</th>
+            <th class="text-center py-3" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;font-weight:600;">Réservations</th>
+            <th class="pe-4 py-3" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;font-weight:600;min-width:160px;">Part</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for obedience in reservations_par_obedience %}
+          <tr style="border-bottom:1px solid #F1F5F9;">
+            <td class="ps-4 py-3 fw-semibold" style="color:#0F2137;font-size:13px;">
+              {{ obedience.loge__obedience__nom|default:"Non renseignée" }}
+            </td>
+            <td class="text-center py-3">
+              <span class="badge rounded-pill px-3"
+                    style="background:#0F2137;color:#C8A84B;font-size:13px;">
+                {{ obedience.nb_reservations }}
+              </span>
+            </td>
+            <td class="pe-4 py-3">
+              {% if stats.total %}
+              <div class="d-flex align-items-center gap-2">
+                <div style="flex:1;background:#F1F5F9;border-radius:99px;height:8px;overflow:hidden;">
+                  <div style="width:{% widthratio obedience.nb_reservations stats.total 100 %}%;height:8px;border-radius:99px;background:linear-gradient(90deg,#C8A84B,#F5D98A);"></div>
+                </div>
+                <small class="text-muted fw-semibold" style="min-width:30px;font-size:12px;">
+                  {% widthratio obedience.nb_reservations stats.total 100 %}%
+                </small>
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" class="text-center text-muted py-4 small">Aucune donnée</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── Exports ──────────────────────────────────────────────────────────────── #}
+<div class="card shadow-sm border-0 rounded-3">
+  <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
+    <span class="section-title" style="color:#C8A84B;">
+      Exports
+    </span>
+  </div>
+  <div class="card-body px-4 py-3" style="background:white;">
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+      <a href="{% url 'exports:csv' %}?annee={{ annee }}" class="btn btn-sm btn-outline-secondary">
+        CSV
+      </a>
+      <a href="{% url 'exports:excel' %}?annee={{ annee }}" class="btn btn-sm"
+         style="background:#0F2137;color:#C8A84B;border:none;">
+        Excel
+      </a>
+      <div class="vr mx-1"></div>
+      <select id="pdf-temple" class="form-select form-select-sm" style="width:auto;">
+        <option value="">Tous les temples</option>
+        {% for t in temples %}
+        <option value="{{ t.pk }}">{{ t }}</option>
+        {% endfor %}
       </select>
-    </form>
-  </div>
-</div>
-
-<!-- KPIs principaux -->
-<div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm h-100" style="border-top: 4px solid #0F2137 !important;">
-      <div class="card-body py-3">
-        <div class="fs-1 fw-bold" style="color:#0F2137;">{{ stats.total }}</div>
-        <div class="text-muted small mt-1">Reservations totales</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm h-100" style="border-top: 4px solid #28a745 !important;">
-      <div class="card-body py-3">
-        <div class="fs-1 fw-bold text-success">{{ stats.validees }}</div>
-        <div class="text-muted small mt-1">Validees</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm h-100" style="border-top: 4px solid #ffc107 !important;">
-      <div class="card-body py-3">
-        <div class="fs-1 fw-bold text-warning">{{ stats.attente }}</div>
-        <div class="text-muted small mt-1">En attente</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm h-100" style="border-top: 4px solid #dc3545 !important;">
-      <div class="card-body py-3">
-        <div class="fs-1 fw-bold text-danger">{{ stats.refusees }}</div>
-        <div class="text-muted small mt-1">Refusees</div>
-      </div>
+      <select id="pdf-mois" class="form-select form-select-sm" style="width:auto;">
+        <option value="9">Septembre</option>
+        <option value="10">Octobre</option>
+        <option value="11">Novembre</option>
+        <option value="12">Décembre</option>
+        <option value="1">Janvier</option>
+        <option value="2">Février</option>
+        <option value="3">Mars</option>
+        <option value="4">Avril</option>
+        <option value="5">Mai</option>
+        <option value="6">Juin</option>
+      </select>
+      <button class="btn btn-sm btn-outline-danger"
+        onclick="(function(){
+          var t=document.getElementById('pdf-temple').value;
+          var m=document.getElementById('pdf-mois').value;
+          var a={{ annee }};
+          var yr=(m>=9)?a:a+1;
+          var url='{% url 'exports:planning_pdf' %}?mois='+m+'&annee='+yr+(t?'&temple='+t:'');
+          window.location=url;
+        })()">
+        📄 Planning PDF mensuel
+      </button>
     </div>
   </div>
 </div>
 
-<!-- KPIs secondaires -->
-<div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <div class="card text-center border-0 shadow-sm h-100" style="border-top: 4px solid #C8A84B !important;">
-      <div class="card-body py-3">
-        <div class="fs-1 fw-bold" style="color:#C8A84B;">{{ stats.taux_validation }}%</div>
-        <div class="text-muted small mt-1">Taux de validation</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card text-center border-0 shadow-sm h-100" style="border-top: 4px solid #6f42c1 !important;">
-      <div class="card-body py-3">
-        <div class="fs-1 fw-bold" style="color:#6f42c1;">{{ stats.total_repas }}</div>
-        <div class="text-muted small mt-1">Total repas agapes</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-4">
-    <div class="card text-center border-0 shadow-sm h-100" style="border-top: 4px solid #17a2b8 !important;">
-      <div class="card-body py-3">
-        <div class="fs-1 fw-bold" style="color:#17a2b8;">{{ stats.total_personnes|default:"&mdash;" }}</div>
-        <div class="text-muted small mt-1">Total personnes</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Graphiques -->
-<div class="row g-4 mb-4">
-  <div class="col-lg-8">
-    <div class="card shadow-sm border-0 h-100">
-      <div class="card-header" style="background:#0F2137; color:#C8A84B; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:600;">
-        Evolution mensuelle des reservations validees
-      </div>
-      <div class="card-body">
-        <canvas id="reservationsChart" height="220"></canvas>
-      </div>
-    </div>
-  </div>
-  <div class="col-lg-4">
-    <div class="card shadow-sm border-0 h-100">
-      <div class="card-header" style="background:#0F2137; color:#C8A84B; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:600;">
-        Repartition par temple
-      </div>
-      <div class="card-body d-flex align-items-center justify-content-center">
-        <canvas id="templesChart" height="220"></canvas>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Tableau par obedience -->
-<div class="row mb-4">
-  <div class="col-12">
-    <div class="card shadow-sm border-0">
-      <div class="card-header" style="background:#0F2137; color:#C8A84B; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:600;">
-        Reservations par obedience
-      </div>
-      <div class="card-body p-0">
-        <div class="table-responsive">
-          <table class="table table-hover mb-0">
-            <thead>
-              <tr style="background:#f4f6f9;">
-                <th class="ps-3 py-2" style="font-size:12px; color:#0F2137; font-weight:600; text-transform:uppercase; letter-spacing:.05em;">Obedience</th>
-                <th class="text-center py-2" style="font-size:12px; color:#0F2137; font-weight:600; text-transform:uppercase; letter-spacing:.05em;">Reservations</th>
-                <th class="text-center pe-3 py-2" style="font-size:12px; color:#0F2137; font-weight:600; text-transform:uppercase; letter-spacing:.05em;">Part</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for obedience in reservations_par_obedience %}
-              <tr>
-                <td class="ps-3 py-2">{{ obedience.loge__obedience__nom|default:"Non renseignee" }}</td>
-                <td class="text-center py-2">
-                  <span class="badge rounded-pill" style="background:#0F2137; color:#C8A84B; font-size:13px;">{{ obedience.nb_reservations }}</span>
-                </td>
-                <td class="text-center pe-3 py-2">
-                  {% if stats.total %}
-                  <div class="d-flex align-items-center justify-content-center gap-2">
-                    <div class="progress flex-grow-1" style="height:6px; max-width:80px;">
-                      <div class="progress-bar" style="width:{% widthratio obedience.nb_reservations stats.total 100 %}%; background:#C8A84B;"></div>
-                    </div>
-                    <small class="text-muted">{% widthratio obedience.nb_reservations stats.total 100 %}%</small>
-                  </div>
-                  {% endif %}
-                </td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="3" class="text-center text-muted py-3">Aucune donnee</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Exports -->
-<div class="row mb-4">
-  <div class="col-12">
-    <div class="card shadow-sm border-0">
-      <div class="card-header" style="background:#0F2137; color:#C8A84B; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:600;">
-        Exports
-      </div>
-      <div class="card-body">
-        <div class="d-flex gap-2 flex-wrap align-items-center">
-          <a href="{% url 'exports:csv' %}?annee={{ annee }}" class="btn btn-sm btn-outline-secondary">
-            CSV
-          </a>
-          <a href="{% url 'exports:excel' %}?annee={{ annee }}" class="btn btn-sm" style="background:#0F2137; color:#C8A84B; border:none;">
-            Excel
-          </a>
-          <div class="vr mx-1"></div>
-          {# PDF Planning mensuel #}
-          <select id="pdf-temple" class="form-select form-select-sm" style="width:auto;">
-            <option value="">Tous les temples</option>
-            {% for t in temples %}
-            <option value="{{ t.pk }}">{{ t }}</option>
-            {% endfor %}
-          </select>
-          <select id="pdf-mois" class="form-select form-select-sm" style="width:auto;">
-            <option value="9">Septembre</option>
-            <option value="10">Octobre</option>
-            <option value="11">Novembre</option>
-            <option value="12">Décembre</option>
-            <option value="1">Janvier</option>
-            <option value="2">Février</option>
-            <option value="3">Mars</option>
-            <option value="4">Avril</option>
-            <option value="5">Mai</option>
-            <option value="6">Juin</option>
-          </select>
-          <button class="btn btn-sm btn-outline-danger"
-            onclick="(function(){
-              var t=document.getElementById('pdf-temple').value;
-              var m=document.getElementById('pdf-mois').value;
-              var a={{ annee }};
-              var yr=(m>=9)?a:a+1;
-              var url='{% url 'exports:planning_pdf' %}?mois='+m+'&annee='+yr+(t?'&temple='+t:'');
-              window.location=url;
-            })()">
-            📄 Planning PDF mensuel
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
+</div>{# /rp-wrap #}
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    console.log('Reporting script demarre');
+const dataMois    = {{ reservations_par_mois|safe }};
+const dataTemples = {{ reservations_par_temple|safe }};
 
-    const dataMois = {{ reservations_par_mois|safe }};
-    console.log('Donnees mois:', dataMois);
-
-    const dataTemples = {{ reservations_par_temple|safe }};
-    console.log('Donnees temples:', dataTemples);
-
-    // Graphique bar — evolution mensuelle
-    const labelsMois = dataMois.map(function(item) {
+// ── Bar chart ──────────────────────────────────────────────────────────────
+var ctx1 = document.getElementById('reservationsChart');
+if (ctx1) {
+    var labelsMois = dataMois.map(function(item) {
         var parts = item.mois.split('-');
         var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1);
-        return d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
+        return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
     });
-    const valuesMois = dataMois.map(function(item) { return item.count; });
+    var valuesMois = dataMois.map(function(item) { return item.count; });
 
-    var ctx1 = document.getElementById('reservationsChart');
-    if (ctx1) {
-        new Chart(ctx1, {
-            type: 'bar',
-            data: {
-                labels: labelsMois,
-                datasets: [{
-                    label: 'Reservations validees',
-                    data: valuesMois,
-                    backgroundColor: 'rgba(15, 33, 55, 0.85)',
-                    borderColor: '#C8A84B',
-                    borderWidth: 2,
-                    borderRadius: 4,
-                    borderSkipped: false
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function(ctx) {
-                                return ' ' + ctx.parsed.y + ' reservation' + (ctx.parsed.y > 1 ? 's' : '');
-                            }
+    new Chart(ctx1, {
+        type: 'bar',
+        data: {
+            labels: labelsMois,
+            datasets: [{
+                label: 'Réservations validées',
+                data: valuesMois,
+                backgroundColor: 'rgba(200, 168, 75, 0.85)',
+                borderWidth: 0,
+                borderRadius: 5,
+                borderSkipped: false,
+                barPercentage: 0.35,
+                categoryPercentage: 0.5,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 900, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#0F2137',
+                    titleColor: '#C8A84B',
+                    bodyColor: '#ffffff',
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: function(ctx) {
+                            return '  ' + ctx.parsed.y + ' réservation' + (ctx.parsed.y > 1 ? 's' : '');
                         }
                     }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1, color: '#94A3B8', font: { size: 10 } },
+                    grid: { color: 'rgba(0,0,0,0.04)', drawBorder: false }
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { stepSize: 1, color: '#6c757d', font: { size: 11 } },
-                        grid: { color: '#f0f0f0' }
-                    },
-                    x: {
-                        ticks: { color: '#6c757d', font: { size: 11 } },
-                        grid: { display: false }
-                    }
+                x: {
+                    ticks: { color: '#94A3B8', font: { size: 10 } },
+                    grid: { display: false }
                 }
             }
-        });
-    }
+        }
+    });
+}
 
-    // Graphique donut — repartition par temple
+// ── Donut chart ────────────────────────────────────────────────────────────
+var ctx2 = document.getElementById('templesChart');
+if (ctx2) {
     var labelsTemples = dataTemples.map(function(item) { return item.nom; });
     var valuesTemples = dataTemples.map(function(item) { return item.nb_reservations; });
-    var palette = ['#0F2137', '#C8A84B', '#6f42c1', '#28a745', '#dc3545', '#ffc107', '#17a2b8', '#fd7e14'];
+    var palette = ['#0F2137', '#C8A84B', '#2563EB', '#7C3AED', '#059669', '#DC2626'];
 
-    var ctx2 = document.getElementById('templesChart');
-    if (ctx2) {
-        new Chart(ctx2, {
-            type: 'doughnut',
-            data: {
-                labels: labelsTemples,
-                datasets: [{
-                    data: valuesTemples,
-                    backgroundColor: palette.slice(0, labelsTemples.length),
-                    borderWidth: 2,
-                    borderColor: '#fff'
-                }]
-            },
-            options: {
-                responsive: true,
-                cutout: '60%',
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: {
-                            padding: 12,
-                            usePointStyle: true,
-                            pointStyleWidth: 10,
-                            font: { size: 11 },
-                            color: '#0F2137'
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(ctx) {
-                                var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
-                                var pct = total > 0 ? Math.round(ctx.parsed * 100 / total) : 0;
-                                return ' ' + ctx.label + ' : ' + ctx.parsed + ' (' + pct + '%)';
-                            }
+    new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: labelsTemples,
+            datasets: [{
+                data: valuesTemples,
+                backgroundColor: palette.slice(0, labelsTemples.length),
+                borderWidth: 3,
+                borderColor: '#ffffff',
+                hoverOffset: 5,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            cutout: '65%',
+            animation: { duration: 900, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#0F2137',
+                    titleColor: '#C8A84B',
+                    bodyColor: '#ffffff',
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: function(ctx) {
+                            var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+                            var pct = total > 0 ? Math.round(ctx.parsed * 100 / total) : 0;
+                            return '  ' + ctx.parsed + ' (' + pct + '%)';
                         }
                     }
                 }
             }
+        }
+    });
+
+    // Légende personnalisée dans la colonne droite
+    var legendEl = document.getElementById('temples-legend');
+    if (legendEl) {
+        var total = valuesTemples.reduce(function(a, b) { return a + b; }, 0);
+        var html = '';
+        labelsTemples.forEach(function(label, i) {
+            var pct = total > 0 ? Math.round(valuesTemples[i] * 100 / total) : 0;
+            html += '<div class="d-flex align-items-start gap-2 mb-2">';
+            html += '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'
+                  + palette[i % palette.length]
+                  + ';flex-shrink:0;margin-top:2px;"></span>';
+            html += '<div style="min-width:0;">';
+            html += '<div style="color:#374151;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+                  + label + '</div>';
+            html += '<div style="color:#94A3B8;">'
+                  + valuesTemples[i] + ' <span style="font-size:11px;">(' + pct + '%)</span></div>';
+            html += '</div></div>';
         });
+        legendEl.innerHTML = html;
     }
+}
 </script>
 {% endblock %}

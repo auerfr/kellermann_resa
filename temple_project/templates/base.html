@@ -176,6 +176,234 @@
             main { padding: 0 !important; }
             .card { box-shadow: none !important; border: 1px solid #ccc !important; }
         }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           KELLERMANN — Design tokens & Bootstrap overrides v2
+           ═══════════════════════════════════════════════════════════════════ */
+
+        /* ── Variables supplémentaires ────────────────────────────────────── */
+        :root {
+            --temple-gold-light:   #F5D98A;
+            --temple-gold-pale:    #FEFCE8;
+            --temple-surface:      #F8FAFC;
+            --temple-surface-2:    #F1F5F9;
+            --temple-border:       #E2E8F0;
+            --temple-border-light: #F1F5F9;
+            --temple-text:         #1E293B;
+            --temple-text-sub:     #64748B;
+            --temple-text-muted:   #94A3B8;
+
+            --radius-xs: 4px;
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 20px;
+
+            --shadow-xs:    0 1px 3px rgba(0,0,0,.05);
+            --shadow-sm:    0 1px 4px rgba(0,0,0,.08);
+            --shadow-md:    0 4px 12px rgba(0,0,0,.10);
+            --shadow-lg:    0 8px 24px rgba(0,0,0,.13);
+            --shadow-focus: 0 0 0 3px rgba(200,168,75,.28);
+
+            --bs-border-radius:    8px;
+            --bs-border-radius-sm: 5px;
+            --bs-border-radius-lg: 12px;
+            --bs-border-color:     #E2E8F0;
+            --bs-body-color:       #1E293B;
+            --bs-secondary-color:  #64748B;
+            --bs-link-color:       #0F2137;
+            --bs-link-hover-color: #1a3a5c;
+        }
+
+        /* ── Typographie ──────────────────────────────────────────────────── */
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--temple-text);
+            font-weight: 600;
+            letter-spacing: -.01em;
+        }
+        .text-muted { color: var(--temple-text-sub) !important; }
+        small, .small { color: var(--temple-text-sub); }
+
+        /* ── Boutons ──────────────────────────────────────────────────────── */
+        .btn {
+            border-radius: var(--radius-sm);
+            font-weight: 500;
+            font-size: .875rem;
+            transition: background-color .15s, border-color .15s,
+                        box-shadow .15s, transform .1s;
+        }
+        .btn:focus-visible {
+            box-shadow: var(--shadow-focus);
+            outline: none;
+        }
+
+        /* btn-primary → navy */
+        .btn-primary {
+            background-color: var(--temple-blue);
+            border-color:     var(--temple-blue);
+            color:            white;
+        }
+        .btn-primary:hover, .btn-primary:active {
+            background-color: var(--temple-blue-light);
+            border-color:     var(--temple-blue-light);
+            color:            white;
+        }
+        .btn-primary:focus-visible {
+            background-color: var(--temple-blue);
+            border-color:     var(--temple-blue);
+        }
+
+        /* btn-temple : états manquants */
+        .btn-temple:active       { background-color: #0a1a2e; color: var(--temple-gold); }
+        .btn-temple:focus-visible { box-shadow: var(--shadow-focus); }
+
+        /* btn-outline-secondary : plus raffiné */
+        .btn-outline-secondary {
+            border-color: var(--temple-border);
+            color:        var(--temple-text-sub);
+        }
+        .btn-outline-secondary:hover {
+            background-color: var(--temple-surface-2);
+            border-color:     #CBD5E1;
+            color:            var(--temple-text);
+        }
+
+        /* ── Cards ────────────────────────────────────────────────────────── */
+        .card {
+            border: 1px solid var(--temple-border-light);
+            box-shadow: var(--shadow-sm);
+        }
+        .card.shadow-sm { box-shadow: var(--shadow-sm) !important; }
+        .card.shadow    { box-shadow: var(--shadow-md) !important; }
+        .card.border-0  { border: none !important; }
+        .card-body      { color: var(--temple-text); }
+
+        /* ── Tables ───────────────────────────────────────────────────────── */
+        .table {
+            --bs-table-border-color: var(--temple-border-light);
+            font-size: .875rem;
+            color: var(--temple-text);
+        }
+        .table > :not(caption) > * > * {
+            padding: .65rem .75rem;
+        }
+        .table thead th {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--temple-text-muted);
+            border-bottom: 1px solid var(--temple-border);
+        }
+        .table-hover > tbody > tr:hover > * {
+            background-color: #F0F9FF;
+            --bs-table-accent-bg: transparent;
+        }
+
+        /* ── Formulaires ──────────────────────────────────────────────────── */
+        .form-control,
+        .form-select {
+            border-color:  var(--temple-border);
+            border-radius: var(--radius-sm);
+            color:         var(--temple-text);
+            font-size:     .9rem;
+            transition:    border-color .15s, box-shadow .15s;
+        }
+        .form-control:focus,
+        .form-select:focus {
+            border-color: var(--temple-gold);
+            box-shadow:   var(--shadow-focus);
+        }
+        .form-label {
+            font-size:     .875rem;
+            font-weight:   600;
+            color:         var(--temple-text);
+            margin-bottom: .375rem;
+        }
+        .form-text { color: var(--temple-text-sub); font-size: .8rem; }
+        .form-check-input:checked {
+            background-color: var(--temple-blue);
+            border-color:     var(--temple-blue);
+        }
+        .form-check-input:focus { box-shadow: var(--shadow-focus); }
+
+        /* ── Badges ───────────────────────────────────────────────────────── */
+        .badge {
+            border-radius: var(--radius-xs);
+            font-weight:   600;
+            font-size:     .72rem;
+            letter-spacing: .02em;
+            padding:       .28em .6em;
+        }
+        .badge-soft-success { background: #DCFCE7; color: #166534; }
+        .badge-soft-warning { background: #FEF9C3; color: #92400E; }
+        .badge-soft-danger  { background: #FEE2E2; color: #991B1B; }
+        .badge-soft-blue    { background: #DBEAFE; color: #1E40AF; }
+        .badge-soft-purple  { background: #EDE9FE; color: #5B21B6; }
+
+        /* ── Alerts ───────────────────────────────────────────────────────── */
+        .alert {
+            border-radius: var(--radius-md);
+            border:        1px solid transparent;
+            font-size:     .875rem;
+        }
+        .alert-success { background: #F0FDF4; color: #166534; border-color: #BBF7D0; }
+        .alert-warning { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
+        .alert-danger  { background: #FEF2F2; color: #991B1B; border-color: #FECACA; }
+        .alert-info    { background: #EFF6FF; color: #1E40AF; border-color: #BFDBFE; }
+
+        /* ── Dropdowns hors navbar (scopés à main) ────────────────────────── */
+        main .dropdown-menu {
+            background:    white !important;
+            border:        1px solid var(--temple-border) !important;
+            border-radius: var(--radius-md) !important;
+            box-shadow:    var(--shadow-md) !important;
+            padding:       .35rem .25rem;
+        }
+        main .dropdown-menu .dropdown-item {
+            color:         var(--temple-text) !important;
+            font-size:     .875rem;
+            border-radius: var(--radius-sm);
+            padding:       .45rem .75rem;
+        }
+        main .dropdown-menu .dropdown-item:hover {
+            background: var(--temple-surface-2) !important;
+            color:      var(--temple-blue) !important;
+        }
+        main .dropdown-menu .dropdown-item.text-danger:hover {
+            background: #FEF2F2 !important;
+            color:      #991B1B !important;
+        }
+        main .dropdown-menu .dropdown-divider {
+            border-color: var(--temple-border) !important;
+            margin:       .3rem 0;
+        }
+
+        /* ── Progress bars ────────────────────────────────────────────────── */
+        .progress {
+            border-radius: 99px;
+            background:    var(--temple-surface-2);
+        }
+        .progress-bar { border-radius: 99px; }
+
+        /* ── Classes utilitaires temple (remplacement inline styles) ──────── */
+        /* Remplace style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;" */
+        .temple-header {
+            background:     var(--temple-blue) !important;
+            color:          var(--temple-gold) !important;
+            font-size:      11px;
+            font-weight:    600;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            border-bottom:  none;
+        }
+        /* Remplace style="color:#0F2137;" sur les titres */
+        .temple-title { color: var(--temple-blue) !important; font-weight: 700; }
+        /* Remplace style="background:#0F2137;color:#C8A84B;" sur les badges/spans */
+        .temple-badge {
+            background: var(--temple-blue) !important;
+            color:      var(--temple-gold) !important;
+        }
     </style>
 </head>
 <body>

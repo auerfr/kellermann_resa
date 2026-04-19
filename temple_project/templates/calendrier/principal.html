@@ -43,12 +43,12 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
   <div>
-    <h1 class="h3 mb-1" style="color:#0F2137;">📅 Calendrier des temples</h1>
+    <h1 class="h3 mb-1 temple-title">📅 Calendrier des temples</h1>
     <p class="text-muted small mb-0 d-none d-md-block">Cliquez sur une tenue pour voir les détails</p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <button class="btn btn-outline-secondary btn-sm" onclick="toggleDispo()">🔍 Dispo</button>
-    <a href="{% url 'reservations:demande' %}" class="btn btn-sm" style="background:#0F2137;color:white;">+ Temple</a>
+    <a href="{% url 'reservations:demande' %}" class="btn btn-sm btn-temple">+ Temple</a>
     <a href="{% url 'reservations:demande_salle' %}" class="btn btn-sm btn-outline-primary">+ Salle</a>
     <a href="{% url 'reservations:demande_banquet' %}" class="btn btn-sm btn-outline-warning">🍽 + Banquet</a>
     <a href="{% url 'reservations:demande_recurrence' %}" class="btn btn-sm btn-outline-secondary" title="Demander une réservation récurrente">+ Récurrence</a>
@@ -60,7 +60,7 @@
 <div id="pdf-panel" class="card border-0 shadow-sm mb-3" style="display:none;">
   <div class="card-body py-2 px-3">
     <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
-      <span class="small fw-semibold" style="color:#0F2137;">Planning PDF :</span>
+      <span class="small fw-semibold temple-title">Planning PDF :</span>
       <div class="btn-group btn-group-sm" role="group">
         <input type="radio" class="btn-check" name="pdf-mode" id="pdf-mode-mois"   value="mois"   checked onchange="majPdfPanel()">
         <label class="btn btn-outline-secondary" for="pdf-mode-mois">Mois</label>
@@ -166,7 +166,7 @@
 
 <div id="dispo-panel">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h6 class="mb-0" style="color:#0F2137;">🔍 Vérifier les disponibilités</h6>
+    <h6 class="mb-0 temple-title">🔍 Vérifier les disponibilités</h6>
     <button class="btn-close" onclick="toggleDispo()"></button>
   </div>
   <div class="row g-2 align-items-end mb-2">
@@ -191,7 +191,7 @@
     </div>
   </div>
   <div class="mb-3 d-flex gap-1 flex-wrap" id="dispo-type-btns">
-    <button class="btn btn-sm active" style="background:#0F2137;color:white;border:none;" onclick="setDispoType('all',this)">Tout</button>
+    <button class="btn btn-sm btn-temple active" onclick="setDispoType('all',this)">Tout</button>
     <button class="btn btn-sm btn-outline-secondary" onclick="setDispoType('temple',this)">🏛 Temples</button>
     <button class="btn btn-sm btn-outline-secondary" onclick="setDispoType('salle',this)">🪑 Salles</button>
     <button class="btn btn-sm btn-outline-secondary" onclick="setDispoType('cabinet',this)">🚪 Cabinets</button>

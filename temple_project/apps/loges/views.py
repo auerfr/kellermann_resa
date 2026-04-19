@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.db.models import Count, Q
 from datetime import date
 from .models import Loge, Obedience
-from temple_project.apps.reservations.models import Reservation, ReservationSalle, Temple
+from temple_project.apps.reservations.models import Reservation, ReservationSalle, Temple, DemandeAccesPortail
 
 
 @membre_required
@@ -135,6 +135,11 @@ def detail_loge(request, pk):
         statut='validee'
     ).order_by('date').first()
 
+    # Token portail loge (dernière demande validée)
+    portail_token = DemandeAccesPortail.objects.filter(
+        loge=loge, statut='validee'
+    ).order_by('-created_at').values_list('token', flat=True).first()
+
     context = {
         'loge':            loge,
         'tenues':          tenues,
@@ -146,6 +151,7 @@ def detail_loge(request, pk):
         'annees':          [annee - 2, annee - 1, annee],
         'saison_label':    f"{annee_param}/{annee_param+1}",
         'nb_tenues':       tenues.count(),
+        'portail_token':   portail_token,
     }
     return render(request, "loges/detail.html", context)
 

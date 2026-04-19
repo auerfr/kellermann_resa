@@ -5,7 +5,7 @@
   <div class="col-lg-7">
 
     <div class="mb-4">
-      <h1 class="h3 mb-1" style="color:#0F2137;">📬 Contact & Accès portail</h1>
+      <h1 class="h3 mb-1 temple-title">📬 Contact & Accès portail</h1>
       <p class="text-muted small">Demandez un accès à votre espace loge ou envoyez-nous un message.</p>
     </div>
 
@@ -30,7 +30,7 @@
       {# Onglet accès portail #}
       <div class="tab-pane fade {% if onglet == 'acces' %}show active{% endif %}" id="pane-acces">
         <div class="card shadow-sm border-0">
-          <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+          <div class="card-header temple-header">
             Demande d'accès à l'espace loge
           </div>
           <div class="card-body p-4">
@@ -84,7 +84,7 @@
                   placeholder="Précisions, contexte de la demande…"></textarea>
               </div>
 
-              <button type="submit" class="btn px-4 fw-semibold" style="background:#0F2137;color:#C8A84B;">
+              <button type="submit" class="btn btn-temple px-4 fw-semibold">
                 Envoyer la demande →
               </button>
             </form>
@@ -95,7 +95,7 @@
       {# Onglet message libre #}
       <div class="tab-pane fade {% if onglet == 'message' %}show active{% endif %}" id="pane-message">
         <div class="card shadow-sm border-0">
-          <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+          <div class="card-header temple-header">
             Envoyer un message à l'administration
           </div>
           <div class="card-body p-4">
@@ -128,7 +128,7 @@
                 <textarea name="message_libre" class="form-control" rows="5" required></textarea>
               </div>
 
-              <button type="submit" class="btn px-4 fw-semibold" style="background:#0F2137;color:#C8A84B;">
+              <button type="submit" class="btn btn-temple px-4 fw-semibold">
                 Envoyer →
               </button>
             </form>

@@ -10,14 +10,22 @@
 </style>
 {% endblock %}
 
+{% block extra_js %}
+<script>
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+  new bootstrap.Tooltip(el);
+});
+</script>
+{% endblock %}
+
 {% block content %}
 
 {# En-tête #}
 <div class="d-flex justify-content-between align-items-start mb-4">
   <div>
     <div class="d-flex align-items-center gap-3 mb-2">
-      <span class="badge fs-6 px-3 py-2" style="background:#0F2137;">{{ loge.abreviation }}</span>
-      <h1 class="h3 mb-0" style="color:#0F2137;">{{ loge.nom }}</h1>
+      <span class="badge fs-6 px-3 py-2 temple-badge">{{ loge.abreviation }}</span>
+      <h1 class="h3 mb-0 temple-title">{{ loge.nom }}</h1>
     </div>
     <div class="d-flex gap-3 text-muted small">
       <span>{{ loge.obedience }}</span>
@@ -26,11 +34,22 @@
       {% if loge.email %}<span>·</span><a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>{% endif %}
     </div>
   </div>
-  <div class="d-flex gap-2 no-print">
+  <div class="d-flex gap-2 no-print flex-wrap">
     <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨️ Imprimer</button>
     {% if user.is_staff %}
     <a href="{% url 'loges:modifier' loge.pk %}" class="btn btn-outline-primary btn-sm">✏️ Modifier</a>
     <a href="{% url 'loges:supprimer' loge.pk %}" class="btn btn-outline-danger btn-sm">🗑 Désactiver</a>
+    {% endif %}
+    {% if portail_token %}
+    <a href="/reservations/portail/{{ portail_token }}/"
+       class="btn btn-outline-secondary btn-sm" target="_blank">
+      👁 Voir le portail loge
+    </a>
+    {% else %}
+    <button type="button" class="btn btn-outline-secondary btn-sm" disabled
+            data-bs-toggle="tooltip" title="Aucun accès portail actif">
+      👁 Voir le portail loge
+    </button>
     {% endif %}
     <a href="{% url 'loges:liste' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
   </div>
@@ -43,7 +62,7 @@
 
     {# Infos générales #}
     <div class="card shadow-sm border-0 mb-4">
-      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+      <div class="card-header temple-header">
         Informations
       </div>
       <div class="card-body p-0">
@@ -58,7 +77,7 @@
 
     {# Stats par temple #}
     <div class="card shadow-sm border-0 mb-4">
-      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+      <div class="card-header temple-header">
         Tenues par temple — {{ annee }}
       </div>
       <div class="card-body">
@@ -112,14 +131,14 @@
     <div class="card shadow-sm border-0">
       <div class="table-responsive">
         <table class="table table-hover mb-0">
-          <thead style="background:#0F2137;">
+          <thead class="temple-header">
             <tr>
-              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">DATE</th>
-              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">JOUR</th>
-              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TYPE</th>
-              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">LIEU</th>
-              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">HORAIRES</th>
-              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">STATUT</th>
+              <th>DATE</th>
+              <th>JOUR</th>
+              <th>TYPE</th>
+              <th>LIEU</th>
+              <th>HORAIRES</th>
+              <th>STATUT</th>
             </tr>
           </thead>
           <tbody>
