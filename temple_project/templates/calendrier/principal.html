@@ -32,6 +32,7 @@
     .fc-daygrid-event { font-size: 9px !important; }
     .fc-button { font-size: 0.7rem !important; padding: 0.25rem 0.4rem !important; }
     .legende-wrapper { display: none; }
+    .legende-wrapper.show { display: flex !important; }
     .filtres-wrapper select { font-size: 0.8rem; }
     /* Vue liste mobile : masquer la colonne horaire (l'emoji créneau suffit) */
     .fc-list-event-time { display: none !important; }
@@ -157,11 +158,14 @@
       <span class="small"><span class="legend-dot" style="background:#CA8A04;border-radius:2px;"></span>Férié</span>
       <span class="small"><span class="legend-dot" style="background:#16A34A;border-radius:2px;"></span>Vacances sco.</span>
     </div>
-    <div class="mt-1">
+    <div class="mt-1 d-flex align-items-center gap-3 flex-wrap">
       <div class="form-check form-check-inline form-switch mb-0">
         <input class="form-check-input" type="checkbox" id="toggle-conges" checked onchange="refreshCalendar()">
         <label class="form-check-label small" for="toggle-conges">Vacances &amp; jours fériés</label>
       </div>
+      <button class="btn btn-outline-secondary btn-sm d-md-none" onclick="toggleLegende()" id="btn-legende">
+        📖 Légende
+      </button>
     </div>
   </div>
 </div>
@@ -285,7 +289,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if (view === 'dayGridMonth') {
         var label;
         if (w < 768) {
-          label = emoji;                                                          // 🌙
+          label = emoji + ' ' + (p.loge_court || arg.event.title);               // 🌙 LV
         } else if (w < 1200) {
           label = emoji + ' ' + (p.loge_court || arg.event.title);               // 🌙 Liberté
         } else {
@@ -373,6 +377,13 @@ function closePanel() {
 
 function toggleDispo() { document.getElementById("dispo-panel").classList.toggle("open"); }
 
+function toggleLegende() {
+  var lw  = document.querySelector('.legende-wrapper');
+  var btn = document.getElementById('btn-legende');
+  lw.classList.toggle('show');
+  btn.textContent = lw.classList.contains('show') ? '✕ Fermer' : '📖 Légende';
+}
+
 function togglePdfPanel() {
   var p = document.getElementById("pdf-panel");
   p.style.display = (p.style.display === 'none') ? 'block' : 'none';
@@ -425,6 +436,43 @@ function renderDispoResults(results) {
   var cellTxt = (l, occ) => l ? '<td class="dispo-libre">Libre</td>'
     : '<td class="dispo-occupe small">' + (occ ? occ.loge || occ.organisation || '—' : '—') + '</td>';
   var html = '';
+
+  // ── Layout mobile : cartes par date ──────────────────────────
+  if (window.innerWidth < 768) {
+    results.forEach(function(data) {
+      var d = new Date(data.date + "T12:00:00");
+      var lbl = jours[d.getDay()] + ' ' + data.date.split('-').reverse().join('/');
+      html += '<div class="mb-2 p-2 rounded border" style="background:#fff;">'
+            + '<div class="fw-semibold small mb-1" style="color:#0F2137;">' + lbl + '</div>';
+      if (dispoTypeFilter === 'all' || dispoTypeFilter === 'temple') {
+        data.temples.forEach(function(t) {
+          var occ = t.libre ? '' : ' <span class="text-muted" style="font-size:10px;">' + (t.occupation ? (t.occupation.loge || '') : '') + '</span>';
+          html += '<div class="small py-1 border-bottom d-flex justify-content-between align-items-center">'
+                + '<span>🏛 ' + t.nom.replace('Temple ', '') + '</span>'
+                + '<span>' + (t.libre ? '✅' : '🔴') + occ + '</span></div>';
+        });
+      }
+      if (dispoTypeFilter === 'all' || dispoTypeFilter === 'salle') {
+        data.salles.filter(s => s.type_salle !== 'cabinet_reflexion').forEach(function(s) {
+          var occ = s.libre ? '' : ' <span class="text-muted" style="font-size:10px;">' + (s.occupation ? (s.occupation.organisation || '') : '') + '</span>';
+          html += '<div class="small py-1 border-bottom d-flex justify-content-between align-items-center">'
+                + '<span>🪑 ' + s.nom.split('(')[0].trim() + '</span>'
+                + '<span>' + (s.libre ? '✅' : '🔴') + occ + '</span></div>';
+        });
+      }
+      if (dispoTypeFilter === 'all' || dispoTypeFilter === 'cabinet') {
+        data.salles.filter(s => s.type_salle === 'cabinet_reflexion').forEach(function(s) {
+          html += '<div class="small py-1 d-flex justify-content-between align-items-center">'
+                + '<span>🚪 ' + s.nom.split('(')[0].trim() + '</span>'
+                + '<span>' + (s.libre ? '✅' : '🔴') + '</span></div>';
+        });
+      }
+      html += '</div>';
+    });
+    html += '<p class="text-muted small mt-1">' + debut + ' – ' + fin + ' · ' + results.length + ' jour(s)</p>';
+    result.innerHTML = html;
+    return;
+  }
 
   // ── Temples ──────────────────────────────────────────────────
   if (dispoTypeFilter === 'all' || dispoTypeFilter === 'temple') {
