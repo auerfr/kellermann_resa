@@ -1,0 +1,14 @@
+{
+  "name": "Kellermann Réservations",
+  "short_name": "Kellermann",
+  "description": "Gestion des réservations des temples maçonniques",
+  "start_url": "/calendrier/",
+  "display": "standalone",
+  "background_color": "#0F2137",
+  "theme_color": "#0F2137",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
