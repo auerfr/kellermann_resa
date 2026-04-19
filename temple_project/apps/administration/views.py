@@ -14,7 +14,8 @@ from temple_project.apps.reservations.models import (
     DemandeAccesPortail, ValidationSaison, ValidationSaisonLigne,
 )
 from temple_project.apps.loges.models import Loge, Obedience
-from .models import Parametres
+from .models import Parametres, JournalEvenement
+from .journal import log_evenement
 
 
 # ── Tableau de bord ───────────────────────────────────────────────────────────
@@ -72,8 +73,14 @@ def valider_reservation(request, pk):
 
         if action == 'valider':
             messages.success(request, f"Demande de {resa.loge} validée — email envoyé à {resa.email_demandeur}.")
+            log_evenement('validation_reservation',
+                f"Réservation validée : {resa.loge} — {resa.date:%d/%m/%Y} {resa.heure_debut:%H:%M}–{resa.heure_fin:%H:%M} ({resa.temple})",
+                request=request, objet=resa)
         else:
             messages.warning(request, f"Demande de {resa.loge} refusée — email envoyé à {resa.email_demandeur}.")
+            log_evenement('refus_reservation',
+                f"Réservation refusée : {resa.loge} — {resa.date:%d/%m/%Y} {resa.heure_debut:%H:%M}–{resa.heure_fin:%H:%M} ({resa.temple})",
+                request=request, objet=resa)
 
         return redirect('administration:tableau_de_bord')
 
@@ -139,8 +146,14 @@ def valider_reservation_salle(request, pk):
 
         if action == 'valider':
             messages.success(request, f"Demande de salle pour {resa.organisation} validée — email envoyé à {resa.email_demandeur}.")
+            log_evenement('validation_reservation',
+                f"Réservation salle validée : {resa.organisation} — {resa.date:%d/%m/%Y} {resa.heure_debut:%H:%M}–{resa.heure_fin:%H:%M} ({resa.salle})",
+                request=request, objet=resa)
         else:
             messages.warning(request, f"Demande de salle pour {resa.organisation} refusée — email envoyé à {resa.email_demandeur}.")
+            log_evenement('refus_reservation',
+                f"Réservation salle refusée : {resa.organisation} — {resa.date:%d/%m/%Y} {resa.heure_debut:%H:%M}–{resa.heure_fin:%H:%M} ({resa.salle})",
+                request=request, objet=resa)
 
         return redirect('administration:tableau_de_bord')
 
@@ -453,6 +466,9 @@ def import_excel(request):
                 stats, errors = _importer_donnees(wb)
                 if not errors:
                     messages.success(request, f"Import réussi : {stats['loges']} loges, {stats['regles']} règles.")
+                    log_evenement('import_excel',
+                        f"Import Excel réussi : {stats['loges']} loge(s), {stats['regles']} règle(s) importée(s)",
+                        request=request, objet_type='systeme')
                     return redirect('administration:tableau_de_bord')
             else:
                 preview = _preview_excel(wb)
@@ -1432,6 +1448,9 @@ def validation_saison_admin(request):
                 "Récapitulatif calculé — aucun email envoyé. "
                 "Vérifiez le tableau ci-dessous puis cliquez sur «\u00a0Envoyer les emails\u00a0». "
                 f"({', '.join(parts)})")
+            log_evenement('ouverture_validation_saison',
+                f"Ouverture validation saison {annee_cible}-{annee_cible + 1} : {', '.join(parts)}",
+                request=request, objet_type='systeme')
             return redirect(f"{request.path}?annee={annee_cible}")
 
         elif action == 'envoyer_emails':
@@ -1494,6 +1513,9 @@ def validation_saison_admin(request):
             if nb_sans_email:
                 parts.append(f"{nb_sans_email} sans adresse email")
             messages.success(request, "Emails envoyés — " + ", ".join(parts) + ".")
+            log_evenement('envoi_emails_saison',
+                f"Envoi emails validation saison {annee_cible}-{annee_cible + 1} : {', '.join(parts)}",
+                request=request, objet_type='systeme')
             return redirect(f"{request.path}?annee={annee_cible}")
 
         elif action == 'marquer_traitee':
@@ -1587,6 +1609,9 @@ def telecharger_backup(request):
     filename = f'backup_kellermann_{today}.sqlite3'
 
     # Lire le fichier et le retourner en réponse
+    log_evenement('backup_base',
+        f"Téléchargement backup base de données : {filename}",
+        request=request, objet_type='systeme')
     with open(db_path, 'rb') as f:
         response = HttpResponse(f.read(), content_type='application/octet-stream')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
@@ -2322,7 +2347,7 @@ def reservation_directe(request):
 
         if type_resa == "temple":
             temple = cd["temple"]
-            Reservation.objects.create(
+            resa = Reservation.objects.create(
                 loge=loge,
                 nom_organisation=org,
                 temple=temple,
@@ -2339,9 +2364,13 @@ def reservation_directe(request):
                 commentaire=note,
             )
             messages.success(request, "Réservation temple créée et validée.")
+            log_evenement('creation_reservation_directe',
+                f"Réservation directe temple : {loge or org} — {date_r:%d/%m/%Y} {hd:%H:%M}–{hf:%H:%M} ({temple})",
+                request=request, objet=resa)
         else:
             salle = cd["salle"]
-            ReservationSalle.objects.create(
+            resa_salle = ReservationSalle.objects.create(
+                loge=loge,
                 salle=salle,
                 date=date_r,
                 heure_debut=hd,
@@ -2355,7 +2384,85 @@ def reservation_directe(request):
                 commentaire=note,
             )
             messages.success(request, "Réservation salle créée et validée.")
+            log_evenement('creation_reservation_directe',
+                f"Réservation directe salle : {loge.nom if loge else org} — {date_r:%d/%m/%Y} {hd:%H:%M}–{hf:%H:%M} ({salle})",
+                request=request, objet=resa_salle)
 
         return redirect("administration:tableau_de_bord")
 
     return render(request, "administration/reservation_directe.html", {"form": form})
+
+
+# ── Journal de traçabilité ────────────────────────────────────────────────────
+
+@login_required
+def journal(request):
+    """Journal de traçabilité — accès staff uniquement."""
+    from django.contrib.auth import get_user_model
+    from django.core.paginator import Paginator
+
+    if not request.user.is_staff:
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden("Accès réservé aux administrateurs.")
+
+    User = get_user_model()
+
+    qs = JournalEvenement.objects.select_related('utilisateur').order_by('-date_heure')
+
+    # ── Filtres ───────────────────────────────────────────────────────────────
+    f_type       = request.GET.get('type', '').strip()
+    f_date_debut = request.GET.get('date_debut', '').strip()
+    f_date_fin   = request.GET.get('date_fin', '').strip()
+    f_loge       = request.GET.get('loge', '').strip()
+    f_user       = request.GET.get('utilisateur', '').strip()
+
+    if f_type:
+        qs = qs.filter(type_evenement=f_type)
+    if f_date_debut:
+        try:
+            from datetime import date as _date
+            qs = qs.filter(date_heure__date__gte=_date.fromisoformat(f_date_debut))
+        except ValueError:
+            pass
+    if f_date_fin:
+        try:
+            from datetime import date as _date
+            qs = qs.filter(date_heure__date__lte=_date.fromisoformat(f_date_fin))
+        except ValueError:
+            pass
+    if f_loge:
+        qs = qs.filter(objet_type='loge', objet_id=f_loge)
+    if f_user:
+        qs = qs.filter(utilisateur_id=f_user)
+
+    # ── Pagination ────────────────────────────────────────────────────────────
+    paginator   = Paginator(qs, 50)
+    page_number = request.GET.get('page', 1)
+    page_obj    = paginator.get_page(page_number)
+
+    # GET params sans 'page' (pour les liens de pagination)
+    get_copy = request.GET.copy()
+    get_copy.pop('page', None)
+    get_params = get_copy.urlencode()
+
+    # Données pour les selects de filtres
+    types_choices    = JournalEvenement.TYPE_CHOICES
+    loges_list       = Loge.objects.order_by('nom')
+    utilisateurs_list = User.objects.filter(
+        evenements_journal__isnull=False
+    ).distinct().order_by('username')
+
+    return render(request, 'administration/journal.html', {
+        'page_obj':          page_obj,
+        'paginator':         paginator,
+        'get_params':        get_params,
+        'types_choices':     types_choices,
+        'loges_list':        loges_list,
+        'utilisateurs_list': utilisateurs_list,
+        'f_type':            f_type,
+        'f_date_debut':      f_date_debut,
+        'f_date_fin':        f_date_fin,
+        'f_loge':            f_loge,
+        'f_user':            f_user,
+        'total':             qs.count(),
+    })

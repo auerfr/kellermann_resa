@@ -271,6 +271,10 @@ class ReservationSalle(models.Model):
     ]
 
     uuid            = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    loge            = models.ForeignKey(
+        Loge, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='reservations_salle'
+    )
     salle           = models.ForeignKey(
         SalleReunion, on_delete=models.PROTECT, related_name="reservations"
     )

@@ -1,25 +1,41 @@
 from django import forms
 from .models import Reservation, ReservationSalle, SalleReunion
 
-HORAIRES = [
-    ("09:00", "09h00"), ("09:30", "09h30"),
-    ("10:00", "10h00"), ("10:30", "10h30"),
-    ("14:00", "14h00"), ("14:30", "14h30"),
-    ("15:00", "15h00"), ("18:00", "18h00"),
-    ("19:00", "19h00"), ("19:30", "19h30"),
-    ("20:00", "20h00"), ("20:30", "20h30"),
-    ("21:00", "21h00"), ("22:00", "22h00"),
-    ("22:30", "22h30"), ("23:00", "23h00"),
+HORAIRES_GROUPED = [
+    ("Matin (06:00–12:00)", [
+        ("06:00", "06h00"), ("06:30", "06h30"),
+        ("07:00", "07h00"), ("07:30", "07h30"),
+        ("08:00", "08h00"), ("08:30", "08h30"),
+        ("09:00", "09h00"), ("09:30", "09h30"),
+        ("10:00", "10h00"), ("10:30", "10h30"),
+        ("11:00", "11h00"), ("11:30", "11h30"),
+    ]),
+    ("Après-midi (12:00–18:00)", [
+        ("12:00", "12h00"), ("12:30", "12h30"),
+        ("13:00", "13h00"), ("13:30", "13h30"),
+        ("14:00", "14h00"), ("14:30", "14h30"),
+        ("15:00", "15h00"), ("15:30", "15h30"),
+        ("16:00", "16h00"), ("16:30", "16h30"),
+        ("17:00", "17h00"), ("17:30", "17h30"),
+    ]),
+    ("Soir (18:00–23:30)", [
+        ("18:00", "18h00"), ("18:30", "18h30"),
+        ("19:00", "19h00"), ("19:30", "19h30"),
+        ("20:00", "20h00"), ("20:30", "20h30"),
+        ("21:00", "21h00"), ("21:30", "21h30"),
+        ("22:00", "22h00"), ("22:30", "22h30"),
+        ("23:00", "23h00"), ("23:30", "23h30"),
+    ]),
 ]
 
 
 class DemandeReservationForm(forms.ModelForm):
     heure_debut = forms.ChoiceField(
-        choices=HORAIRES, label="Heure de début",
+        choices=HORAIRES_GROUPED, label="Heure de début",
         widget=forms.Select(attrs={"class": "form-select"})
     )
     heure_fin = forms.ChoiceField(
-        choices=HORAIRES, label="Heure de fin",
+        choices=HORAIRES_GROUPED, label="Heure de fin",
         initial="22:30",
         widget=forms.Select(attrs={"class": "form-select"})
     )
@@ -68,11 +84,11 @@ class DemandeReservationForm(forms.ModelForm):
 
 class DemandeReservationSalleForm(forms.ModelForm):
     heure_debut = forms.ChoiceField(
-        choices=HORAIRES, label="Heure de début",
+        choices=HORAIRES_GROUPED, label="Heure de début",
         widget=forms.Select(attrs={"class": "form-select"})
     )
     heure_fin = forms.ChoiceField(
-        choices=HORAIRES, label="Heure de fin",
+        choices=HORAIRES_GROUPED, label="Heure de fin",
         initial="22:30",
         widget=forms.Select(attrs={"class": "form-select"})
     )
@@ -80,13 +96,14 @@ class DemandeReservationSalleForm(forms.ModelForm):
     class Meta:
         model = ReservationSalle
         fields = [
-            "salle", "date",
+            "loge", "salle", "date",
             "heure_debut", "heure_fin",
             "nom_demandeur", "email_demandeur",
             "organisation", "objet",
             "nombre_participants", "commentaire",
         ]
         widgets = {
+            "loge":                forms.Select(attrs={"class": "form-select"}),
             "salle":               forms.Select(attrs={"class": "form-select"}),
             "date":                forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "nom_demandeur":       forms.TextInput(attrs={"class": "form-control"}),
@@ -97,6 +114,9 @@ class DemandeReservationSalleForm(forms.ModelForm):
                                     "placeholder": "Ex : Réunion de bureau, Conseil d'administration..."}),
             "nombre_participants": forms.NumberInput(attrs={"class": "form-control", "min": 1}),
             "commentaire":         forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+        }
+        labels = {
+            "loge": "Loge (optionnelle)",
         }
 
 
@@ -112,11 +132,11 @@ class DemandeCabinetsForm(forms.Form):
         widget=forms.DateInput(attrs={"type": "date", "class": "form-control"})
     )
     heure_debut = forms.ChoiceField(
-        choices=HORAIRES, label="Heure de début",
+        choices=HORAIRES_GROUPED, label="Heure de début",
         widget=forms.Select(attrs={"class": "form-select"})
     )
     heure_fin = forms.ChoiceField(
-        choices=HORAIRES, label="Heure de fin",
+        choices=HORAIRES_GROUPED, label="Heure de fin",
         initial="22:30",
         widget=forms.Select(attrs={"class": "form-select"})
     )
@@ -181,11 +201,11 @@ class DemandeBanquetForm(forms.Form):
         widget=forms.DateInput(attrs={"type": "date", "class": "form-control"})
     )
     heure_debut = forms.ChoiceField(
-        choices=HORAIRES, label="Heure de début",
+        choices=HORAIRES_GROUPED, label="Heure de début",
         widget=forms.Select(attrs={"class": "form-select"})
     )
     heure_fin = forms.ChoiceField(
-        choices=HORAIRES, label="Heure de fin",
+        choices=HORAIRES_GROUPED, label="Heure de fin",
         initial="22:30",
         widget=forms.Select(attrs={"class": "form-select"})
     )

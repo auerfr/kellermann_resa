@@ -310,6 +310,7 @@ def reserver(request):
         salle    = cd["salle"]
 
         ReservationSalle.objects.create(
+            loge=loge,
             salle=salle,
             date=date_r,
             heure_debut=hd,

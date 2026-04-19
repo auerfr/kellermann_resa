@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.db.models import Count, Q
 from datetime import date
 from .models import Loge, Obedience
-from temple_project.apps.reservations.models import Reservation, Temple
+from temple_project.apps.reservations.models import Reservation, ReservationSalle, Temple
 
 
 @membre_required
@@ -68,13 +68,52 @@ def detail_loge(request, pk):
     debut_saison = date(annee_param, 9, 1)
     fin_saison   = date(annee_param + 1, 6, 30)
 
-    # Tenues de la saison demandée
+    # Tenues temple de la saison demandée
     tenues = Reservation.objects.filter(
         loge=loge,
         date__gte=debut_saison,
         date__lte=fin_saison,
         statut='validee'
     ).select_related('temple').order_by('date')
+
+    # Réservations salle de la saison demandée
+    resas_salle = ReservationSalle.objects.filter(
+        loge=loge,
+        date__gte=debut_saison,
+        date__lte=fin_saison,
+        statut__in=['validee', 'attente'],
+    ).select_related('salle').order_by('date')
+
+    # Normalisation en dicts uniformes
+    TYPE_SALLE_LABELS = {
+        'agapes': 'Agapes', 'reunion': 'Salle de réunion',
+        'cabinet_reflexion': 'Cabinet de réflexion',
+    }
+
+    def _t(r):
+        return {
+            'date': r.date, 'heure_debut': r.heure_debut, 'heure_fin': r.heure_fin,
+            'statut': r.statut, 'get_statut_display': r.get_statut_display(),
+            'type_code': 'temple', 'type_label': 'Temple',
+            'lieu': str(r.temple) if r.temple else '—',
+            'detail': '',
+        }
+
+    def _s(r):
+        ts = r.salle.type_salle if r.salle else ''
+        return {
+            'date': r.date, 'heure_debut': r.heure_debut, 'heure_fin': r.heure_fin,
+            'statut': r.statut, 'get_statut_display': r.get_statut_display(),
+            'type_code': ts, 'type_label': TYPE_SALLE_LABELS.get(ts, ts),
+            'lieu': str(r.salle) if r.salle else '—',
+            'detail': r.objet or '',
+        }
+
+    from itertools import chain
+    tous_evenements = sorted(
+        chain((_t(r) for r in tenues), (_s(r) for r in resas_salle)),
+        key=lambda d: d['date'],
+    )
 
     # Stats par temple
     stats_temples = {}
@@ -97,15 +136,16 @@ def detail_loge(request, pk):
     ).order_by('date').first()
 
     context = {
-        'loge':          loge,
-        'tenues':        tenues,
-        'stats_temples': stats_temples,
-        'demandes':      demandes,
-        'prochaine':     prochaine,
-        'annee':         annee_param,
-        'annees':        [annee - 2, annee - 1, annee],
-        'saison_label':  f"{annee_param}/{annee_param+1}",
-        'nb_tenues':     tenues.count(),
+        'loge':            loge,
+        'tenues':          tenues,
+        'tous_evenements': tous_evenements,
+        'stats_temples':   stats_temples,
+        'demandes':        demandes,
+        'prochaine':       prochaine,
+        'annee':           annee_param,
+        'annees':          [annee - 2, annee - 1, annee],
+        'saison_label':    f"{annee_param}/{annee_param+1}",
+        'nb_tenues':       tenues.count(),
     }
     return render(request, "loges/detail.html", context)
 

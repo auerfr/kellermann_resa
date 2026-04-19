@@ -94,16 +94,24 @@
             <div class="col-md-6">
               <label class="form-label fw-semibold">Heure de début <span class="text-danger">*</span></label>
               <select name="heure_debut" id="id_heure_debut" class="form-select" required>
-                {% for val, label in horaires %}
-                <option value="{{ val }}" {% if val == "19:00" %}selected{% endif %}>{{ label }}</option>
+                {% for group_label, group_choices in horaires %}
+                <optgroup label="{{ group_label }}">
+                  {% for val, label in group_choices %}
+                  <option value="{{ val }}" {% if val == "19:00" %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </optgroup>
                 {% endfor %}
               </select>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">Heure de fin <span class="text-danger">*</span></label>
               <select name="heure_fin" id="id_heure_fin" class="form-select" required>
-                {% for val, label in horaires %}
-                <option value="{{ val }}" {% if val == "22:30" %}selected{% endif %}>{{ label }}</option>
+                {% for group_label, group_choices in horaires %}
+                <optgroup label="{{ group_label }}">
+                  {% for val, label in group_choices %}
+                  <option value="{{ val }}" {% if val == "22:30" %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </optgroup>
                 {% endfor %}
               </select>
             </div>

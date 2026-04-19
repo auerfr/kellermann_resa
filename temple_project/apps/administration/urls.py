@@ -31,4 +31,5 @@ urlpatterns = [
     path("portail/<int:pk>/valider/", views.valider_acces_portail, name="valider_acces_portail"),
     path("reservation-directe/", views.reservation_directe, name="reservation_directe"),
     path("saison/validation/", views.validation_saison_admin, name="validation_saison_admin"),
+    path("journal/", views.journal, name="journal"),
 ]

@@ -130,12 +130,12 @@
       </div>
     </div>
 
-    {# ── Tableau tenues de la saison ──────────────────────────────────────── #}
+    {# ── Tableau réservations de la saison ───────────────────────────────── #}
     <div class="card shadow-sm border-0 mb-4">
       <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
            style="background:#0F2137;">
         <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
-          Tenues de la saison
+          Réservations de la saison
         </span>
         <form method="get" class="d-flex align-items-center gap-2 mb-0">
           <label class="text-white small mb-0" style="white-space:nowrap;">Saison :</label>
@@ -150,32 +150,40 @@
         </form>
       </div>
 
-      {% if reservations %}
+      {% if evenements_passes or evenements_futurs %}
       <div class="table-responsive">
         <table class="table table-hover mb-0" style="font-size:14px;">
           <thead style="background:#F8FAFC;">
             <tr>
               <th class="text-muted small ps-3">Date</th>
-              <th class="text-muted small col-mobile-hide">Temple</th>
+              <th class="text-muted small">Type</th>
+              <th class="text-muted small col-mobile-hide">Lieu</th>
               <th class="text-muted small">Horaires</th>
-              <th class="text-muted small col-mobile-hide">Type</th>
               <th class="text-muted small">Statut</th>
             </tr>
           </thead>
           <tbody>
-            {# Tenues passées #}
-            {% for r in reservations_passees %}
+            {# Passées #}
+            {% for e in evenements_passes %}
             <tr class="row-passee">
-              <td class="ps-3" style="color:#0F2137;">{{ r.date|date:"D d/m/Y" }}</td>
-              <td class="col-mobile-hide">
-                <span class="badge" style="background:#0F2137;">{{ r.temple }}</span>
-              </td>
-              <td class="small text-muted">{{ r.heure_debut|time:"H:i" }} – {{ r.heure_fin|time:"H:i" }}</td>
-              <td class="small text-muted col-mobile-hide">{{ r.get_type_reservation_display }}</td>
+              <td class="ps-3" style="color:#0F2137;">{{ e.date|date:"D d/m/Y" }}</td>
               <td>
-                {% if r.statut == 'validee' %}
+                {% if e.type_code == 'temple' %}
+                  <span class="badge" style="background:#0F2137;color:#C8A84B;">Temple</span>
+                {% elif e.type_code == 'agapes' %}
+                  <span class="badge" style="background:#92400E;color:white;">Agapes</span>
+                {% elif e.type_code == 'cabinet_reflexion' %}
+                  <span class="badge bg-secondary">Cabinet</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ e.type_label }}</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted col-mobile-hide">{{ e.lieu }}</td>
+              <td class="small text-muted">{{ e.heure_debut|time:"H:i" }} – {{ e.heure_fin|time:"H:i" }}</td>
+              <td>
+                {% if e.statut == 'validee' %}
                   <span class="badge bg-success">Validée</span>
-                {% elif r.statut == 'attente' %}
+                {% elif e.statut == 'attente' %}
                   <span class="badge bg-warning text-dark">En attente</span>
                 {% endif %}
               </td>
@@ -183,25 +191,33 @@
             {% endfor %}
 
             {# Séparateur Aujourd'hui #}
-            {% if reservations_passees and reservations_futures %}
+            {% if evenements_passes and evenements_futurs %}
             <tr class="sep-today">
               <td colspan="5">— Aujourd'hui —</td>
             </tr>
             {% endif %}
 
-            {# Tenues à venir #}
-            {% for r in reservations_futures %}
+            {# À venir #}
+            {% for e in evenements_futurs %}
             <tr>
-              <td class="fw-semibold ps-3" style="color:#0F2137;">{{ r.date|date:"l d F Y" }}</td>
-              <td class="col-mobile-hide">
-                <span class="badge" style="background:#0F2137;">{{ r.temple }}</span>
-              </td>
-              <td class="small">{{ r.heure_debut|time:"H:i" }} – {{ r.heure_fin|time:"H:i" }}</td>
-              <td class="small text-muted col-mobile-hide">{{ r.get_type_reservation_display }}</td>
+              <td class="fw-semibold ps-3" style="color:#0F2137;">{{ e.date|date:"l d F Y" }}</td>
               <td>
-                {% if r.statut == 'validee' %}
+                {% if e.type_code == 'temple' %}
+                  <span class="badge" style="background:#0F2137;color:#C8A84B;">Temple</span>
+                {% elif e.type_code == 'agapes' %}
+                  <span class="badge" style="background:#92400E;color:white;">Agapes</span>
+                {% elif e.type_code == 'cabinet_reflexion' %}
+                  <span class="badge bg-secondary">Cabinet</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ e.type_label }}</span>
+                {% endif %}
+              </td>
+              <td class="small col-mobile-hide">{{ e.lieu }}</td>
+              <td class="small">{{ e.heure_debut|time:"H:i" }} – {{ e.heure_fin|time:"H:i" }}</td>
+              <td>
+                {% if e.statut == 'validee' %}
                   <span class="badge bg-success">Validée</span>
-                {% elif r.statut == 'attente' %}
+                {% elif e.statut == 'attente' %}
                   <span class="badge bg-warning text-dark">En attente</span>
                 {% endif %}
               </td>
@@ -212,7 +228,7 @@
       </div>
       {% else %}
       <div class="card-body text-center text-muted py-4">
-        Aucune tenue pour la saison {{ annee_saison }}–{{ annee_saison|add:1 }}.
+        Aucune réservation pour la saison {{ annee_saison }}–{{ annee_saison|add:1 }}.
       </div>
       {% endif %}
 

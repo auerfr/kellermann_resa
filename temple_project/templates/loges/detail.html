@@ -116,35 +116,40 @@
             <tr>
               <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">DATE</th>
               <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">JOUR</th>
-              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TEMPLE</th>
-              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">HORAIRES</th>
               <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TYPE</th>
+              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">LIEU</th>
+              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">HORAIRES</th>
+              <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">STATUT</th>
             </tr>
           </thead>
           <tbody>
-            {% for t in tenues %}
-            <tr {% if t.date < today %}style="opacity:.5"{% endif %}>
-              <td class="fw-semibold" style="color:#0F2137;">{{ t.date|date:"d/m/Y" }}</td>
-              <td class="text-muted small">{{ t.date|date:"l" }}</td>
+            {% for e in tous_evenements %}
+            <tr>
+              <td class="fw-semibold" style="color:#0F2137;">{{ e.date|date:"d/m/Y" }}</td>
+              <td class="text-muted small">{{ e.date|date:"l" }}</td>
               <td>
-                <span class="badge" style="
-                  {% if 'Lafayette' in t.temple.get_nom_display %}background:#1a3a5c;
-                  {% elif 'galit' in t.temple.get_nom_display %}background:#0d6e6e;
-                  {% elif 'raternit' in t.temple.get_nom_display %}background:#92400E;
-                  {% else %}background:#5B21B6;{% endif %}
-                ">{{ t.temple }}</span>
-              </td>
-              <td class="text-muted small">{{ t.heure_debut|time:"H:i" }} – {{ t.heure_fin|time:"H:i" }}</td>
-              <td>
-                {% if t.type_reservation == 'reguliere' %}
-                <span class="badge bg-light text-dark border">Régulière</span>
+                {% if e.type_code == 'temple' %}
+                  <span class="badge" style="background:#0F2137;color:#C8A84B;">Temple</span>
+                {% elif e.type_code == 'agapes' %}
+                  <span class="badge" style="background:#92400E;color:white;">Agapes</span>
+                {% elif e.type_code == 'cabinet_reflexion' %}
+                  <span class="badge bg-secondary">Cabinet</span>
                 {% else %}
-                <span class="badge bg-warning text-dark">Exceptionnelle</span>
+                  <span class="badge bg-secondary">{{ e.type_label }}</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted">{{ e.lieu }}</td>
+              <td class="text-muted small">{{ e.heure_debut|time:"H:i" }} – {{ e.heure_fin|time:"H:i" }}</td>
+              <td>
+                {% if e.statut == 'validee' %}
+                  <span class="badge bg-success">Validée</span>
+                {% elif e.statut == 'attente' %}
+                  <span class="badge bg-warning text-dark">Attente</span>
                 {% endif %}
               </td>
             </tr>
             {% empty %}
-            <tr><td colspan="5" class="text-center text-muted py-4">Aucune tenue en {{ annee }}/{{ annee|add:1 }}</td></tr>
+            <tr><td colspan="6" class="text-center text-muted py-4">Aucune réservation en {{ annee }}/{{ annee|add:1 }}</td></tr>
             {% endfor %}
           </tbody>
         </table>

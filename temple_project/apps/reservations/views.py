@@ -12,6 +12,7 @@ from .models import (
 )
 from temple_project.apps.loges.models import Loge
 from .forms import DemandeReservationForm, DemandeReservationSalleForm, DemandeCabinetsForm, DemandeBanquetForm
+from temple_project.apps.administration.journal import log_evenement
 
 
 def soumettre_demande(request):
@@ -178,6 +179,7 @@ def demande_cabinets(request):
             reservations_creees = []
             for cabinet in cabinets_libres:
                 resa = ReservationSalle.objects.create(
+                    loge=form.cleaned_data.get('loge'),
                     salle=cabinet,
                     date=date,
                     heure_debut=heure_debut,
@@ -304,6 +306,7 @@ def demande_banquet(request):
 
             # Créer la réservation
             resa = ReservationSalle.objects.create(
+                loge=form.cleaned_data.get('loge'),
                 salle=salle_banquet,
                 date=date,
                 heure_debut=heure_debut,
@@ -355,13 +358,31 @@ def confirmation_banquet(request, uuid):
 
 def soumettre_demande_recurrence(request):
     """Formulaire front-end : une loge demande une règle de récurrence."""
-    HORAIRES = [
-        ('09:00','09h00'),('09:30','09h30'),('10:00','10h00'),('10:30','10h30'),
-        ('11:00','11h00'),('11:30','11h30'),('12:00','12h00'),
-        ('14:00','14h00'),('14:30','14h30'),('15:00','15h00'),('15:30','15h30'),
-        ('16:00','16h00'),('16:30','16h30'),('17:00','17h00'),
-        ('19:00','19h00'),('19:30','19h30'),('20:00','20h00'),('20:30','20h30'),
-        ('21:00','21h00'),('22:00','22h00'),('22:30','22h30'),('23:00','23h00'),
+    HORAIRES_GROUPED = [
+        ("Matin (06:00–12:00)", [
+            ("06:00", "06h00"), ("06:30", "06h30"),
+            ("07:00", "07h00"), ("07:30", "07h30"),
+            ("08:00", "08h00"), ("08:30", "08h30"),
+            ("09:00", "09h00"), ("09:30", "09h30"),
+            ("10:00", "10h00"), ("10:30", "10h30"),
+            ("11:00", "11h00"), ("11:30", "11h30"),
+        ]),
+        ("Après-midi (12:00–18:00)", [
+            ("12:00", "12h00"), ("12:30", "12h30"),
+            ("13:00", "13h00"), ("13:30", "13h30"),
+            ("14:00", "14h00"), ("14:30", "14h30"),
+            ("15:00", "15h00"), ("15:30", "15h30"),
+            ("16:00", "16h00"), ("16:30", "16h30"),
+            ("17:00", "17h00"), ("17:30", "17h30"),
+        ]),
+        ("Soir (18:00–23:30)", [
+            ("18:00", "18h00"), ("18:30", "18h30"),
+            ("19:00", "19h00"), ("19:30", "19h30"),
+            ("20:00", "20h00"), ("20:30", "20h30"),
+            ("21:00", "21h00"), ("21:30", "21h30"),
+            ("22:00", "22h00"), ("22:30", "22h30"),
+            ("23:00", "23h00"), ("23:30", "23h30"),
+        ]),
     ]
     MOIS = [
         (9,'Septembre'),(10,'Octobre'),(11,'Novembre'),(12,'Décembre'),
@@ -432,7 +453,7 @@ def soumettre_demande_recurrence(request):
         'temples' : Temple.objects.all(),
         'jours'   : RegleRecurrence.JOUR_CHOICES,
         'semaines': RegleRecurrence.SEMAINE_CHOICES,
-        'horaires': HORAIRES,
+        'horaires': HORAIRES_GROUPED,
         'mois'    : MOIS,
         'tranches': TRANCHES,
     })
@@ -596,19 +617,69 @@ def portail_loge(request, token):
     debut_saison = date_cls(annee_saison, 9, 1)
     fin_saison   = date_cls(annee_saison + 1, 6, 30)
 
-    # ── Réservations : saison complète sélectionnée, validée ou en attente ───
-    reservations = Reservation.objects.filter(
+    # ── Réservations temple : saison complète sélectionnée, validée ou en attente ───
+    reservations_temple = Reservation.objects.filter(
         loge=loge,
         date__gte=debut_saison,
         date__lte=fin_saison,
         statut__in=['validee', 'attente'],
     ).select_related('temple').order_by('date') if loge else Reservation.objects.none()
 
-    # Séparation passé / futur pour le tableau et les encarts
-    reservations_passees = reservations.filter(date__lt=today)
-    reservations_futures = reservations.filter(date__gte=today)
-    prochaine_tenue  = reservations_futures.filter(statut='validee').first()
-    nb_restantes     = reservations_futures.filter(statut='validee').count()
+    # Réservations salle (cabinets, banquet, réunion) liées à la loge
+    reservations_salle_qs = ReservationSalle.objects.filter(
+        loge=loge,
+        date__gte=debut_saison,
+        date__lte=fin_saison,
+        statut__in=['validee', 'attente'],
+    ).select_related('salle').order_by('date') if loge else ReservationSalle.objects.none()
+
+    # Normalisation en dicts uniformes pour le template
+    TYPE_SALLE_LABELS = {
+        'agapes': 'Agapes', 'reunion': 'Salle de réunion',
+        'cabinet_reflexion': 'Cabinet de réflexion',
+    }
+
+    def _temple_dict(r):
+        return {
+            'date': r.date, 'heure_debut': r.heure_debut, 'heure_fin': r.heure_fin,
+            'statut': r.statut, 'get_statut_display': r.get_statut_display(),
+            'type_code': 'temple', 'type_label': 'Temple',
+            'lieu': str(r.temple) if r.temple else '—',
+            'detail': r.get_sous_type_display() if hasattr(r, 'sous_type') and r.sous_type else '',
+            'obj': r,
+        }
+
+    def _salle_dict(r):
+        ts = r.salle.type_salle if r.salle else ''
+        return {
+            'date': r.date, 'heure_debut': r.heure_debut, 'heure_fin': r.heure_fin,
+            'statut': r.statut, 'get_statut_display': r.get_statut_display(),
+            'type_code': ts, 'type_label': TYPE_SALLE_LABELS.get(ts, ts),
+            'lieu': str(r.salle) if r.salle else '—',
+            'detail': r.objet or '',
+            'obj': r,
+        }
+
+    from itertools import chain
+    tous_evenements = sorted(
+        chain(
+            (_temple_dict(r) for r in reservations_temple),
+            (_salle_dict(r) for r in reservations_salle_qs),
+        ),
+        key=lambda d: d['date'],
+    )
+
+    evenements_passes = [d for d in tous_evenements if d['date'] < today]
+    evenements_futurs = [d for d in tous_evenements if d['date'] >= today]
+
+    # Encarts (temple uniquement pour prochaine tenue / nb restantes)
+    prochaine_tenue  = reservations_temple.filter(date__gte=today, statut='validee').first()
+    nb_restantes     = reservations_temple.filter(date__gte=today, statut='validee').count()
+
+    # Conserver aussi les querysets bruts pour compatibilité template existante
+    reservations         = reservations_temple
+    reservations_passees = reservations_temple.filter(date__lt=today)
+    reservations_futures = reservations_temple.filter(date__gte=today)
 
     # ── Validation de saison ─────────────────────────────────────────────────
     # La validation est indépendante du sélecteur de saison : on cherche
@@ -641,11 +712,12 @@ def portail_loge(request, token):
         validation.date_reponse     = timezone.now()
         validation.save()
 
+        nb_ok       = validation.lignes.filter(avis='ok').count()
+        nb_deplacer = validation.lignes.filter(avis='deplacer').count()
+        nb_annuler  = validation.lignes.filter(avis='annuler').count()
+
         # Email de confirmation à la loge
         if loge.email:
-            nb_ok       = validation.lignes.filter(avis='ok').count()
-            nb_deplacer = validation.lignes.filter(avis='deplacer').count()
-            nb_annuler  = validation.lignes.filter(avis='annuler').count()
             send_mail_kellermann(
                 subject=f"Votre validation de saison {annee_saison}-{annee_saison + 1} a bien été enregistrée",
                 message=(
@@ -679,6 +751,10 @@ def portail_loge(request, token):
             )
 
         messages.success(request, "Votre validation a bien été enregistrée. Merci !")
+        log_evenement('soumission_validation_loge',
+            f"Validation saison soumise : {loge.nom} — saison {annee_saison}-{annee_saison + 1} "
+            f"({nb_ok} ok, {nb_deplacer} à déplacer, {nb_annuler} à annuler)",
+            request=request, objet=validation)
         return redirect('reservations:portail_loge', token=token)
 
     return render(request, 'reservations/portail_loge.html', {
@@ -686,6 +762,8 @@ def portail_loge(request, token):
         'reservations':          reservations,
         'reservations_passees':  reservations_passees,
         'reservations_futures':  reservations_futures,
+        'evenements_passes':     evenements_passes,
+        'evenements_futurs':     evenements_futurs,
         'prochaine_tenue':       prochaine_tenue,
         'nb_restantes':          nb_restantes,
         'loge':                  loge,
