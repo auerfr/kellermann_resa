@@ -33,6 +33,8 @@
     .fc-button { font-size: 0.7rem !important; padding: 0.25rem 0.4rem !important; }
     .legende-wrapper { display: none; }
     .filtres-wrapper select { font-size: 0.8rem; }
+    /* Vue liste mobile : masquer la colonne horaire (l'emoji créneau suffit) */
+    .fc-list-event-time { display: none !important; }
   }
   @media (max-width: 480px) {
     .fc-col-header-cell-cushion { font-size: 9px; letter-spacing: 0; }
@@ -218,6 +220,7 @@ const TEMPLE_COLORS = {
   "Temple Fraternité": { bg:"#FEF3C7", border:"#92400E", text:"#78350F" },
   "Temple Liberté":    { bg:"#EDE9FE", border:"#5B21B6", text:"#4C1D95" },
 };
+const CRENEAU_EMOJI = { matin: "🌅", aprem: "☀️", soir: "🌙" };
 const IS_ADMIN = {{ request.user.is_staff|yesno:"true,false" }};
 let calendar;
 
@@ -260,8 +263,59 @@ document.addEventListener("DOMContentLoaded", function() {
       fetch(buildUrl(fetchInfo.startStr.slice(0,10), fetchInfo.endStr.slice(0,10)))
         .then(r => r.json()).then(d => successCb(d)).catch(e => failureCb(e));
     },
+    eventContent: function(arg) {
+      var p    = arg.event.extendedProps;
+      var view = arg.view.type;
+      var w    = window.innerWidth;
+      var emoji = p.creneau ? (CRENEAU_EMOJI[p.creneau] || '') : '';
+      // Formate "19h" ou "19h30" (sans zéro si minutes = 0)
+      function fmtH(dt) {
+        if (!dt) return '';
+        var m = dt.getMinutes();
+        return dt.getHours() + 'h' + (m ? (m < 10 ? '0' + m : m) : '');
+      }
+      // Formate "19h00" (minutes toujours affichées)
+      function fmtHM(dt) {
+        if (!dt) return '';
+        var m = dt.getMinutes();
+        return dt.getHours() + 'h' + (m < 10 ? '0' + m : m);
+      }
+
+      // ── Vue mensuelle ────────────────────────────────────────────
+      if (view === 'dayGridMonth') {
+        var label;
+        if (w < 768) {
+          label = emoji;                                                          // 🌙
+        } else if (w < 1200) {
+          label = emoji + ' ' + (p.loge_court || arg.event.title);               // 🌙 Liberté
+        } else {
+          label = emoji + ' ' + (p.loge_nom || arg.event.title)
+                + (p.heure ? ' ' + p.heure : '');                               // 🌙 Loge Liberté 19h
+        }
+        return { html: '<div style="padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + label + '</div>' };
+      }
+
+      // ── Vue semaine ──────────────────────────────────────────────
+      if (view === 'timeGridWeek') {
+        var twLabel;
+        if (w < 768) {
+          twLabel = emoji + ' ' + fmtH(arg.event.start);                         // 🌙 19h
+        } else if (w < 1200) {
+          twLabel = emoji + ' ' + (p.loge_court || arg.event.title)
+                  + ' ' + fmtH(arg.event.start) + '-' + fmtH(arg.event.end);    // 🌙 Liberté 19h-22h
+        } else {
+          twLabel = emoji + ' ' + (p.loge_nom || arg.event.title)
+                  + ' ' + fmtHM(arg.event.start) + ' – ' + fmtHM(arg.event.end); // 🌙 Loge Liberté 19h00 – 22h30
+        }
+        return { html: '<div style="padding:2px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + twLabel + '</div>' };
+      }
+
+      // ── Autres vues (liste, 3 jours) : rendu par défaut ─────────
+      return true;
+    },
     eventDidMount: function(info) {
       var p = info.event.extendedProps;
+      // Couleurs temple sur toutes les vues
       if (p.type === "temple" && p.statut === "validee") {
         var c = TEMPLE_COLORS[p.temple];
         if (c) { info.el.style.backgroundColor = c.bg; info.el.style.borderColor = c.border; info.el.style.color = c.text; }

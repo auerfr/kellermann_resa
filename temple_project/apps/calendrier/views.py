@@ -71,8 +71,12 @@ def api_evenements(request):
                 "textColor":       color["text"],
                 "extendedProps": {
                     "type":       "temple",
+                    "creneau":    _creneau(r.heure_debut),
+                    "heure":      _heure_court(r.heure_debut),
                     "temple":     str(r.temple),
                     "loge":       r.loge.nom if r.loge else (r.nom_organisation or '?'),
+                    "loge_nom":   r.loge.nom if r.loge else (r.nom_organisation or '?'),
+                    "loge_court": _loge_court(r.loge) if r.loge else (r.nom_organisation or '?'),
                     "obedience":  r.loge.obedience.nom if r.loge else '—',
                     "type_res":   r.get_type_reservation_display(),
                     "sous_type":  r.get_sous_type_display(),
@@ -123,6 +127,7 @@ def api_evenements(request):
                 title = f"\U0001fa91 {org} \u2013 {rs.salle.nom}"
             props = {
                 "type":         "salle",
+                "creneau":      _creneau(rs.heure_debut),
                 "type_salle":   ts,
                 "salle":        str(rs.salle),
                 "objet":        rs.objet,
@@ -288,6 +293,34 @@ def api_disponibilites(request):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _creneau(heure):
+    """Retourne 'matin', 'aprem' ou 'soir' selon l'heure de début."""
+    h = heure.hour
+    if h < 12:
+        return "matin"
+    elif h < 18:
+        return "aprem"
+    else:
+        return "soir"
+
+
+def _heure_court(t):
+    """Format '19h' ou '19h30' selon les minutes."""
+    if t.minute == 0:
+        return f"{t.hour}h"
+    return f"{t.hour}h{t.minute:02d}"
+
+
+def _loge_court(loge):
+    """Abréviation si disponible, sinon 2-3 premiers mots du nom."""
+    if loge is None:
+        return '?'
+    if loge.abreviation:
+        return loge.abreviation
+    mots = loge.nom.split()
+    return ' '.join(mots[:3])
+
 
 def _couleur_reservation(r):
     """Retourne bg/border/text selon le type et statut de la réservation."""
