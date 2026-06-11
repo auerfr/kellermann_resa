@@ -68,9 +68,9 @@ class JournalEvenement(models.Model):
         verbose_name_plural   = "Journal des événements"
         ordering              = ['-date_heure']
         indexes = [
-            models.Index(fields=['-date_heure']),
-            models.Index(fields=['type_evenement']),
-            models.Index(fields=['objet_type', 'objet_id']),
+            models.Index(fields=['-date_heure'],          name='admin_journal_date_idx'),
+            models.Index(fields=['type_evenement'],        name='admin_journal_type_idx'),
+            models.Index(fields=['objet_type', 'objet_id'], name='admin_journal_objet_idx'),
         ]
 
     def __str__(self):
