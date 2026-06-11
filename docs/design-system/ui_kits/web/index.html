@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<style>
+@font-face{font-family:'Open Sans';font-style:normal;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype');}
+@font-face{font-family:'Open Sans';font-style:italic;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype');}
+</style>
+
+<title>Kellermann — Web UI kit</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="../../colors_and_type.css" rel="stylesheet">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--temple-surface);color:var(--temple-text);}
+
+  /* Kit chrome — switcher across the top */
+  .kit-switcher{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--temple-border);padding:.6rem 1rem;display:flex;gap:.4rem;align-items:center;box-shadow:var(--shadow-xs);}
+  .kit-title{font-weight:700;color:var(--temple-blue);margin-right:auto;font-size:.95rem;display:inline-flex;align-items:center;gap:.5rem;}
+  .kit-title svg{width:22px;height:22px;}
+  .kit-tab{border:1px solid var(--temple-border);background:#fff;color:var(--temple-text-sub);font-size:.85rem;padding:.4rem .85rem;border-radius:var(--radius-sm);cursor:pointer;font-weight:500;}
+  .kit-tab.active{background:var(--temple-blue);color:var(--temple-gold);border-color:var(--temple-blue);}
+  .kit-tab:hover:not(.active){background:var(--temple-surface-2);color:var(--temple-text);}
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  /* ── Real app navbar ────────────────────────────── */
+  .app-nav{background:var(--temple-blue);padding:.6rem 1rem;box-shadow:var(--shadow-navbar);display:flex;align-items:center;gap:.25rem;}
+  .app-nav .brand{color:var(--temple-gold);font-weight:700;font-size:1.05rem;text-decoration:none;margin-right:1rem;display:inline-flex;align-items:center;gap:.5rem;}
+  .app-nav .brand svg{width:22px;height:22px;}
+  .app-nav a.lnk{color:var(--temple-gold);font-size:.88rem;padding:.45rem .75rem;text-decoration:none;border-radius:var(--radius-xs);}
+  .app-nav a.lnk:hover{background:rgba(200,168,75,.08);}
+  .app-nav .grow{flex:1;}
+  .app-nav .user{color:var(--temple-gold);font-size:.88rem;padding:.45rem .75rem;}
+
+  /* ── Bienvenue ──────────────────────────────────── */
+  .bienvenue-wrap{background:var(--temple-blue);min-height:calc(100vh - 50px);display:flex;align-items:center;justify-content:center;padding:2rem;}
+  .card-bienvenue{background:#fff;border-radius:var(--radius-xl);padding:2.5rem 2rem;width:100%;max-width:440px;box-shadow:var(--shadow-xl);text-align:center;}
+  .card-bienvenue .symbol{margin-bottom:1rem;display:flex;justify-content:center;}
+  .card-bienvenue .symbol svg{width:72px;height:72px;}
+  .card-bienvenue .titre{font-size:var(--fs-h1);font-weight:var(--fw-bold);color:var(--temple-blue);margin-bottom:.3rem;}
+  .card-bienvenue .sous-titre{color:var(--temple-gold);font-size:.95rem;margin-bottom:2rem;}
+  .btn-acces{background:var(--temple-blue);color:#fff;border:none;border-radius:var(--radius-md);padding:.9rem 1.5rem;font-size:1rem;font-weight:var(--fw-semibold);width:100%;display:block;text-decoration:none;margin-bottom:.75rem;transition:background .2s;}
+  .btn-acces:hover{background:var(--temple-blue-light);color:#fff;}
+  .btn-admin{background:transparent;color:var(--temple-text-muted);border:1px solid var(--temple-border);border-radius:var(--radius-md);padding:.75rem 1.5rem;font-size:.9rem;width:100%;display:block;text-decoration:none;}
+  .btn-admin:hover{border-color:var(--temple-text-muted);color:var(--temple-text-sub);}
+  .separator{border:none;border-top:1px solid var(--temple-border-light);margin:1.5rem 0;}
+  .footer-text{color:#CBD5E1;font-size:.75rem;margin-top:1.5rem;}
+
+  /* ── Page container shared ──────────────────────── */
+  .page{padding:1.5rem;max-width:1280px;margin:0 auto;}
+  .page-title{font-size:var(--fs-h1);font-weight:var(--fw-bold);color:var(--temple-blue);letter-spacing:var(--ls-tight);margin:0 0 .25rem;}
+  .page-sub{color:var(--temple-text-sub);font-size:.95rem;margin-bottom:1.25rem;}
+
+  /* Card with navy-header band */
+  .tcard{background:#fff;border:1px solid var(--temple-border-light);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden;}
+  .tcard-header{background:var(--temple-blue);color:var(--temple-gold);text-transform:uppercase;letter-spacing:var(--ls-wider);font-size:var(--fs-xs);font-weight:var(--fw-semibold);padding:.7rem 1rem;display:flex;align-items:center;gap:.5rem;}
+  .tcard-body{padding:1.1rem 1.2rem;}
+
+  /* ── Calendrier ─────────────────────────────────── */
+  .cal-toolbar{display:flex;align-items:center;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;}
+  .cal-toolbar .spacer{flex:1;}
+  .btn-outline-slate{background:#fff;border:1px solid var(--temple-border);color:var(--temple-text-sub);font-size:.85rem;padding:.4rem .8rem;border-radius:var(--radius-sm);cursor:pointer;font-weight:500;}
+  .btn-outline-slate:hover{background:var(--temple-surface-2);color:var(--temple-text);}
+  .btn-gold{background:var(--temple-blue);color:var(--temple-gold);border:none;font-weight:var(--fw-semibold);font-size:.85rem;padding:.45rem .9rem;border-radius:var(--radius-sm);cursor:pointer;}
+  .btn-gold:hover{background:var(--temple-blue-light);}
+
+  .cal-month{font-size:1.35rem;font-weight:var(--fw-bold);color:var(--temple-blue);text-transform:capitalize;min-width:210px;text-align:center;}
+
+  .cal-grid{background:#fff;border:1px solid var(--temple-border);border-radius:var(--radius-md);overflow:hidden;}
+  .cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);background:var(--temple-blue);color:var(--temple-gold);font-size:var(--fs-xs);font-weight:var(--fw-semibold);letter-spacing:var(--ls-wider);text-transform:uppercase;}
+  .cal-weekdays>div{padding:.55rem .5rem;text-align:center;}
+  .cal-days{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(100px,auto);}
+  .cal-day{border-top:1px solid var(--temple-border-light);border-left:1px solid var(--temple-border-light);padding:.35rem .4rem;font-size:.78rem;position:relative;min-height:100px;}
+  .cal-day:nth-child(7n+1){border-left:none;}
+  .cal-day .dn{color:var(--temple-text-sub);font-weight:var(--fw-semibold);font-size:.82rem;}
+  .cal-day.other .dn{color:var(--temple-text-muted);opacity:.55;}
+  .cal-day.today .dn{background:var(--temple-gold);color:var(--temple-blue);border-radius:var(--radius-pill);padding:1px 7px;display:inline-block;}
+  .evt{display:block;font-size:10.5px;font-weight:600;padding:2px 6px;border-radius:3px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:3px solid transparent;}
+  .evt.laf{background:var(--temple-lafayette-bg);color:var(--temple-lafayette);border-color:var(--temple-lafayette);}
+  .evt.ega{background:var(--temple-egalite-bg);color:var(--temple-egalite);border-color:var(--temple-egalite);}
+  .evt.fra{background:var(--temple-fraternite-bg);color:var(--temple-fraternite);border-color:var(--temple-fraternite);}
+  .evt.lib{background:var(--temple-liberte-bg);color:var(--temple-liberte);border-color:var(--temple-liberte);}
+  .evt.banq{background:#FCE7F3;color:#BE123C;border-color:#BE123C;}
+  .evt.cab{background:#FFEDD5;color:#9A3412;border-color:#EA580C;}
+  .evt.ferie{background:#FEF3C7;color:#854D0E;border-color:#CA8A04;font-style:italic;}
+  .evt.attente{background:#FEF3C7;color:#78350F;border-style:dashed;border-width:0 0 0 3px;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:.9rem;margin-top:1rem;font-size:.8rem;color:var(--temple-text-sub);}
+  .legend .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:middle;margin-right:5px;border-left:3px solid transparent;}
+
+  /* ── Formulaire ─────────────────────────────────── */
+  .form-wrap{max-width:720px;margin:0 auto;}
+  .form-label{font-size:.875rem;font-weight:var(--fw-semibold);color:var(--temple-text);margin-bottom:.35rem;display:block;}
+  .form-control,.form-select{display:block;width:100%;border:1px solid var(--temple-border);border-radius:var(--radius-sm);padding:.65rem .9rem;font:inherit;font-size:.95rem;color:var(--temple-text);background:#fff;box-sizing:border-box;}
+  .form-control:focus,.form-select:focus{outline:none;border-color:var(--temple-gold);box-shadow:var(--shadow-focus);}
+  .form-help{color:var(--temple-text-sub);font-size:.8rem;margin-top:.3rem;}
+  .form-group{margin-bottom:1.1rem;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+  .form-check{display:flex;align-items:flex-start;gap:.55rem;padding:.5rem 0;}
+  .form-check input{accent-color:var(--temple-blue);width:16px;height:16px;margin-top:2px;}
+  .form-check label{font-size:.9rem;line-height:1.35;}
+  .form-check .lbl-title{font-weight:var(--fw-semibold);color:var(--temple-text);}
+  .form-check small{color:var(--temple-text-sub);display:block;}
+  .form-actions{display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;padding-top:1.2rem;border-top:1px solid var(--temple-border-light);}
+  .btn-primary{background:var(--temple-blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:.7rem 1.3rem;font-weight:var(--fw-semibold);font-size:.95rem;cursor:pointer;}
+  .btn-primary:hover{background:var(--temple-blue-light);}
+  .btn-link{background:transparent;border:none;color:var(--temple-text-sub);font-size:.9rem;padding:.5rem;text-decoration:none;}
+  .btn-link:hover{color:var(--temple-blue);}
+  .alert-info{background:var(--status-info-soft);color:var(--status-info-fg);border:1px solid var(--status-info-brd);border-radius:var(--radius-md);padding:.7rem 1rem;font-size:.875rem;margin-bottom:1.2rem;}
+
+  /* ── Admin dashboard ────────────────────────────── */
+  .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.3rem;}
+  .kpi{border-radius:var(--radius-lg);padding:1.25rem 1.4rem;color:#fff;box-shadow:var(--shadow-md);position:relative;overflow:hidden;}
+  .kpi .icon{position:absolute;top:.9rem;right:1rem;font-size:1.6rem;opacity:.55;}
+  .kpi .num{font-size:var(--fs-kpi);font-weight:var(--fw-bold);line-height:1;}
+  .kpi .lbl{font-size:.85rem;opacity:.9;margin-top:.2rem;}
+  .kpi .foot{font-size:.75rem;opacity:.8;margin-top:.5rem;text-transform:uppercase;letter-spacing:var(--ls-wider);font-weight:var(--fw-semibold);}
+  .kpi.navy{background:linear-gradient(135deg,var(--temple-blue),var(--temple-blue-light));}
+  .kpi.gold{background:linear-gradient(135deg,var(--temple-gold),#A88B3B);color:var(--temple-blue);}
+  .kpi.gold .foot{opacity:.75;}
+  .kpi.info{background:linear-gradient(135deg,#1E40AF,var(--status-info));}
+  .kpi.warn{background:linear-gradient(135deg,var(--status-warning-solid),var(--status-warning-deep));}
+
+  .attente-banner{background:var(--status-warning-soft);border:1px solid var(--status-warning-brd);border-left:4px solid var(--status-warning-solid);border-radius:var(--radius-md);padding:1rem 1.2rem;margin-bottom:1.3rem;display:flex;align-items:center;gap:1rem;}
+  .attente-banner .big{font-weight:var(--fw-bold);color:var(--status-warning-fg);font-size:1rem;}
+  .attente-banner .sub{color:var(--status-warning-deep);font-size:.85rem;}
+  .attente-banner .badge-nb{background:var(--status-warning-solid);color:#fff;padding:2px 11px;border-radius:var(--radius-pill);font-weight:var(--fw-bold);font-size:.85rem;}
+  .attente-banner .grow{flex:1;}
+
+  .quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;}
+  .quick{background:#fff;border:1px solid var(--temple-border-light);border-radius:var(--radius-md);padding:1.1rem;text-align:center;text-decoration:none;color:inherit;transition:all .15s;display:block;}
+  .quick:hover{border-color:var(--temple-gold);box-shadow:var(--shadow-md);transform:translateY(-1px);}
+  .quick .qi{font-size:1.6rem;margin-bottom:.4rem;}
+  .quick .qt{font-weight:var(--fw-semibold);color:var(--temple-blue);font-size:.9rem;}
+  .quick .qs{font-size:.78rem;color:var(--temple-text-sub);margin-top:.2rem;}
+
+  table.t{width:100%;border-collapse:collapse;font-size:.88rem;}
+  table.t thead th{background:var(--temple-blue);color:var(--temple-gold);font-size:var(--fs-xs);font-weight:var(--fw-semibold);letter-spacing:var(--ls-wider);text-transform:uppercase;padding:.6rem .9rem;text-align:left;}
+  table.t tbody td{padding:.6rem .9rem;border-bottom:1px solid var(--temple-border-light);}
+  table.t tbody tr:hover td{background:#F0F9FF;}
+  .status-b{font-size:.72rem;font-weight:var(--fw-semibold);padding:2px 8px;border-radius:var(--radius-sm);display:inline-block;}
+  .status-b.ok{background:var(--status-success-bg);color:var(--status-success-fg);}
+  .status-b.wait{background:var(--status-warning-bg);color:var(--status-warning-fg);}
+  .status-b.ko{background:var(--status-danger-bg);color:var(--status-danger-fg);}
+  .t-badge{background:var(--temple-blue);color:var(--temple-gold);font-size:.7rem;font-weight:var(--fw-semibold);padding:2px 7px;border-radius:var(--radius-xs);}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ Reusable brand glyph (Option A — façade) ═══════════ -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none;" aria-hidden="true">
+  <symbol id="kgl" viewBox="0 0 64 64">
+    <path d="M8 22 L32 8 L56 22 Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" fill="none"/>
+    <rect x="10" y="22" width="44" height="4" fill="currentColor"/>
+    <rect x="14" y="26" width="4" height="24" fill="currentColor"/>
+    <rect x="24" y="26" width="4" height="24" fill="currentColor"/>
+    <rect x="36" y="26" width="4" height="24" fill="currentColor"/>
+    <rect x="46" y="26" width="4" height="24" fill="currentColor"/>
+    <rect x="10" y="50" width="44" height="4" fill="currentColor"/>
+  </symbol>
+</svg>
+
+<!-- ═══════════ UI kit switcher ═══════════ -->
+<div class="kit-switcher">
+  <div class="kit-title"><svg style="color:var(--temple-blue)"><use href="#kgl"/></svg> Kellermann — Web UI kit</div>
+  <button class="kit-tab active" data-t="bienvenue">Bienvenue</button>
+  <button class="kit-tab" data-t="calendrier">Calendrier</button>
+  <button class="kit-tab" data-t="formulaire">Formulaire</button>
+  <button class="kit-tab" data-t="admin">Admin</button>
+</div>
+
+<!-- ═══════════ Bienvenue ═══════════ -->
+<div class="screen active" id="s-bienvenue">
+  <div class="bienvenue-wrap">
+    <div class="card-bienvenue">
+      <div class="symbol"><svg style="color:var(--temple-blue)"><use href="#kgl"/></svg></div>
+      <div class="titre">Kellermann Réservations</div>
+      <div class="sous-titre">Gestion des temples et salles de réunion</div>
+      <a class="btn-acces" href="#" onclick="switchTab('calendrier');return false;">🔑 Accéder au calendrier</a>
+      <hr class="separator">
+      <a class="btn-admin" href="#" onclick="switchTab('admin');return false;">⚙️ Espace administrateur</a>
+      <div class="footer-text">Accès réservé aux membres des loges affiliées</div>
+      <div style="margin-top:1.5rem;">
+        <a href="#" style="color:#CBD5E1;font-size:.72rem;text-decoration:none;opacity:.6;">Accès traiteur</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Shared navbar (used by other screens) ═══════════ -->
+<template id="tpl-nav">
+<div class="app-nav">
+  <a class="brand" href="#" onclick="switchTab('bienvenue');return false;"><svg style="color:var(--temple-gold)"><use href="#kgl"/></svg> Kellermann</a>
+  <a class="lnk" href="#" onclick="switchTab('calendrier');return false;">📅 Calendrier</a>
+  <a class="lnk" href="#" onclick="switchTab('formulaire');return false;">📝 Faire une demande ▾</a>
+  <a class="lnk" href="#">🏛 Loges</a>
+  <a class="lnk" href="#">📬 Contact</a>
+  <a class="lnk" href="#" onclick="switchTab('admin');return false;">⚙️ Administration ▾</a>
+  <div class="grow"></div>
+  <div class="user">👤 admin ▾</div>
+</div>
+</template>
+
+<!-- ═══════════ Calendrier ═══════════ -->
+<div class="screen" id="s-calendrier">
+  <div class="nav-slot"></div>
+  <div class="page">
+    <div class="cal-toolbar">
+      <button class="btn-outline-slate" id="cal-prev">‹</button>
+      <div class="cal-month" id="cal-month">septembre 2026</div>
+      <button class="btn-outline-slate" id="cal-next">›</button>
+      <button class="btn-outline-slate">Aujourd'hui</button>
+      <div class="spacer"></div>
+      <button class="btn-outline-slate">📅 Saison 2026–2027 ▾</button>
+      <button class="btn-outline-slate">🎯 Filtrer ▾</button>
+      <button class="btn-gold">＋ Nouvelle demande</button>
+    </div>
+
+    <div class="cal-grid">
+      <div class="cal-weekdays">
+        <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+      </div>
+      <div class="cal-days" id="cal-days"></div>
+    </div>
+
+    <div class="legend">
+      <span><span class="sw" style="background:var(--temple-lafayette-bg);border-color:var(--temple-lafayette);"></span>Temple Lafayette</span>
+      <span><span class="sw" style="background:var(--temple-egalite-bg);border-color:var(--temple-egalite);"></span>Temple Égalité</span>
+      <span><span class="sw" style="background:var(--temple-fraternite-bg);border-color:var(--temple-fraternite);"></span>Temple Fraternité</span>
+      <span><span class="sw" style="background:var(--temple-liberte-bg);border-color:var(--temple-liberte);"></span>Temple Liberté</span>
+      <span><span class="sw" style="background:#FCE7F3;border-color:#BE123C;"></span>Banquet</span>
+      <span><span class="sw" style="background:#FFEDD5;border-color:#EA580C;"></span>Cabinet</span>
+      <span><span class="sw" style="background:#FEF3C7;border-color:#CA8A04;"></span>Férié</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Formulaire ═══════════ -->
+<div class="screen" id="s-formulaire">
+  <div class="nav-slot"></div>
+  <div class="page">
+    <div class="form-wrap">
+      <div class="page-title">📝 Demande de tenue</div>
+      <div class="page-sub">Remplissez ce formulaire pour demander un créneau. Votre demande sera validée par l'équipe Kellermann sous 48h.</div>
+
+      <div class="alert-info">💡 Rappel — le code d'accès annuel est distribué en début de saison par l'administrateur de votre obédience.</div>
+
+      <div class="tcard" style="margin-bottom:1.2rem;">
+        <div class="tcard-header">Votre loge</div>
+        <div class="tcard-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Obédience</label>
+              <select class="form-select"><option>Grande Loge de France (GLDF)</option><option>GLNF</option><option>GLFF</option><option>GODF</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Loge demandeuse</label>
+              <select class="form-select"><option>Loge Liberté n° 247</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vénérable en charge</label>
+              <input class="form-control" value="F∴ Jean Dupont">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email de confirmation</label>
+              <input type="email" class="form-control" value="venerable@loge-liberte.fr">
+              <div class="form-help">Vous recevrez la confirmation à cette adresse.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tcard" style="margin-bottom:1.2rem;">
+        <div class="tcard-header">Créneau souhaité</div>
+        <div class="tcard-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <input type="date" class="form-control" value="2026-09-18">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Temple souhaité</label>
+              <select class="form-select"><option>Temple Lafayette</option><option>Temple Égalité</option><option>Temple Fraternité</option><option>Temple Liberté</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Heure de début</label>
+              <input type="time" class="form-control" value="19:00">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Heure de fin</label>
+              <input type="time" class="form-control" value="22:30">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nature des travaux</label>
+            <select class="form-select"><option>Tenue rituelle au 1er degré</option><option>Tenue au 2e degré</option><option>Tenue au 3e degré</option><option>Tenue blanche ouverte</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="tcard" style="margin-bottom:1.2rem;">
+        <div class="tcard-header">Options complémentaires</div>
+        <div class="tcard-body">
+          <div class="form-check">
+            <input type="checkbox" id="c-ag" checked>
+            <label for="c-ag"><span class="lbl-title">🍽 Agapes prévues</span><small>Un second formulaire vous sera proposé pour configurer le menu avec le traiteur.</small></label>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" id="c-cab">
+            <label for="c-cab"><span class="lbl-title">🚪 Cabinet de réflexion</span><small>Réservation d'un cabinet pour travaux préparatoires (initiation / élévation).</small></label>
+          </div>
+          <div class="form-check">
+            <input type="checkbox" id="c-rec">
+            <label for="c-rec"><span class="lbl-title">🔁 Demande récurrente</span><small>Demande répétée sur la saison selon votre calendrier habituel.</small></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-link">← Retour à l'accueil</button>
+        <button class="btn-primary">Soumettre la demande →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ Admin ═══════════ -->
+<div class="screen" id="s-admin">
+  <div class="nav-slot"></div>
+  <div class="page">
+    <div class="page-title">Tableau de bord</div>
+    <div class="page-sub">Saison 2026–2027 · semaine 38</div>
+
+    <div class="attente-banner">
+      <span style="font-size:1.5rem;">⏳</span>
+      <div class="grow">
+        <div class="big">3 demandes en attente de validation</div>
+        <div class="sub">Dernière demande reçue il y a 2 heures. Action requise.</div>
+      </div>
+      <span class="badge-nb">3</span>
+      <button class="btn-gold">Valider →</button>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi navy"><span class="icon">📅</span><div class="num">42</div><div class="lbl">Tenues validées</div><div class="foot">cette saison</div></div>
+      <div class="kpi info"><span class="icon">🏛</span><div class="num">11</div><div class="lbl">Loges actives</div><div class="foot">4 obédiences</div></div>
+      <div class="kpi warn"><span class="icon">⏳</span><div class="num">3</div><div class="lbl">En attente</div><div class="foot">à traiter</div></div>
+      <div class="kpi gold"><span class="icon">🍽</span><div class="num">18</div><div class="lbl">Agapes prévues</div><div class="foot">sept. → déc.</div></div>
+    </div>
+
+    <h3 style="font-size:.95rem;color:var(--temple-text-sub);text-transform:uppercase;letter-spacing:var(--ls-wider);font-weight:600;margin:1.5rem 0 .7rem;">Actions rapides</h3>
+    <div class="quick-grid" style="margin-bottom:1.6rem;">
+      <a class="quick" href="#"><div class="qi">➕</div><div class="qt">Réservation directe</div><div class="qs">Admin sans validation</div></a>
+      <a class="quick" href="#"><div class="qi">🔒</div><div class="qt">Bloquer un créneau</div><div class="qs">Jour férié, maintenance…</div></a>
+      <a class="quick" href="#"><div class="qi">📂</div><div class="qt">Importer Excel</div><div class="qs">Tableau de saison</div></a>
+      <a class="quick" href="#"><div class="qi">📋</div><div class="qt">Journal d'activité</div><div class="qs">127 événements</div></a>
+    </div>
+
+    <div class="tcard">
+      <div class="tcard-header">Demandes en attente</div>
+      <div style="padding:.25rem 0;">
+      <table class="t">
+        <thead><tr><th>Loge</th><th>Date</th><th>Temple</th><th>Agapes</th><th>Reçue</th><th>Statut</th></tr></thead>
+        <tbody>
+          <tr><td><span class="t-badge">LIB</span> Loge Liberté n° 247</td><td>ven. 12 sept. · 19h</td><td>Lafayette</td><td>🍽 oui</td><td>il y a 2h</td><td><span class="status-b wait">En attente</span></td></tr>
+          <tr><td><span class="t-badge">ÉGA</span> Loge Égalité n° 89</td><td>mer. 17 sept. · 19h30</td><td>Égalité</td><td>—</td><td>il y a 6h</td><td><span class="status-b wait">En attente</span></td></tr>
+          <tr><td><span class="t-badge">FRA</span> Loge Fraternité n° 312</td><td>ven. 19 sept. · 20h</td><td>Fraternité</td><td>🍽 oui</td><td>il y a 1j</td><td><span class="status-b wait">En attente</span></td></tr>
+          <tr><td><span class="t-badge">LAF</span> Loge Lafayette n° 11</td><td>jeu. 04 sept.</td><td>Lafayette</td><td>🍽 oui</td><td>il y a 3j</td><td><span class="status-b ok">Validée</span></td></tr>
+          <tr><td><span class="t-badge">RÉG</span> Loge Régénération n° 78</td><td>mar. 02 sept.</td><td>Liberté</td><td>—</td><td>il y a 4j</td><td><span class="status-b ko">Refusée</span></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Navbar injection ─────────────────────────────
+  const navHtml = document.getElementById('tpl-nav').innerHTML;
+  document.querySelectorAll('.nav-slot').forEach(s => s.innerHTML = navHtml);
+
+  // ── Tab switching (persisted) ────────────────────
+  const LS_KEY = 'kellermann-kit-tab';
+  function switchTab(name) {
+    document.querySelectorAll('.kit-tab').forEach(b => b.classList.toggle('active', b.dataset.t === name));
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 's-' + name));
+    localStorage.setItem(LS_KEY, name);
+    window.scrollTo(0, 0);
+  }
+  document.querySelectorAll('.kit-tab').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.t)));
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved) switchTab(saved);
+
+  // ── Calendrier mock (September 2026 — starts Tuesday) ──
+  // Preload events keyed by day-of-month
+  const events = {
+    1:  [{c:'fra', t:'🌙 T. Fraternité n°312'}],
+    4:  [{c:'laf', t:'🌙 T. Lafayette n°11'}, {c:'banq', t:'🍽 Banquet Lafayette'}],
+    7:  [{c:'ega', t:'🌙 T. Égalité n°89'}],
+    9:  [{c:'laf', t:'🌙 Tenue blanche'}],
+    11: [{c:'cab', t:'🚪 Cabinet (initiation)'}],
+    12: [{c:'laf', t:'🌙 Liberté n°247'}, {c:'banq', t:'🍽 Agapes'}],
+    14: [{c:'ega', t:'🌙 T. Égalité'}],
+    16: [{c:'fra', t:'🌙 T. Fraternité'}],
+    17: [{c:'ega', t:'🌙 Égalité n°89'}, {c:'attente', t:'⏳ En attente'}],
+    18: [{c:'lib', t:'🌙 T. Liberté'}],
+    19: [{c:'fra', t:'🌙 Fraternité n°312'}, {c:'attente', t:'⏳ En attente'}],
+    21: [{c:'laf', t:'🌙 T. Lafayette'}],
+    22: [{c:'ferie', t:'Équinoxe d\'automne'}],
+    24: [{c:'lib', t:'🌙 Tenue 2ème degré'}, {c:'banq', t:'🍽 Banquet d\'ordre'}],
+    25: [{c:'ega', t:'🌙 T. Égalité'}],
+    26: [{c:'laf', t:'🌙 T. Lafayette'}],
+    28: [{c:'fra', t:'🌙 T. Fraternité'}],
+    30: [{c:'lib', t:'🌙 T. Liberté'}]
+  };
+
+  function renderMonth() {
+    // September 2026 — Sept 1 is a Tuesday (weekday idx: Mon=0,Tue=1,…)
+    const firstWeekday = 1;   // Tuesday
+    const daysInMonth = 30;
+    const prevLast = 31;      // August 2026 has 31 days
+    const container = document.getElementById('cal-days');
+    container.innerHTML = '';
+    // Leading days from August (6 cells before Sept 1)
+    for (let i = firstWeekday - 1; i >= 0; i--) {
+      const d = prevLast - i;
+      container.insertAdjacentHTML('beforeend', `<div class="cal-day other"><span class="dn">${d}</span></div>`);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const todayCls = (d === 12) ? ' today' : '';
+      let evtHtml = '';
+      if (events[d]) events[d].forEach(e => evtHtml += `<span class="evt ${e.c}">${e.t}</span>`);
+      container.insertAdjacentHTML('beforeend', `<div class="cal-day${todayCls}"><span class="dn">${d}</span>${evtHtml}</div>`);
+    }
+    // Trailing to fill to 6 rows * 7 = 42 cells
+    const placed = firstWeekday + daysInMonth;
+    const trail = (Math.ceil(placed / 7) * 7) - placed;
+    for (let d = 1; d <= trail; d++) {
+      container.insertAdjacentHTML('beforeend', `<div class="cal-day other"><span class="dn">${d}</span></div>`);
+    }
+  }
+  renderMonth();
+
+  // prev/next just toggle the month label for demo purposes
+  const months = ['juillet 2026','août 2026','septembre 2026','octobre 2026','novembre 2026','décembre 2026'];
+  let mIdx = 2;
+  document.getElementById('cal-prev').onclick = () => { mIdx = Math.max(0, mIdx - 1); document.getElementById('cal-month').textContent = months[mIdx]; };
+  document.getElementById('cal-next').onclick = () => { mIdx = Math.min(months.length - 1, mIdx + 1); document.getElementById('cal-month').textContent = months[mIdx]; };
+</script>
+</body>
+</html>

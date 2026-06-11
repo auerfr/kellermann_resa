@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Demande de récurrence enregistrée{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6 text-center">
+    <div class="card shadow-sm border-0 p-5">
+      <div style="font-size:48px;" class="mb-3">✅</div>
+      <h2 style="color:#0F2137;">Demande reçue !</h2>
+      <p class="text-muted mt-3">
+        Votre demande de règle de récurrence pour la loge
+        <strong>{{ demande.loge }}</strong> au temple
+        <strong>{{ demande.temple }}</strong> a bien été enregistrée.
+      </p>
+      <p class="text-muted">Un email de confirmation a été envoyé à <strong>{{ demande.email_demandeur }}</strong>.</p>
+
+      <div class="alert alert-light text-start mt-3">
+        <div class="row g-1 small">
+          <div class="col-5 text-muted">Fréquence</div>
+          <div class="col-7 fw-semibold">{{ demande.get_numero_semaine_display }} {{ demande.get_jour_semaine_display }}</div>
+          <div class="col-5 text-muted">Horaires</div>
+          <div class="col-7">{{ demande.heure_debut|time:"H:i" }} – {{ demande.heure_fin|time:"H:i" }}</div>
+          <div class="col-5 text-muted">Statut</div>
+          <div class="col-7"><span class="badge bg-warning text-dark">En attente</span></div>
+          <div class="col-5 text-muted">Référence</div>
+          <div class="col-7"><code>{{ demande.uuid }}</code></div>
+        </div>
+      </div>
+
+      <p class="text-muted small mt-3">
+        Vous pouvez <a href="{% url 'reservations:suivi_recurrence' uuid=demande.uuid %}">suivre l'état de votre demande</a> à tout moment.
+      </p>
+
+      <a href="{% url 'calendrier:principal' %}" class="btn mt-3" style="background:#0F2137;color:white;">
+        Retour au calendrier
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

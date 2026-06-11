@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accès refusé — Kellermann</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f4f6f9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(15,33,55,.12);
+      padding: 3rem 2.5rem;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+    }
+    .symbol { font-size: 3rem; margin-bottom: 1rem; }
+    .code {
+      font-size: 5rem;
+      font-weight: 800;
+      color: #0F2137;
+      line-height: 1;
+      margin-bottom: .5rem;
+    }
+    h1 {
+      font-size: 1.4rem;
+      color: #0F2137;
+      margin-bottom: 1rem;
+    }
+    p {
+      color: #6c757d;
+      line-height: 1.6;
+      margin-bottom: 2rem;
+    }
+    .btn {
+      display: inline-block;
+      background: #0F2137;
+      color: #C8A84B;
+      text-decoration: none;
+      padding: .75rem 2rem;
+      border-radius: 6px;
+      font-weight: 600;
+      letter-spacing: .03em;
+      transition: opacity .15s;
+    }
+    .btn:hover { opacity: .85; }
+    .divider {
+      width: 48px;
+      height: 3px;
+      background: #C8A84B;
+      margin: 1rem auto;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="symbol">⚒</div>
+    <div class="code">403</div>
+    <div class="divider"></div>
+    <h1>Accès refusé</h1>
+    <p>
+      Vous n'avez pas les droits nécessaires pour accéder à cette page.<br>
+      Si vous pensez qu'il s'agit d'une erreur, contactez l'administrateur.
+    </p>
+    <a href="/" class="btn">← Retour à l'accueil</a>
+  </div>
+</body>
+</html>

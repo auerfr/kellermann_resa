@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Journal de traçabilité{% endblock %}
+
+{% block extra_css %}
+<style>
+  .badge-type { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
+  .type-validation_reservation       { background:#D1FAE5; color:#065F46; }
+  .type-refus_reservation            { background:#FEE2E2; color:#991B1B; }
+  .type-modification_reservation     { background:#FEF3C7; color:#92400E; }
+  .type-soumission_portail_loge      { background:#DBEAFE; color:#1E40AF; }
+  .type-ouverture_validation_saison  { background:#EDE9FE; color:#5B21B6; }
+  .type-envoi_emails_saison          { background:#E0E7FF; color:#3730A3; }
+  .type-soumission_validation_loge   { background:#CCFBF1; color:#0F766E; }
+  .type-import_excel                 { background:#FEF9C3; color:#854D0E; }
+  .type-backup_base                  { background:#F1F5F9; color:#475569; }
+  .type-creation_reservation_directe { background:#0F2137; color:#C8A84B; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #F8FAFC !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📋 Journal de traçabilité</h1>
+    <p class="text-muted small mb-0">{{ total }} événement{{ total|pluralize }} trouvé{{ total|pluralize }}</p>
+  </div>
+  <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-sm btn-outline-secondary">
+    ← Tableau de bord
+  </a>
+</div>
+
+{# ── Filtres ──────────────────────────────────────────────────────────────── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-3">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-sm-6 col-md-3">
+        <label class="form-label small fw-semibold mb-1">Type d'événement</label>
+        <select name="type" class="form-select form-select-sm">
+          <option value="">Tous les types</option>
+          {% for val, label in types_choices %}
+          <option value="{{ val }}" {% if f_type == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-md-2">
+        <label class="form-label small fw-semibold mb-1">Du</label>
+        <input type="date" name="date_debut" class="form-control form-control-sm"
+               value="{{ f_date_debut }}">
+      </div>
+      <div class="col-sm-6 col-md-2">
+        <label class="form-label small fw-semibold mb-1">Au</label>
+        <input type="date" name="date_fin" class="form-control form-control-sm"
+               value="{{ f_date_fin }}">
+      </div>
+      <div class="col-sm-6 col-md-2">
+        <label class="form-label small fw-semibold mb-1">Loge</label>
+        <select name="loge" class="form-select form-select-sm">
+          <option value="">Toutes les loges</option>
+          {% for loge in loges_list %}
+          <option value="{{ loge.pk }}" {% if f_loge == loge.pk|stringformat:"s" %}selected{% endif %}>
+            {{ loge.nom }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-md-2">
+        <label class="form-label small fw-semibold mb-1">Utilisateur</label>
+        <select name="utilisateur" class="form-select form-select-sm">
+          <option value="">Tous</option>
+          {% for u in utilisateurs_list %}
+          <option value="{{ u.pk }}" {% if f_user == u.pk|stringformat:"s" %}selected{% endif %}>
+            {{ u.username }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-12 col-md-1 d-flex gap-1">
+        <button type="submit" class="btn btn-sm fw-semibold flex-fill"
+                style="background:#0F2137;color:white;">Filtrer</button>
+        <a href="{% url 'administration:journal' %}" class="btn btn-sm btn-outline-secondary"
+           title="Réinitialiser">✕</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Tableau ───────────────────────────────────────────────────────────────── #}
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0" style="font-size:13px;">
+      <thead style="background:#0F2137;">
+        <tr>
+          <th style="color:#C8A84B;white-space:nowrap;">Date / heure</th>
+          <th style="color:#C8A84B;">Type</th>
+          <th style="color:#C8A84B;">Utilisateur</th>
+          <th style="color:#C8A84B;">Objet</th>
+          <th style="color:#C8A84B;">Description</th>
+          <th style="color:#C8A84B;">IP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for evt in page_obj %}
+        <tr class="clickable"
+            data-bs-toggle="modal" data-bs-target="#modal-evt"
+            data-id="{{ evt.pk }}"
+            data-date="{{ evt.date_heure|date:'d/m/Y H:i:s' }}"
+            data-type="{{ evt.get_type_evenement_display }}"
+            data-type-key="{{ evt.type_evenement }}"
+            data-user="{% if evt.utilisateur %}{{ evt.utilisateur.username }}{% else %}—{% endif %}"
+            data-objet-type="{{ evt.get_objet_type_display }}"
+            data-objet-id="{{ evt.objet_id|default:'' }}"
+            data-objet-label="{{ evt.objet_label|default:'—' }}"
+            data-description="{{ evt.description }}"
+            data-ip="{{ evt.ip_address|default:'—' }}">
+          <td class="text-muted" style="white-space:nowrap;">
+            {{ evt.date_heure|date:"d/m/Y" }}<br>
+            <small>{{ evt.date_heure|date:"H:i:s" }}</small>
+          </td>
+          <td>
+            <span class="badge-type type-{{ evt.type_evenement }}">
+              {{ evt.get_type_evenement_display }}
+            </span>
+          </td>
+          <td>
+            {% if evt.utilisateur %}
+              <span class="fw-semibold" style="color:#0F2137;">{{ evt.utilisateur.username }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="small">
+            {% if evt.objet_label %}
+              <span class="text-muted me-1">{{ evt.get_objet_type_display }}</span>
+              {{ evt.objet_label|truncatechars:40 }}
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-muted" style="max-width:280px;">
+            {{ evt.description|truncatechars:90 }}
+          </td>
+          <td class="small text-muted" style="white-space:nowrap;">
+            {{ evt.ip_address|default:"—" }}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-5">
+            Aucun événement trouvé pour ces critères.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# Pagination #}
+  {% if paginator.num_pages > 1 %}
+  <div class="card-footer bg-transparent d-flex justify-content-between align-items-center py-2">
+    <small class="text-muted">
+      Page {{ page_obj.number }} / {{ paginator.num_pages }}
+      — {{ total }} résultat{{ total|pluralize }}
+    </small>
+    <nav>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?{{ get_params }}&page={{ page_obj.previous_page_number }}">‹</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">‹</span></li>
+        {% endif %}
+
+        {% for num in paginator.page_range %}
+          {% if num == page_obj.number %}
+          <li class="page-item active">
+            <span class="page-link" style="background:#0F2137;border-color:#0F2137;">{{ num }}</span>
+          </li>
+          {% elif num == 1 or num == paginator.num_pages or num|add:"-2" <= page_obj.number and page_obj.number <= num|add:"2" %}
+          <li class="page-item">
+            <a class="page-link" href="?{{ get_params }}&page={{ num }}">{{ num }}</a>
+          </li>
+          {% elif num == 2 or num == paginator.num_pages|add:"-1" %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+          {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?{{ get_params }}&page={{ page_obj.next_page_number }}">›</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">›</span></li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Modal détail ─────────────────────────────────────────────────────────── #}
+<div class="modal fade" id="modal-evt" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#0F2137;">
+        <h5 class="modal-title" style="color:#C8A84B;">Détail de l'événement</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <table class="table table-sm table-borderless mb-0">
+          <tr><td class="text-muted fw-semibold" style="width:140px;">Date / heure</td>
+              <td id="md-date"></td></tr>
+          <tr><td class="text-muted fw-semibold">Type</td>
+              <td><span id="md-type-badge" class="badge-type"></span></td></tr>
+          <tr><td class="text-muted fw-semibold">Utilisateur</td>
+              <td id="md-user"></td></tr>
+          <tr><td class="text-muted fw-semibold">Objet</td>
+              <td><span id="md-objet-type" class="text-muted me-1"></span><span id="md-objet-label"></span></td></tr>
+          <tr><td class="text-muted fw-semibold">ID objet</td>
+              <td id="md-objet-id"></td></tr>
+          <tr><td class="text-muted fw-semibold">IP</td>
+              <td id="md-ip"></td></tr>
+          <tr><td class="text-muted fw-semibold align-top">Description</td>
+              <td><pre id="md-description" class="mb-0" style="white-space:pre-wrap;font-size:13px;font-family:inherit;"></pre></td></tr>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('modal-evt').addEventListener('show.bs.modal', function(e) {
+  const tr = e.relatedTarget;
+  document.getElementById('md-date').textContent        = tr.dataset.date;
+  document.getElementById('md-user').textContent        = tr.dataset.user;
+  document.getElementById('md-objet-type').textContent  = tr.dataset.objetType;
+  document.getElementById('md-objet-label').textContent = tr.dataset.objetLabel;
+  document.getElementById('md-objet-id').textContent    = tr.dataset.objetId || '—';
+  document.getElementById('md-ip').textContent          = tr.dataset.ip;
+  document.getElementById('md-description').textContent = tr.dataset.description;
+
+  const badge = document.getElementById('md-type-badge');
+  badge.textContent  = tr.dataset.type;
+  badge.className    = 'badge-type type-' + tr.dataset.typeKey;
+});
+</script>
+{% endblock %}

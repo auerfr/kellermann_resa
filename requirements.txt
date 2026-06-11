@@ -1,0 +1,15 @@
+# Framework principal
+Django==5.0.6
+
+# Base de données (production)
+psycopg2-binary==2.9.9
+
+# Excel / Import-Export
+openpyxl==3.1.5
+
+# Utilitaires
+python-decouple==3.8
+whitenoise==6.7.0
+
+# Développement uniquement
+django-debug-toolbar==4.4.6

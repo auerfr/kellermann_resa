@@ -1,0 +1,7 @@
+from django.apps import AppConfig
+
+
+class CalendrierConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "temple_project.apps.calendrier"
+    verbose_name = "Calendrier"

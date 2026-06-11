@@ -1,0 +1,240 @@
+/* ============================================================
+   KELLERMANN DESIGN SYSTEM — Colors & Type foundations
+   Extracted from temple_project/templates/base.html
+   ============================================================ */
+
+/* Brand font — Open Sans (variable, wght + wdth axes).
+   Files live in /fonts/ at the project root. */
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-stretch: 75% 125%;
+  font-display: swap;
+  src: url('fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype-variations'),
+       url('fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Open Sans';
+  font-style: italic;
+  font-weight: 300 800;
+  font-stretch: 75% 125%;
+  font-display: swap;
+  src: url('fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype-variations'),
+       url('fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype');
+}
+
+:root {
+  /* ── Brand — navy & gold ────────────────────────────────── */
+  --temple-blue:        #0F2137;  /* primary navy — backgrounds, headers, text */
+  --temple-blue-light:  #24446E;  /* hover on navy — clearly lighter than base */
+  --temple-blue-deep:   #061425;  /* active/pressed — clearly darker than base */
+  --temple-gold:        #C8A84B;  /* accent — links, badges on navy, borders */
+  --temple-gold-light:  #F5D98A;
+  --temple-gold-pale:   #FEFCE8;  /* faint gold wash for highlight cards */
+
+  /* ── Neutrals (slate scale) ─────────────────────────────── */
+  --temple-surface:      #F8FAFC;  /* body background */
+  --temple-surface-2:    #F1F5F9;  /* muted surface — separators, subtle fills */
+  --temple-border:       #E2E8F0;  /* default border */
+  --temple-border-light: #F1F5F9;
+  --temple-text:         #1E293B;  /* body text */
+  --temple-text-sub:     #64748B;  /* muted, captions */
+  --temple-text-muted:   #94A3B8;  /* labels, footer, placeholders */
+
+  /* ── Temple identity colors (for calendar events) ───────── */
+  --temple-lafayette:    #1a3a5c;  /* blue */
+  --temple-lafayette-bg: #DBEAFE;
+  --temple-egalite:      #0d6e6e;  /* teal */
+  --temple-egalite-bg:   #CCFBF1;
+  --temple-fraternite:   #92400E;  /* brown-gold */
+  --temple-fraternite-bg:#FEF3C7;
+  --temple-liberte:      #5B21B6;  /* violet */
+  --temple-liberte-bg:   #EDE9FE;
+
+  /* ── Event-type colors (calendar) ───────────────────────── */
+  --event-salle:         #9333EA;  /* violet */
+  --event-cabinet:       #EA580C;  /* orange */
+  --event-banquet:       #BE123C;  /* rose */
+  --event-attente-cab:   #F59E0B;
+  --event-attente-banq:  #F87171;
+  --event-attente-salle: #A78BFA;
+  --event-refusee:       #FB7185;
+  --event-ferie:         #CA8A04;
+  --event-vacances:      #16A34A;
+
+  /* ── Semantic — status + feedback ───────────────────────── */
+  --status-success:       #22C55E;
+  --status-success-fg:    #166534;
+  --status-success-bg:    #DCFCE7;
+  --status-success-soft:  #F0FDF4;
+  --status-success-brd:   #BBF7D0;
+
+  --status-warning:       #EAB308;
+  --status-warning-solid: #F59E0B;  /* used on KPI gradient + attente banner */
+  --status-warning-fg:    #92400E;
+  --status-warning-bg:    #FEF9C3;
+  --status-warning-soft:  #FFFBEB;
+  --status-warning-brd:   #FDE68A;
+  --status-warning-deep:  #B45309;
+
+  --status-danger:       #EF4444;
+  --status-danger-fg:    #991B1B;
+  --status-danger-bg:    #FEE2E2;
+  --status-danger-soft:  #FEF2F2;
+  --status-danger-brd:   #FECACA;
+
+  --status-info:         #3B82F6;
+  --status-info-fg:      #1E40AF;
+  --status-info-bg:      #DBEAFE;
+  --status-info-soft:    #EFF6FF;
+  --status-info-brd:     #BFDBFE;
+
+  --status-purple-bg:    #EDE9FE;
+  --status-purple-fg:    #5B21B6;
+
+  /* ── Radii ──────────────────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;   /* login/welcome card */
+  --radius-pill: 99px;
+
+  /* ── Shadows ────────────────────────────────────────────── */
+  --shadow-xs:    0 1px 3px rgba(0,0,0,.05);
+  --shadow-sm:    0 1px 4px rgba(0,0,0,.08);
+  --shadow-md:    0 4px 12px rgba(0,0,0,.10);
+  --shadow-lg:    0 8px 24px rgba(0,0,0,.13);
+  --shadow-xl:    0 20px 60px rgba(0,0,0,0.40);   /* modal / login card */
+  --shadow-navbar:0 2px 8px rgba(0,0,0,0.20);
+  --shadow-focus: 0 0 0 3px rgba(200,168,75,.28); /* gold ring */
+
+  /* ── Spacing scale (Bootstrap-aligned, 0.25rem step) ────── */
+  --space-0:    0;
+  --space-1:    0.25rem;   /* 4px */
+  --space-2:    0.5rem;    /* 8px */
+  --space-3:    0.75rem;   /* 12px */
+  --space-4:    1rem;      /* 16px */
+  --space-5:    1.25rem;   /* 20px */
+  --space-6:    1.5rem;    /* 24px */
+  --space-8:    2rem;      /* 32px */
+  --space-10:   2.5rem;    /* 40px */
+  --space-12:   3rem;      /* 48px */
+
+  /* ── Typography ─────────────────────────────────────────── */
+  --font-sans:   'Open Sans', 'Segoe UI', Arial, system-ui, sans-serif;
+  --font-mono:   'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* Font weights */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* Type scale — expressed as font-size / line-height */
+  --fs-xs:       11px;  /* uppercase labels, table headers */
+  --fs-sm:       12px;  /* captions, small badges */
+  --fs-body-sm:  13px;  /* dense table cells */
+  --fs-body:     14px;  /* default paragraph (0.875rem) */
+  --fs-body-lg:  15px;  /* form inputs (0.95rem) */
+  --fs-h6:       16px;
+  --fs-h5:       1.1rem;    /* prochaine tenue */
+  --fs-h4:       1.2rem;
+  --fs-h3:       1.3rem;    /* page title mobile */
+  --fs-h2:       1.5rem;    /* login titre */
+  --fs-h1:       1.6rem;    /* welcome card titre */
+  --fs-display:  2.2rem;    /* big KPI number stats */
+  --fs-kpi:      2.8rem;    /* dashboard KPI number */
+  --fs-symbol:   56px;      /* welcome card symbol */
+
+  /* Letter-spacing */
+  --ls-tight:   -.01em;   /* headings */
+  --ls-normal:  0;
+  --ls-wide:    .06em;    /* small uppercase tags */
+  --ls-wider:   .08em;    /* nav labels, temple-header */
+
+  /* Borders */
+  --bs-border-radius:    8px;
+  --bs-border-radius-sm: 5px;
+  --bs-border-radius-lg: 12px;
+}
+
+/* ========================================================
+   SEMANTIC TYPOGRAPHY — drop-in classes
+   ======================================================== */
+
+body {
+  font-family: var(--font-sans);
+  color: var(--temple-text);
+  background: var(--temple-surface);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+h1, .h1 {
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-bold);
+  color: var(--temple-blue);
+  letter-spacing: var(--ls-tight);
+  line-height: 1.2;
+}
+h2, .h2 {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+  color: var(--temple-text);
+  letter-spacing: var(--ls-tight);
+}
+h3, .h3 {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  color: var(--temple-text);
+}
+h4, .h4 { font-size: var(--fs-h4); font-weight: var(--fw-semibold); color: var(--temple-text); }
+h5, .h5 { font-size: var(--fs-h5); font-weight: var(--fw-semibold); color: var(--temple-text); }
+h6, .h6 { font-size: var(--fs-h6); font-weight: var(--fw-semibold); color: var(--temple-text); }
+
+p, .p-body {
+  font-size: var(--fs-body);
+  color: var(--temple-text);
+}
+
+.kpi-number {
+  font-size: var(--fs-kpi);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  color: white;
+}
+
+.temple-title {
+  color: var(--temple-blue) !important;
+  font-weight: var(--fw-bold);
+}
+
+/* Uppercase micro-label (common in navy card-headers & KPI footers) */
+.temple-eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wider);
+  text-transform: uppercase;
+  color: var(--temple-text-muted);
+}
+
+/* Navy header band with gold caps (on cards, calendar headers, table heads) */
+.temple-header {
+  background: var(--temple-blue) !important;
+  color: var(--temple-gold) !important;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wider);
+  text-transform: uppercase;
+}
+
+/* Gold-on-navy badge (used on temple name chips) */
+.temple-badge {
+  background: var(--temple-blue) !important;
+  color: var(--temple-gold) !important;
+}
+
+small, .small { color: var(--temple-text-sub); font-size: var(--fs-body-sm); }
+.text-muted { color: var(--temple-text-sub) !important; }

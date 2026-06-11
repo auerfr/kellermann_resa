@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Comparaison des polices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Source+Sans+3:wght@400;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;padding:0;}
+  body{background:#F8FAFC;color:#1E293B;padding:24px;}
+  h1.page{font-family:'Segoe UI',Arial,sans-serif;font-size:18px;font-weight:700;color:#0F2137;margin:0 0 6px;}
+  .intro{font-family:'Segoe UI',Arial,sans-serif;color:#64748B;font-size:13px;max-width:760px;margin-bottom:20px;}
+  .intro b{color:#1E293B;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .card{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:18px 20px;box-shadow:0 1px 4px rgba(0,0,0,.05);}
+  .card.recommended{border:2px solid #C8A84B;position:relative;}
+  .card.recommended::after{content:"★ RECOMMANDÉ";position:absolute;top:-10px;right:14px;background:#C8A84B;color:#0F2137;font-family:'Segoe UI',sans-serif;font-size:10px;font-weight:700;letter-spacing:.08em;padding:3px 8px;border-radius:4px;}
+
+  .tag{font-family:'Segoe UI',Arial,sans-serif;font-size:10px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+  .tag .pill{background:#0F2137;color:#C8A84B;padding:2px 8px;border-radius:4px;font-size:10px;letter-spacing:.04em;}
+
+  /* Each sample gets its own font family */
+  .sample-system   { font-family:'Segoe UI', Arial, sans-serif; }
+  .sample-opensans { font-family:'Open Sans', sans-serif; }
+  .sample-source   { font-family:'Source Sans 3', sans-serif; }
+  .sample-inter    { font-family:'Inter', sans-serif; }
+
+  /* Typography specimen inside each card */
+  .specimen h1{font-size:1.6rem;font-weight:700;color:#0F2137;letter-spacing:-.01em;margin:0 0 4px;line-height:1.15;}
+  .specimen h2{font-size:1.1rem;font-weight:600;color:#1E293B;margin:0 0 10px;}
+  .specimen .body{font-size:14px;color:#1E293B;line-height:1.5;margin:0 0 10px;}
+  .specimen .btn{display:inline-block;background:#0F2137;color:#fff;font-size:.875rem;font-weight:600;padding:.5rem 1rem;border-radius:6px;margin-right:8px;}
+  .specimen .btn-gold{background:#0F2137;color:#C8A84B;font-weight:700;padding:.5rem 1rem;border-radius:6px;font-size:.875rem;display:inline-block;}
+  .specimen .lbl{font-size:11px;font-weight:600;color:#94A3B8;text-transform:uppercase;letter-spacing:.08em;margin-top:14px;margin-bottom:4px;}
+  .specimen .kpi{font-size:2rem;font-weight:700;color:#0F2137;line-height:1;}
+  .specimen .small{font-size:12px;color:#64748B;}
+
+  .notes{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#64748B;margin-top:12px;padding-top:12px;border-top:1px dashed #E2E8F0;line-height:1.5;}
+  .notes b{color:#1E293B;}
+</style>
+</head>
+<body>
+  <h1 class="page">Comparaison des polices — Kellermann</h1>
+  <p class="intro">
+    Le même texte, rendu avec 4 stacks différentes. <b>Regarde chaque carte pendant quelques secondes</b> et note celles où
+    le "K" du titre, le chiffre 42 et la copie courante te parlent le plus. Il n'y a pas de bonne réponse —
+    c'est une question de personnalité de marque.
+  </p>
+
+  <div class="grid">
+
+    <!-- ─── 1. Stack système (actuel) ─── -->
+    <div class="card sample-system">
+      <div class="tag">Option 1 · <span class="pill">Stack système (actuelle)</span> · rapide, 0 fichier à charger</div>
+      <div class="specimen">
+        <h1>Kellermann Réservations</h1>
+        <h2>vendredi 12 septembre 2026</h2>
+        <p class="body">Remplissez ce formulaire pour demander un créneau. Votre demande sera validée par l'équipe Kellermann sous 48h.</p>
+        <span class="btn">Soumettre la demande</span>
+        <span class="btn-gold">＋ Nouvelle demande</span>
+        <div class="lbl">Tenues validées</div>
+        <div class="kpi">42</div>
+        <div class="small">saison 2026–2027 · Temple Lafayette</div>
+      </div>
+      <div class="notes">
+        <b>Segoe UI</b> sur Windows · <b>Helvetica/SF Pro</b> sur Mac · <b>DejaVu Sans</b> sur Linux.
+        Rendu <u>différent selon l'OS</u> — c'est la source de l'alerte.
+      </div>
+    </div>
+
+    <!-- ─── 2. Open Sans ─── -->
+    <div class="card sample-opensans recommended">
+      <div class="tag">Option 2 · <span class="pill">Open Sans</span> · proche de Segoe UI, identique partout</div>
+      <div class="specimen">
+        <h1>Kellermann Réservations</h1>
+        <h2>vendredi 12 septembre 2026</h2>
+        <p class="body">Remplissez ce formulaire pour demander un créneau. Votre demande sera validée par l'équipe Kellermann sous 48h.</p>
+        <span class="btn">Soumettre la demande</span>
+        <span class="btn-gold">＋ Nouvelle demande</span>
+        <div class="lbl">Tenues validées</div>
+        <div class="kpi">42</div>
+        <div class="small">saison 2026–2027 · Temple Lafayette</div>
+      </div>
+      <div class="notes">
+        <b>Google Fonts</b> · 90 ko · rendu identique Windows / Mac / Linux / PDF.
+        Métriques très proches de Segoe UI — <u>substitution la plus sûre</u>.
+      </div>
+    </div>
+
+    <!-- ─── 3. Source Sans 3 ─── -->
+    <div class="card sample-source">
+      <div class="tag">Option 3 · <span class="pill">Source Sans 3</span> · plus condensé, plus "technique"</div>
+      <div class="specimen">
+        <h1>Kellermann Réservations</h1>
+        <h2>vendredi 12 septembre 2026</h2>
+        <p class="body">Remplissez ce formulaire pour demander un créneau. Votre demande sera validée par l'équipe Kellermann sous 48h.</p>
+        <span class="btn">Soumettre la demande</span>
+        <span class="btn-gold">＋ Nouvelle demande</span>
+        <div class="lbl">Tenues validées</div>
+        <div class="kpi">42</div>
+        <div class="small">saison 2026–2027 · Temple Lafayette</div>
+      </div>
+      <div class="notes">
+        <b>Google Fonts</b> · 120 ko · dessinée par Adobe.
+        Plus <u>étroite et anguleuse</u> que Open Sans — davantage de caractère, moins "neutre administratif".
+      </div>
+    </div>
+
+    <!-- ─── 4. Inter ─── -->
+    <div class="card sample-inter">
+      <div class="tag">Option 4 · <span class="pill">Inter</span> · moderne, "produit SaaS"</div>
+      <div class="specimen">
+        <h1>Kellermann Réservations</h1>
+        <h2>vendredi 12 septembre 2026</h2>
+        <p class="body">Remplissez ce formulaire pour demander un créneau. Votre demande sera validée par l'équipe Kellermann sous 48h.</p>
+        <span class="btn">Soumettre la demande</span>
+        <span class="btn-gold">＋ Nouvelle demande</span>
+        <div class="lbl">Tenues validées</div>
+        <div class="kpi">42</div>
+        <div class="small">saison 2026–2027 · Temple Lafayette</div>
+      </div>
+      <div class="notes">
+        <b>Google Fonts</b> · 180 ko · style SaaS / fintech (Stripe, Linear).
+        Plus <u>géométrique et moderne</u> — peut-être trop "startup" pour un contexte institutionnel maçonnique ?
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

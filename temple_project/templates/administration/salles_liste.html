@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Gestion des salles{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">🏢 Gestion des salles</h1>
+    <p class="text-muted small">{{ nb_salles }} salles</p>
+  </div>
+  <div>
+    <a href="{% url 'administration:salle_ajouter' %}" class="btn" style="background:#0F2137;color:white;">
+      + Ajouter une salle
+    </a>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead style="background:#0F2137;">
+        <tr>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">NOM</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TYPE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">CAPACITÉ</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">ACTIF</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for salle in salles %}
+        <tr>
+          <td>
+            <strong>{{ salle.nom }}</strong>
+            {% if salle.description %}
+            <br><small class="text-muted">{{ salle.description }}</small>
+            {% endif %}
+          </td>
+          <td>{{ salle.get_type_salle_display }}</td>
+          <td>{{ salle.capacite }}</td>
+          <td>
+            {% if salle.actif %}
+            <span class="badge bg-success">Oui</span>
+            {% else %}
+            <span class="badge bg-secondary">Non</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'administration:salle_modifier' salle.pk %}" class="btn btn-sm btn-outline-primary">✏️</a>
+            <a href="{% url 'administration:salle_supprimer' salle.pk %}" class="btn btn-sm btn-outline-danger">🗑️</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted py-4">Aucune salle trouvée.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

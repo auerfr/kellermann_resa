@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<style>
+@font-face{font-family:'Open Sans';font-style:normal;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype');}
+@font-face{font-family:'Open Sans';font-style:italic;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype');}
+</style>
+
+<title>Form controls</title>
+<style>
+  body{margin:0;font-family:'Open Sans','Segoe UI',Arial,sans-serif;background:#fff;padding:20px;color:#1E293B;}
+  .lbl{font-size:.875rem;font-weight:600;color:#1E293B;margin:0 0 6px;display:block;}
+  .help{color:#64748B;font-size:.8rem;margin-top:4px;}
+  .fld,.sel{display:block;width:100%;border:1px solid #E2E8F0;border-radius:6px;padding:.75rem 1rem;font:inherit;font-size:.95rem;color:#1E293B;background:#fff;box-sizing:border-box;}
+  .fld:focus,.sel:focus{outline:none;border-color:#C8A84B;box-shadow:0 0 0 3px rgba(200,168,75,.28);}
+  .focused{border-color:#C8A84B;box-shadow:0 0 0 3px rgba(200,168,75,.28);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.875rem;}
+  .chk input{accent-color:#0F2137;width:16px;height:16px;}
+</style></head><body>
+<div class="grid">
+  <div>
+    <label class="lbl">Votre loge / organisation</label>
+    <input class="fld" placeholder="Sélectionner…" value="Loge Liberté">
+  </div>
+  <div>
+    <label class="lbl">Temple souhaité</label>
+    <select class="sel focused"><option>Temple Lafayette</option></select>
+  </div>
+  <div>
+    <label class="lbl">Votre email</label>
+    <input class="fld" type="email" value="venerable@loge.fr">
+    <div class="help">Vous recevrez une confirmation par email.</div>
+  </div>
+  <div>
+    <label class="lbl">Date</label>
+    <input class="fld" type="date" value="2026-09-12">
+    <div class="chk"><input type="checkbox" checked><span>Agapes prévues</span></div>
+  </div>
+</div>
+</body></html>

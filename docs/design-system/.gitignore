@@ -1,0 +1,10 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Anthropic preview internals (only present inside the design-tool sandbox)
+uploads/
+.review-manifest.json

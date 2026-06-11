@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+{% block title %}Validation saison {{ saison_label }}{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📋 Validation saison {{ saison_label }}</h1>
+    <p class="text-muted small mb-0">{{ periode_label }} — Workflow de validation par les loges</p>
+  </div>
+  <div class="d-flex gap-2">
+    <form method="get" class="d-flex gap-2 align-items-center mb-0">
+      <select name="annee" class="form-select form-select-sm" onchange="this.form.submit()" style="width:auto;">
+        {% for a in annees %}
+        <option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}/{{ a|add:1 }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <a href="{% url 'administration:gestion_saison' %}" class="btn btn-sm btn-outline-secondary">← Gestion saison</a>
+  </div>
+</div>
+
+{# ── Statistiques ────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center h-100" style="border-left:4px solid #64748B !important;">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold text-secondary">{{ nb_total }}</div>
+        <div class="text-muted small">Loges concernées</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center h-100" style="border-left:4px solid #2563EB !important;">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold" style="color:#2563EB;">{{ nb_ouverte }}</div>
+        <div class="text-muted small">En attente de réponse</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center h-100" style="border-left:4px solid #D97706 !important;">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold" style="color:#D97706;">{{ nb_soumise }}</div>
+        <div class="text-muted small">Réponses reçues</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center h-100" style="border-left:4px solid #16A34A !important;">
+      <div class="card-body py-3">
+        <div class="fs-3 fw-bold" style="color:#16A34A;">{{ nb_traitee }}</div>
+        <div class="text-muted small">Traitées</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Étape 1 : Calculer les fiches (pas d'email) ─────────────────────────── #}
+{% if not validations %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #C8A84B !important;">
+  <div class="card-body py-3 d-flex align-items-center gap-3">
+    <span class="fs-4">🔍</span>
+    <div class="flex-grow-1">
+      <strong>Aucune fiche de validation pour la saison {{ saison_label }}.</strong>
+      <p class="text-muted small mb-0">
+        Étape 1 — Calcule les tenues prévisionnelles et crée une fiche par loge.
+        <strong>Aucun email n'est envoyé.</strong> Vous vérifiez le récapitulatif, puis vous envoyez les emails séparément.
+      </p>
+    </div>
+    <form method="post" class="mb-0">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="ouvrir_validation">
+      <input type="hidden" name="annee_cible" value="{{ annee }}">
+      <button type="submit" class="btn fw-semibold px-4" style="background:#0F2137;color:#C8A84B;">
+        🔍 Calculer les fiches
+      </button>
+    </form>
+  </div>
+</div>
+
+{% else %}
+{# Barre d'actions (validations existantes) #}
+<div class="d-flex gap-2 mb-3 align-items-center flex-wrap">
+
+  {# Anomalies #}
+  {% if nb_anomalies_total > 0 %}
+  <span class="badge bg-warning text-dark fs-6">⚠ {{ nb_anomalies_total }} anomalie{{ nb_anomalies_total|pluralize }} signalée{{ nb_anomalies_total|pluralize }}</span>
+  {% else %}
+  <span class="badge bg-success fs-6">✓ Aucune anomalie signalée</span>
+  {% endif %}
+
+  <div class="ms-auto d-flex gap-2 flex-wrap">
+    {# Recalculer #}
+    <form method="post" class="mb-0">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="ouvrir_validation">
+      <input type="hidden" name="annee_cible" value="{{ annee }}">
+      <button type="submit" class="btn btn-sm btn-outline-secondary"
+              onclick="return confirm('Recalculer les fiches ? Les loges déjà soumises ne seront pas modifiées. Aucun email n\'est envoyé.')">
+        🔄 Recalculer les fiches
+      </button>
+    </form>
+
+    {# Étape 2 : sélection loges + envoi emails — visible seulement s'il reste des fiches en 'attente' #}
+    {% if nb_attente > 0 %}
+    <button class="btn btn-sm fw-semibold px-3" style="background:#0F2137;color:#C8A84B;"
+            data-bs-toggle="collapse" data-bs-target="#panel-envoi-emails">
+      📤 Envoyer les emails ({{ nb_attente }} loge{{ nb_attente|pluralize }}) ▾
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{# Bandeau explicatif + panneau de sélection loges #}
+{% if nb_attente > 0 %}
+<div class="alert alert-info d-flex align-items-start gap-2 py-2 mb-2">
+  <span>ℹ️</span>
+  <div>
+    <strong>{{ nb_attente }} fiche{{ nb_attente|pluralize }} calculée{{ nb_attente|pluralize }}, emails non encore envoyés.</strong>
+    Vérifiez le tableau ci-dessous (nombre de tenues, loges sans email…) puis utilisez
+    <strong>Envoyer les emails</strong> pour sélectionner les loges à notifier.
+  </div>
+</div>
+
+{# Panneau de sélection des loges avant envoi #}
+<div class="collapse mb-3" id="panel-envoi-emails">
+  <div class="card border-0 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;">
+      <span style="color:#C8A84B;font-size:12px;letter-spacing:.06em;text-transform:uppercase;">
+        📤 Sélection des loges — envoi emails
+      </span>
+      <span class="text-muted small" style="color:#C8A84B !important;" id="label-nb-selectionnes">
+        0 / {{ nb_attente }} sélectionnée(s)
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <form method="post" id="form-envoi-emails">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="envoyer_emails">
+        <input type="hidden" name="annee_cible" value="{{ annee }}">
+
+        {# Boutons tout/rien #}
+        <div class="px-3 pt-2 pb-1 d-flex gap-2">
+          <button type="button" class="btn btn-xs btn-outline-secondary btn-sm py-0 px-2"
+                  onclick="toggleTout(true)">☑ Tout sélectionner</button>
+          <button type="button" class="btn btn-xs btn-outline-secondary btn-sm py-0 px-2"
+                  onclick="toggleTout(false)">☐ Tout désélectionner</button>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0" style="font-size:13px;">
+            <thead style="background:#F8FAFC;">
+              <tr>
+                <th style="width:36px;"></th>
+                <th class="text-muted small">LOGE</th>
+                <th class="text-muted small text-center">TENUES</th>
+                <th class="text-muted small">EMAIL</th>
+                <th class="text-muted small">PORTAIL</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in validations_attente_list %}
+              {% with has_email=v.loge.email %}
+              {% with has_token=v.loge.demandes_portail.all %}
+              <tr id="envoi-row-{{ v.pk }}"
+                  style="{% if not has_email %}opacity:.6;{% endif %}">
+                <td class="text-center align-middle">
+                  <input type="checkbox" name="validation_pks" value="{{ v.pk }}"
+                         class="form-check-input cb-envoi"
+                         {% if has_email %}checked{% endif %}
+                         {% if not has_email %}disabled title="Pas d'adresse email"{% endif %}>
+                </td>
+                <td class="fw-semibold align-middle">{{ v.loge.nom }}</td>
+                <td class="text-center align-middle">{{ v.lignes.count }}</td>
+                <td class="align-middle small">
+                  {% if has_email %}
+                    <span class="text-success">✓ {{ v.loge.email }}</span>
+                  {% else %}
+                    <span class="badge bg-danger">Email manquant</span>
+                  {% endif %}
+                </td>
+                <td class="align-middle small text-muted">
+                  {% with demande=v.loge.demandes_portail.all|first %}
+                    {% if demande %}<span class="text-success">✓ portail actif</span>
+                    {% else %}<span class="text-warning">— pas de portail</span>{% endif %}
+                  {% endwith %}
+                </td>
+              </tr>
+              {% endwith %}{% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="px-3 py-3 border-top d-flex gap-2 align-items-center">
+          <button type="submit" class="btn fw-semibold px-4" style="background:#0F2137;color:#C8A84B;"
+                  id="btn-envoyer-selectionnes">
+            📤 Envoyer aux loges sélectionnées (<span id="nb-sel">0</span>)
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  data-bs-toggle="collapse" data-bs-target="#panel-envoi-emails">
+            Annuler
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+
+{# ── Tableau des validations ─────────────────────────────────────────────── #}
+{% if validations %}
+<div class="card shadow-sm border-0 mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead style="background:#0F2137;">
+        <tr>
+          <th style="color:#C8A84B;font-size:11px;">LOGE</th>
+          <th style="color:#C8A84B;font-size:11px;text-align:center;">TENUES</th>
+          <th style="color:#C8A84B;font-size:11px;text-align:center;">À DÉPLACER</th>
+          <th style="color:#C8A84B;font-size:11px;text-align:center;">À ANNULER</th>
+          <th style="color:#C8A84B;font-size:11px;">STATUT</th>
+          <th style="color:#C8A84B;font-size:11px;">COMMENTAIRE</th>
+          <th style="color:#C8A84B;font-size:11px;">EMAIL</th>
+          <th style="color:#C8A84B;font-size:11px;text-align:center;">ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in validations %}
+        <tr>
+          <td class="fw-semibold small" style="color:#0F2137;">{{ v.loge.nom }}</td>
+          <td class="text-center small">{{ v.lignes.count }}</td>
+          <td class="text-center small">
+            {% with n=v.nb_deplacer %}
+            {% if n %}<span class="badge" style="background:#FEF9C3;color:#92400E;">{{ n }}</span>{% else %}—{% endif %}
+            {% endwith %}
+          </td>
+          <td class="text-center small">
+            {% with n=v.nb_annuler %}
+            {% if n %}<span class="badge" style="background:#FEE2E2;color:#991B1B;">{{ n }}</span>{% else %}—{% endif %}
+            {% endwith %}
+          </td>
+          <td class="small">
+            {% if v.statut == 'attente' %}
+              <span class="badge bg-secondary">En attente</span>
+            {% elif v.statut == 'ouverte' %}
+              <span class="badge bg-primary">Ouverte</span>
+              {% if v.date_envoi %}<br><small class="text-muted">Envoyé {{ v.date_envoi|date:"d/m H:i" }}</small>{% endif %}
+            {% elif v.statut == 'soumise' %}
+              <span class="badge bg-warning text-dark">Soumise</span>
+              {% if v.date_reponse %}<br><small class="text-muted">{{ v.date_reponse|date:"d/m H:i" }}</small>{% endif %}
+            {% elif v.statut == 'traitee' %}
+              <span class="badge bg-success">Traitée</span>
+            {% endif %}
+          </td>
+          <td class="small text-muted" style="max-width:200px;">
+            {{ v.commentaire_loge|truncatechars:80|default:"—" }}
+          </td>
+          <td class="small text-center">
+            {% if v.loge.email %}
+              <span class="text-success" title="{{ v.loge.email }}">✓</span>
+            {% else %}
+              <span class="badge bg-danger">Email manquant</span>
+            {% endif %}
+          </td>
+          <td class="text-center" style="white-space:nowrap;">
+            {# Détail #}
+            <button class="btn btn-xs btn-outline-secondary btn-sm py-0 px-1"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#detail-{{ v.pk }}"
+                    title="Voir les tenues">
+              🔍
+            </button>
+            {% if v.statut == 'soumise' %}
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="marquer_traitee">
+              <input type="hidden" name="validation_pk" value="{{ v.pk }}">
+              <button type="submit" class="btn btn-xs btn-success btn-sm py-0 px-1" title="Marquer traitée">✓</button>
+            </form>
+            {% endif %}
+            {% if v.statut in 'soumise traitee' %}
+            <form method="post" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="reinitialiser">
+              <input type="hidden" name="validation_pk" value="{{ v.pk }}">
+              <button type="submit" class="btn btn-xs btn-outline-warning btn-sm py-0 px-1"
+                      title="Réinitialiser"
+                      onclick="return confirm('Réinitialiser la réponse de {{ v.loge.nom }} ?')">↺</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {# Ligne détail collapsible #}
+        <tr class="collapse" id="detail-{{ v.pk }}">
+          <td colspan="8" class="p-0" style="background:#F8FAFC;">
+            <div class="p-3">
+              {% if v.lignes.all %}
+              <table class="table table-sm mb-0" style="font-size:12px;">
+                <thead>
+                  <tr>
+                    <th>Date</th><th>Temple</th><th>Horaires</th><th>Avis</th><th>Commentaire</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for ligne in v.lignes.all %}
+                  <tr style="background:{% if ligne.avis == 'ok' %}#F0FDF4{% elif ligne.avis == 'deplacer' %}#FEFCE8{% else %}#FEF2F2{% endif %};">
+                    <td>{{ ligne.date|date:"d/m/Y" }}</td>
+                    <td>{{ ligne.temple_nom }}</td>
+                    <td>{{ ligne.heure_debut|time:"H:i" }}–{{ ligne.heure_fin|time:"H:i" }}</td>
+                    <td>
+                      {% if ligne.avis == 'ok' %}
+                        <span class="badge" style="background:#D1FAE5;color:#065F46;">✓ Confirmée</span>
+                      {% elif ligne.avis == 'deplacer' %}
+                        <span class="badge" style="background:#FEF9C3;color:#92400E;">↻ À déplacer</span>
+                      {% elif ligne.avis == 'annuler' %}
+                        <span class="badge" style="background:#FEE2E2;color:#991B1B;">✕ À annuler</span>
+                      {% else %}
+                        <span class="badge bg-secondary">— Non répondu</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-muted">{{ ligne.commentaire|default:"—" }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% else %}
+              <p class="text-muted small mb-0">Aucune tenue.</p>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{# ── Loges sans validation ───────────────────────────────────────────────── #}
+{% if loges_manquantes %}
+<div class="card border-warning shadow-sm mb-4">
+  <div class="card-header bg-warning text-white">
+    <h6 class="mb-0">⚠ Loges avec règles actives non incluses dans la validation</h6>
+  </div>
+  <div class="card-body py-2">
+    <p class="text-muted small mb-2">Ces loges ont des règles actives mais aucune fiche de validation pour {{ saison_label }}. Utilisez <em>Recalculer / Rouvrir</em> pour les inclure.</p>
+    <div class="d-flex flex-wrap gap-2">
+      {% for loge in loges_manquantes %}
+      <span class="badge bg-secondary">{{ loge.nom }}{% if not loge.email %} ⚠{% endif %}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if nb_attente > 0 %}
+<script>
+function majCompteur() {
+  const n = document.querySelectorAll('.cb-envoi:checked').length;
+  const el = document.getElementById('nb-sel');
+  const lbl = document.getElementById('label-nb-selectionnes');
+  if (el)  el.textContent = n;
+  if (lbl) lbl.textContent = n + ' / {{ nb_attente }} sélectionnée(s)';
+}
+function toggleTout(etat) {
+  document.querySelectorAll('.cb-envoi:not(:disabled)').forEach(cb => cb.checked = etat);
+  majCompteur();
+}
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.cb-envoi').forEach(cb => cb.addEventListener('change', majCompteur));
+  majCompteur();
+  // Confirmation avant soumission
+  const form = document.getElementById('form-envoi-emails');
+  if (form) form.addEventListener('submit', function(e) {
+    const n = document.querySelectorAll('.cb-envoi:checked').length;
+    if (!n) { e.preventDefault(); alert('Sélectionnez au moins une loge.'); return; }
+    if (!confirm('Envoyer les emails de validation à ' + n + ' loge(s) ?')) e.preventDefault();
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<style>
+@font-face{font-family:'Open Sans';font-style:normal;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype');}
+@font-face{font-family:'Open Sans';font-style:italic;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype');}
+</style>
+
+<title>Navbar</title>
+<style>
+  html,body{margin:0;padding:0;font-family:'Open Sans','Segoe UI',Arial,sans-serif;background:#F8FAFC;color:#1E293B;}
+  body{overflow-x:hidden;}
+  .nav{background:#0F2137;padding:.55rem 1rem;box-shadow:0 2px 8px rgba(0,0,0,.2);display:flex;align-items:center;gap:4px;width:100%;box-sizing:border-box;flex-wrap:nowrap;white-space:nowrap;}
+  .nav .link,.nav .user{white-space:nowrap;}
+  .brand{color:#C8A84B;font-weight:700;font-size:1.05rem;text-decoration:none;display:inline-flex;align-items:center;gap:.5rem;margin-right:1rem;line-height:1;}
+  .brand svg{width:22px;height:22px;display:block;}
+  .links{display:flex;gap:2px;flex:1;}
+  .link{color:#C8A84B;font-size:.88rem;padding:.45rem .7rem;text-decoration:none;border-radius:4px;display:inline-flex;align-items:center;gap:.4rem;line-height:1;}
+  .link:hover{background:rgba(200,168,75,.08);}
+  .link .ic{font-size:1rem;line-height:1;}
+  /* normalize emoji appearance on navy — tint toward the gold key */
+  .link .ic.tint{filter:sepia(.5) saturate(3) hue-rotate(5deg) brightness(1.05);}
+  .user{color:#C8A84B;font-size:.88rem;padding:.45rem .7rem;display:inline-flex;align-items:center;gap:.4rem;line-height:1;}
+  .user .ic{font-size:1rem;}
+  .note{padding:16px;font-size:12px;color:#64748B;}
+  .note code{background:#F1F5F9;padding:1px 5px;border-radius:4px;font-size:11.5px;color:#0F2137;}
+</style></head><body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none;" aria-hidden="true">
+  <symbol id="kgl" viewBox="0 0 64 64">
+    <path d="M8 22 L32 8 L56 22 Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" fill="none"/>
+    <rect x="10" y="22" width="44" height="4" fill="currentColor"/>
+    <rect x="14" y="26" width="4" height="24" fill="currentColor"/>
+    <rect x="24" y="26" width="4" height="24" fill="currentColor"/>
+    <rect x="36" y="26" width="4" height="24" fill="currentColor"/>
+    <rect x="46" y="26" width="4" height="24" fill="currentColor"/>
+    <rect x="10" y="50" width="44" height="4" fill="currentColor"/>
+  </symbol>
+</svg>
+<div class="nav">
+  <a class="brand" href="#"><svg><use href="#kgl"/></svg>Kellermann</a>
+  <div class="links">
+    <a class="link"><span class="ic tint">📅</span>Calendrier</a>
+    <a class="link"><span class="ic tint">📝</span>Faire une demande<span style="opacity:.7">▾</span></a>
+    <a class="link"><span class="ic tint">🏛</span>Loges</a>
+    <a class="link"><span class="ic tint">📬</span>Contact</a>
+    <a class="link"><span class="ic tint">⚙️</span>Administration<span style="opacity:.7">▾</span></a>
+  </div>
+  <div class="user"><span class="ic tint">👤</span>admin<span style="opacity:.7">▾</span></div>
+</div>
+<div class="note">Barre fixe en haut, icônes + libellés alignés sur la <em>ligne de base</em> via <code>display:inline-flex;align-items:center;line-height:1</code>. Le logo Kellermann utilise le glyphe SVG commun, et les emoji sont teintés (<code>filter: sepia+saturate+hue-rotate</code>) pour s'uniformiser avec la palette or sur navy.</div>
+</body></html>

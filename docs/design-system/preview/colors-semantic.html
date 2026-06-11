@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<style>
+@font-face{font-family:'Open Sans';font-style:normal;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype');}
+@font-face{font-family:'Open Sans';font-style:italic;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype');}
+</style>
+
+<title>Semantic colors</title>
+<style>
+  body{margin:0;font-family:'Open Sans','Segoe UI',Arial,sans-serif;background:#fff;padding:20px;color:#1E293B;}
+  .row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .group{border-radius:10px;overflow:hidden;border:1px solid #F1F5F9;}
+  .solid{padding:10px 12px;color:#fff;font-weight:600;font-size:12px;}
+  .soft{padding:8px 12px;font-size:11.5px;font-weight:600;}
+  .meta{padding:6px 12px;font-size:10px;color:#94A3B8;font-family:SFMono-Regular,Menlo,monospace;}
+  .label{font-weight:700;color:#1E293B;font-size:12px;font-family:'Open Sans','Segoe UI',sans-serif;}
+</style></head><body>
+<div class="row">
+  <div class="group">
+    <div class="solid" style="background:#22C55E;">Validée ✓</div>
+    <div class="soft" style="background:#DCFCE7;color:#166534;">Validée</div>
+    <div class="meta"><span class="label">success</span><br>#22C55E · #DCFCE7/#166534</div>
+  </div>
+  <div class="group">
+    <div class="solid" style="background:#F59E0B;">En attente ⏳</div>
+    <div class="soft" style="background:#FEF9C3;color:#92400E;">En attente</div>
+    <div class="meta"><span class="label">warning</span><br>#F59E0B · #FEF9C3/#92400E</div>
+  </div>
+  <div class="group">
+    <div class="solid" style="background:#EF4444;">Refusée ✕</div>
+    <div class="soft" style="background:#FEE2E2;color:#991B1B;">Refusée</div>
+    <div class="meta"><span class="label">danger</span><br>#EF4444 · #FEE2E2/#991B1B</div>
+  </div>
+  <div class="group">
+    <div class="solid" style="background:#3B82F6;">Portail 🔑</div>
+    <div class="soft" style="background:#DBEAFE;color:#1E40AF;">Accès portail</div>
+    <div class="meta"><span class="label">info</span><br>#3B82F6 · #DBEAFE/#1E40AF</div>
+  </div>
+</div>
+</body></html>

@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Traiteur — Calendrier agapes{% endblock %}
+
+{% block extra_css %}
+<style>
+.cal-table { width:100%; border-collapse:collapse; }
+.cal-table th { background:#0F2137; color:#C8A84B; padding:0.5rem; text-align:center; font-size:0.85rem; }
+.cal-table td { border:1px solid #E2E8F0; vertical-align:top; padding:0.4rem; min-height:80px; width:14.28%; }
+.cal-table td.autre-mois { background:#F8FAFC; opacity:0.35; pointer-events:none; }
+.cal-table td.aujourd-hui { background:#FFF7ED; border-color:#C8A84B !important; border-width:2px !important; }
+.day-num { font-size:0.75rem; font-weight:600; color:#64748B; margin-bottom:2px; }
+.evt { font-size:0.7rem; border-radius:4px; padding:2px 5px; margin-bottom:2px; line-height:1.35; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.evt-agapes  { background:#DCFCE7; color:#166534; border-left:3px solid #22C55E; }
+.evt-salle   { background:#DBEAFE; color:#1E40AF; border-left:3px solid #3B82F6; }
+.evt-blocage { background:#FEE2E2; color:#991B1B; border-left:3px solid #EF4444; font-weight:600; }
+.evt-normal  { background:#F1F5F9; color:#475569; border-left:3px solid #94A3B8; }
+.estim { font-style:italic; opacity:0.75; }
+.filtre-btn.active { opacity:1; font-weight:700; box-shadow:0 0 0 2px #0F2137; }
+@media (max-width:768px) {
+    .cal-table, .cal-table tbody, .cal-table tr, .cal-table td, .cal-table th { display:block; }
+    .cal-table thead { display:none; }
+    .cal-table td { border:1px solid #E2E8F0; margin-bottom:0.4rem; border-radius:8px; min-height:auto; }
+    .cal-table td.autre-mois { display:none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- En-tête navigation -->
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <h1 class="h3 mb-0">📅 Calendrier — {{ nom_mois }}</h1>
+    <div class="d-flex gap-2 flex-wrap align-items-center">
+        <a href="{% url 'traiteur:reserver' %}" class="btn btn-sm btn-success">➕ Réserver</a>
+        <a href="{% url 'traiteur:bloquer' %}"  class="btn btn-sm btn-danger">🔒 Bloquer</a>
+    </div>
+</div>
+
+<!-- Sélecteur mois/année + flèches + filtres -->
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">
+            <!-- Navigation -->
+            <div class="d-flex gap-1 align-items-center">
+                <a href="?mois={{ mois_prec }}&annee={{ annee_prec }}&filtre={{ filtre }}"
+                   class="btn btn-sm btn-outline-secondary">‹</a>
+                <form method="get" class="d-inline-flex align-items-center gap-1">
+                    <input type="hidden" name="filtre" value="{{ filtre }}">
+                    <select name="mois" class="form-select form-select-sm no-select2" style="width:auto;"
+                            onchange="this.form.submit()">
+                        {% for c in mois_choices %}
+                        <option value="{{ c.mois }}" data-annee="{{ c.annee }}"
+                                {% if c.actif %}selected{% endif %}>
+                            {{ c.label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {# Champ annee mis à jour par JS #}
+                    <input type="hidden" name="annee" id="annee-hidden" value="{{ annee }}">
+                </form>
+                <a href="?mois={{ mois_suiv }}&annee={{ annee_suiv }}&filtre={{ filtre }}"
+                   class="btn btn-sm btn-outline-secondary">›</a>
+            </div>
+
+            <!-- Filtres -->
+            <div class="d-flex gap-1 flex-wrap">
+                <a href="?mois={{ mois }}&annee={{ annee }}&filtre=tout"
+                   class="btn btn-sm btn-outline-secondary filtre-btn {% if filtre == 'tout' %}active{% endif %}">
+                   Tout
+                </a>
+                <a href="?mois={{ mois }}&annee={{ annee }}&filtre=agapes"
+                   class="btn btn-sm btn-outline-success filtre-btn {% if filtre == 'agapes' %}active{% endif %}">
+                   🍽 Agapes seules
+                </a>
+                <a href="?mois={{ mois }}&annee={{ annee }}&filtre=blocages"
+                   class="btn btn-sm btn-outline-danger filtre-btn {% if filtre == 'blocages' %}active{% endif %}">
+                   🔒 Blocages seuls
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Légende -->
+<div class="d-flex gap-3 flex-wrap mb-2" style="font-size:0.78rem;">
+    <span><span style="color:#22C55E;">■</span> Agapes temple</span>
+    <span><span style="color:#3B82F6;">■</span> Salle agapes</span>
+    <span><span style="color:#94A3B8;">■</span> Sans agapes</span>
+    <span><span style="color:#EF4444;">■</span> Créneau bloqué</span>
+    <span class="estim">~ Estimation</span>
+</div>
+
+<!-- Grille calendrier -->
+<div class="card shadow-sm">
+    <div class="card-body p-1 p-md-2">
+        <table class="cal-table">
+            <thead>
+                <tr>
+                    <th>Lun</th><th>Mar</th><th>Mer</th><th>Jeu</th>
+                    <th>Ven</th><th>Sam</th><th>Dim</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for semaine in cal %}
+                <tr>
+                    {% for jour in semaine %}
+                    {% if jour == 0 %}
+                    <td class="autre-mois"></td>
+                    {% else %}
+                    <td {% if jour == today.day and mois == today.month and annee == today.year %}class="aujourd-hui"{% endif %}>
+                        <div class="day-num">{{ jour }}</div>
+                        {% for date_evt, evts in events_by_date.items %}
+                            {% if date_evt.day == jour and date_evt.month == mois and date_evt.year == annee %}
+                                {% for evt in evts %}
+                                    {% if evt.type == "blocage" %}
+                                    <div class="evt evt-blocage" title="{{ evt.obj.motif }}">
+                                        🔒 {{ evt.obj.heure_debut|time:"H\hi" }} {{ evt.obj.motif|truncatechars:20 }}
+                                    </div>
+                                    {% elif evt.type == "reservation" and evt.agapes %}
+                                    <div class="evt evt-agapes"
+                                         title="{{ evt.obj.loge.nom|default:evt.obj.nom_organisation }} — {{ evt.couverts }} couverts{% if evt.estimation %} (estimation){% endif %}">
+                                        🍽 {{ evt.obj.heure_debut|time:"H\hi" }}
+                                        {{ evt.obj.loge.nom|default:evt.obj.nom_organisation|truncatechars:15 }}
+                                        {% if evt.couverts %}
+                                        — <span {% if evt.estimation %}class="estim"{% endif %}>{% if evt.estimation %}~{% endif %}{{ evt.couverts }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% elif evt.type == "reservation" %}
+                                    <div class="evt evt-normal" title="{{ evt.obj.loge.nom|default:evt.obj.nom_organisation }}">
+                                        🏛 {{ evt.obj.heure_debut|time:"H\hi" }}
+                                        {{ evt.obj.loge.nom|default:evt.obj.nom_organisation|truncatechars:15 }}
+                                    </div>
+                                    {% elif evt.type == "salle" %}
+                                    <div class="evt evt-salle"
+                                         title="{{ evt.obj.salle.nom }} — {{ evt.obj.organisation|default:evt.obj.nom_demandeur }} — {{ evt.couverts }} pers.{% if evt.estimation %} (estimation){% endif %}">
+                                        🪑 {{ evt.obj.heure_debut|time:"H\hi" }}
+                                        {{ evt.obj.salle.nom|truncatechars:12 }}
+                                        {% if evt.couverts %}
+                                        — <span {% if evt.estimation %}class="estim"{% endif %}>{% if evt.estimation %}~{% endif %}{{ evt.couverts }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                    </td>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tableau détaillé -->
+{% if reservations or reservations_salles or blocages %}
+<div class="card shadow-sm mt-4">
+    <div class="card-header" style="background:#0F2137;color:white;"><strong>📋 Détail — {{ nom_mois }}</strong></div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th><th>Horaires</th><th>Lieu</th><th>Organisation</th>
+                        <th class="text-center">Couverts</th><th>Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in reservations %}
+                    <tr {% if r.besoin_agapes %}style="background:#F0FDF4;"{% endif %}>
+                        <td>{{ r.date|date:"D d/m" }}</td>
+                        <td>{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</td>
+                        <td>{{ r.temple }}</td>
+                        <td>{{ r.loge.nom|default:r.nom_organisation|default:r.nom_demandeur }}</td>
+                        <td class="text-center">
+                            {% if r.besoin_agapes %}
+                                {% if r.nombre_repas %}<strong>{{ r.nombre_repas }}</strong>
+                                {% elif r.loge and r.loge.effectif_moyen_agapes %}<em class="text-muted">~{{ r.loge.effectif_moyen_agapes }}</em>
+                                {% else %}<span class="text-muted">—</span>{% endif %}
+                            {% else %}—{% endif %}
+                        </td>
+                        <td>
+                            {% if r.besoin_agapes %}<span class="badge" style="background:#22C55E;">Agapes</span>
+                            {% else %}<span class="badge bg-secondary">Sans agapes</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% for r in reservations_salles %}
+                    <tr style="background:#EFF6FF;">
+                        <td>{{ r.date|date:"D d/m" }}</td>
+                        <td>{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</td>
+                        <td>{{ r.salle.nom }}</td>
+                        <td>{{ r.organisation|default:r.nom_demandeur }}</td>
+                        <td class="text-center"><strong>{{ r.nombre_participants }}</strong></td>
+                        <td><span class="badge" style="background:#3B82F6;">Salle agapes</span></td>
+                    </tr>
+                    {% endfor %}
+                    {% for b in blocages %}
+                    <tr style="background:#FEF2F2;">
+                        <td>{{ b.date|date:"D d/m" }}</td>
+                        <td>{{ b.heure_debut|time:"H\hi" }}–{{ b.heure_fin|time:"H\hi" }}</td>
+                        <td>{% for s in b.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+                        <td colspan="2">{{ b.motif }}</td>
+                        <td><span class="badge" style="background:#EF4444;">Bloqué</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Synchronise le champ annee-hidden avec le select mois
+(function(){
+    var sel = document.querySelector('select[name="mois"]');
+    if (!sel) return;
+    var hiddenAnnee = document.getElementById('annee-hidden');
+    function updateAnnee() {
+        var opt = sel.options[sel.selectedIndex];
+        hiddenAnnee.value = opt.getAttribute('data-annee') || opt.value;
+    }
+    sel.addEventListener('change', updateAnnee);
+    updateAnnee();
+})();
+</script>
+{% endblock %}

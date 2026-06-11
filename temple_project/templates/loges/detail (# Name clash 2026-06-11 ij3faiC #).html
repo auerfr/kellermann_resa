@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}{{ loge.nom }} — Fiche loge{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    nav, .btn, .no-print, footer { display: none !important; }
+    .card { box-shadow: none !important; border: 1px solid #ccc !important; }
+  }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+  new bootstrap.Tooltip(el);
+});
+</script>
+{% endblock %}
+
+{% block content %}
+
+{# En-tête #}
+<div class="d-flex justify-content-between align-items-start mb-4">
+  <div>
+    <div class="d-flex align-items-center gap-3 mb-2">
+      <span class="badge fs-6 px-3 py-2 temple-badge">{{ loge.abreviation }}</span>
+      <h1 class="h3 mb-0 temple-title">{{ loge.nom }}</h1>
+    </div>
+    <div class="d-flex gap-3 text-muted small">
+      <span>{{ loge.obedience }}</span>
+      <span>·</span>
+      <span>{% if loge.type_loge == 'haut_grade' %}Haut grade{% else %}Loge bleue{% endif %}</span>
+      {% if loge.email %}<span>·</span><a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>{% endif %}
+    </div>
+  </div>
+  <div class="d-flex gap-2 no-print flex-wrap">
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨️ Imprimer</button>
+    {% if user.is_staff %}
+    <a href="{% url 'loges:modifier' loge.pk %}" class="btn btn-outline-primary btn-sm">✏️ Modifier</a>
+    <a href="{% url 'loges:supprimer' loge.pk %}" class="btn btn-outline-danger btn-sm">🗑 Désactiver</a>
+    {% endif %}
+    {% if portail_token %}
+    <a href="/reservations/portail/{{ portail_token }}/"
+       class="btn btn-outline-secondary btn-sm" target="_blank">
+      👁 Voir le portail loge
+    </a>
+    {% else %}
+    <button type="button" class="btn btn-outline-secondary btn-sm" disabled
+            data-bs-toggle="tooltip" title="Aucun accès portail actif">
+      👁 Voir le portail loge
+    </button>
+    {% endif %}
+    <a href="{% url 'loges:liste' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  {# Colonne gauche — Stats #}
+  <div class="col-md-4">
+
+    {# Infos générales #}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header temple-header">
+        Informations
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-borderless table-sm mb-0">
+          <tr><td class="text-muted small ps-3">Rite</td><td class="fw-semibold">{{ loge.get_rite_display|default:"—" }}</td></tr>
+          <tr><td class="text-muted small ps-3">Effectif total</td><td class="fw-semibold">{{ loge.effectif_total|default:"—" }}</td></tr>
+          <tr><td class="text-muted small ps-3">Moy. agapes</td><td class="fw-semibold">{{ loge.effectif_moyen_agapes|default:"—" }}</td></tr>
+          <tr><td class="text-muted small ps-3">Email</td><td class="small">{{ loge.email|default:"—" }}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    {# Stats par temple #}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header temple-header">
+        Tenues par temple — {{ annee }}
+      </div>
+      <div class="card-body">
+        {% if stats_temples %}
+          {% for temple, nb in stats_temples.items %}
+          <div class="mb-2">
+            <div class="d-flex justify-content-between small mb-1">
+              <span>{{ temple }}</span>
+              <span class="fw-semibold">{{ nb }}</span>
+            </div>
+            <div style="background:#F1F5F9;border-radius:4px;height:6px;">
+              <div style="width:{% widthratio nb nb_tenues 100 %}%;background:#0F2137;height:6px;border-radius:4px;"></div>
+            </div>
+          </div>
+          {% endfor %}
+          <div class="text-muted small mt-3 border-top pt-2">
+            Total : <strong>{{ nb_tenues }}</strong> tenues
+          </div>
+        {% else %}
+          <p class="text-muted small mb-0">Aucune tenue en {{ annee }}/{{ annee|add:1 }}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Prochaine tenue #}
+    {% if prochaine %}
+    <div class="card border-0 mb-4" style="background:#F0FDF4;border-left:4px solid #16A34A !important;">
+      <div class="card-body py-3">
+        <div class="small text-muted text-uppercase" style="letter-spacing:.06em;">Prochaine tenue</div>
+        <div class="fw-semibold mt-1" style="color:#0F2137;">{{ prochaine.date|date:"l d F Y" }}</div>
+        <div class="small text-muted">{{ prochaine.temple }} · {{ prochaine.heure_debut|time:"H:i" }} – {{ prochaine.heure_fin|time:"H:i" }}</div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  {# Colonne droite — Planning #}
+  <div class="col-md-8">
+
+    {# Sélecteur d'année #}
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+      <h5 class="mb-0" style="color:#0F2137;">Saison {{ annee }}/{{ annee|add:1 }}</h5>
+      <div class="btn-group btn-group-sm">
+        {% for a in annees %}
+        <a href="?annee={{ a }}" class="btn {% if a == annee %}btn-dark{% else %}btn-outline-secondary{% endif %}">{{ a }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="temple-header">
+            <tr>
+              <th>DATE</th>
+              <th>JOUR</th>
+              <th>TYPE</th>
+              <th>LIEU</th>
+              <th>HORAIRES</th>
+              <th>STATUT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in tous_evenements %}
+            <tr>
+              <td class="fw-semibold" style="color:#0F2137;">{{ e.date|date:"d/m/Y" }}</td>
+              <td class="text-muted small">{{ e.date|date:"l" }}</td>
+              <td>
+                {% if e.type_code == 'temple' %}
+                  <span class="badge" style="background:#0F2137;color:#C8A84B;">Temple</span>
+                {% elif e.type_code == 'agapes' %}
+                  <span class="badge" style="background:#92400E;color:white;">Agapes</span>
+                {% elif e.type_code == 'cabinet_reflexion' %}
+                  <span class="badge bg-secondary">Cabinet</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ e.type_label }}</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted">{{ e.lieu }}</td>
+              <td class="text-muted small">{{ e.heure_debut|time:"H:i" }} – {{ e.heure_fin|time:"H:i" }}</td>
+              <td>
+                {% if e.statut == 'validee' %}
+                  <span class="badge bg-success">Validée</span>
+                {% elif e.statut == 'attente' %}
+                  <span class="badge bg-warning text-dark">Attente</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Aucune réservation en {{ annee }}/{{ annee|add:1 }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# Historique demandes exceptionnelles #}
+    {% if demandes %}
+    <h6 class="mt-4 mb-3" style="color:#0F2137;">Historique des demandes exceptionnelles</h6>
+    <div class="card shadow-sm border-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>Date</th><th>Temple</th><th>Demandeur</th><th>Statut</th></tr>
+          </thead>
+          <tbody>
+            {% for d in demandes %}
+            <tr>
+              <td class="small">{{ d.date|date:"d/m/Y" }}</td>
+              <td class="small">{{ d.temple }}</td>
+              <td class="small text-muted">
+                {% if user.is_staff %}{{ d.nom_demandeur }}{% else %}—{% endif %}
+              </td>
+              <td>
+                {% if d.statut == 'validee' %}<span class="badge bg-success">Validée</span>
+                {% elif d.statut == 'attente' %}<span class="badge bg-warning text-dark">Attente</span>
+                {% else %}<span class="badge bg-danger">Refusée</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

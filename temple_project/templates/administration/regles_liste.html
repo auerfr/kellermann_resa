@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Règles de récurrence{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📋 Règles de récurrence</h1>
+    <p class="text-muted small">{{ nb_regles }} règles actives — source de vérité pour la génération des tenues</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="{% url 'administration:template_excel' %}" class="btn btn-outline-success btn-sm">
+      📥 Télécharger template Excel
+    </a>
+    <a href="{% url 'administration:regle_ajouter' %}" class="btn btn-sm" style="background:#0F2137;color:white;">
+      + Ajouter une règle
+    </a>
+  </div>
+</div>
+
+{# Filtres #}
+<form method="get" class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-center">
+      <div class="col-auto">
+        <select name="temple" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Tous les temples</option>
+          {% for t in temples %}<option value="{{ t.pk }}" {% if request.GET.temple == t.pk|stringformat:"s" %}selected{% endif %}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <select name="loge" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">Toutes les loges</option>
+          {% for l in loges %}<option value="{{ l.pk }}" {% if request.GET.loge == l.pk|stringformat:"s" %}selected{% endif %}>{{ l.abreviation }} — {{ l.nom }}</option>{% endfor %}
+        </select>
+      </div>
+      {% if request.GET.temple or request.GET.loge %}
+      <div class="col-auto">
+        <a href="{% url 'administration:regles_liste' %}" class="btn btn-outline-secondary btn-sm">✕ Effacer</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</form>
+
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead style="background:#0F2137;">
+        <tr>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">LOGE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">TEMPLE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">FRÉQUENCE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">HORAIRES</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">PÉRIODE</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">STATUT</th>
+          <th style="color:#C8A84B;font-size:11px;letter-spacing:.06em;">ACTIONS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in regles %}
+        <tr>
+          <td>
+            <div class="fw-semibold" style="color:#0F2137;">{{ r.loge.abreviation }}</div>
+            <div class="text-muted small">{{ r.loge.nom|truncatechars:30 }}</div>
+          </td>
+          <td><span class="badge" style="background:#0F2137;">{{ r.temple }}</span></td>
+          <td>
+            <span class="fw-semibold">{{ r.get_numero_semaine_display }}</span>
+            {{ r.get_jour_semaine_display }}
+          </td>
+          <td class="text-muted small">{{ r.heure_debut|time:"H:i" }} – {{ r.heure_fin|time:"H:i" }}</td>
+          <td class="text-muted small">
+            {% if r.date_debut or r.date_fin %}
+              {{ r.date_debut|default:"—" }} → {{ r.date_fin|default:"—" }}
+            {% else %}
+              <span class="text-muted">Toute la saison</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.actif %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactive</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'administration:regle_modifier' r.pk %}" class="btn btn-sm btn-outline-primary">✏️</a>
+            <a href="{% url 'administration:regle_supprimer' r.pk %}" class="btn btn-sm btn-outline-danger">🗑</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Aucune règle trouvée.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="mt-4 d-flex gap-3">
+  <a href="{% url 'administration:regenerer' %}" class="btn btn-warning">
+    🔄 Regénérer les tenues depuis ces règles
+  </a>
+  <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">
+    ← Retour au tableau de bord
+  </a>
+</div>
+{% endblock %}

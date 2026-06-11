@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Demande de salle de réunion{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="mb-4">
+      <h1 class="h3" style="color:#0F2137;">📋 Demande de salle de réunion</h1>
+      <p class="text-muted">Remplissez ce formulaire pour réserver une salle. Vous recevrez une confirmation par email.</p>
+    </div>
+
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          {# Salle + date #}
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Salle souhaitée</label>
+              {{ form.salle }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Date</label>
+              {{ form.date }}
+            </div>
+          </div>
+
+          {# Horaires #}
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Heure de début</label>
+              {{ form.heure_debut }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Heure de fin</label>
+              {{ form.heure_fin }}
+            </div>
+          </div>
+
+          <div id="conflit-message" class="mb-3" style="display: none;"></div>
+
+          {# Demandeur #}
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre nom</label>
+              {{ form.nom_demandeur }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre email</label>
+              {{ form.email_demandeur }}
+            </div>
+          </div>
+
+          {# Organisation / Loge #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Votre loge / organisation</label>
+            <div id="loge-select-wrapper">
+              <select id="loge-selector" class="form-select" onchange="logeSelectChange(this)">
+                <option value="">— Sélectionner une loge —</option>
+                {% for loge in loges %}
+                  <option value="{{ loge.nom }}">{{ loge }}</option>
+                {% endfor %}
+              </select>
+              <div class="mt-1">
+                <a href="#" class="small text-muted" onclick="basculerOrg(true);return false;">
+                  Mon organisation n'est pas dans la liste →
+                </a>
+              </div>
+            </div>
+            <div id="org-libre-wrapper" style="display:none;">
+              {{ form.organisation }}
+              <div class="mt-1">
+                <a href="#" class="small text-muted" onclick="basculerOrg(false);return false;">
+                  ← Choisir dans la liste
+                </a>
+              </div>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Objet de la réunion <span class="text-danger">*</span></label>
+            {{ form.objet }}
+          </div>
+
+          {# Participants #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nombre de participants</label>
+            {{ form.nombre_participants }}
+          </div>
+
+          {# Commentaire #}
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Commentaire</label>
+            {{ form.commentaire }}
+          </div>
+
+          <div class="d-flex gap-3">
+            <button type="submit" class="btn btn-lg px-4"
+              style="background:#0F2137;color:white;">
+              Soumettre la demande
+            </button>
+            <a href="{% url 'calendrier:principal' %}" class="btn btn-outline-secondary btn-lg">
+              Annuler
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function logeSelectChange(sel) {
+  var orgInput = document.querySelector('[name="organisation"]');
+  if (sel.value) orgInput.value = sel.value;
+}
+
+function basculerOrg(libre) {
+  var selWrap   = document.getElementById('loge-select-wrapper');
+  var libreWrap = document.getElementById('org-libre-wrapper');
+  var orgInput  = document.querySelector('[name="organisation"]');
+  if (libre) {
+    selWrap.style.display   = 'none';
+    libreWrap.style.display = 'block';
+    orgInput.value = '';
+    if (window.$ && $('#loge-selector').data('select2')) {
+      $('#loge-selector').val(null).trigger('change');
+    } else {
+      document.getElementById('loge-selector').value = '';
+    }
+  } else {
+    selWrap.style.display   = 'block';
+    libreWrap.style.display = 'none';
+    orgInput.value = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const conflitMessage = document.getElementById('conflit-message');
+  const salleSelect    = document.querySelector('[name="salle"]');
+  const dateInput      = document.querySelector('[name="date"]');
+  const heureDebutInput = document.querySelector('[name="heure_debut"]');
+  const heureFinInput   = document.querySelector('[name="heure_fin"]');
+
+  function verifierConflitSalle() {
+    const salle     = salleSelect ? salleSelect.value : '';
+    const date      = dateInput.value;
+    const heureDebut = heureDebutInput.value;
+    const heureFin   = heureFinInput.value;
+
+    if (!salle || !date || !heureDebut || !heureFin) {
+      conflitMessage.style.display = 'none';
+      return;
+    }
+
+    fetch(`/reservations/api/verifier-conflit/?salle=${encodeURIComponent(salle)}&date=${encodeURIComponent(date)}&heure_debut=${encodeURIComponent(heureDebut)}&heure_fin=${encodeURIComponent(heureFin)}`)
+      .then(r => r.json())
+      .then(data => {
+        let alertClass = 'alert-success';
+        if (data.conflit) {
+          alertClass = data.niveau === 'erreur' ? 'alert-danger' : 'alert-warning';
+        }
+        conflitMessage.innerHTML = `<div class="alert ${alertClass}" role="alert">${data.message}</div>`;
+        conflitMessage.style.display = 'block';
+      })
+      .catch(() => { conflitMessage.style.display = 'none'; });
+  }
+
+  if (salleSelect) salleSelect.addEventListener('change', verifierConflitSalle);
+  if (dateInput)   dateInput.addEventListener('change', verifierConflitSalle);
+  if (heureDebutInput) heureDebutInput.addEventListener('change', verifierConflitSalle);
+  if (heureFinInput)   heureFinInput.addEventListener('change', verifierConflitSalle);
+
+  var orgInput = document.querySelector('[name="organisation"]');
+  if (orgInput && orgInput.value.trim()) {
+    var sel = document.getElementById('loge-selector');
+    var matched = false;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === orgInput.value.trim()) {
+        sel.value = sel.options[i].value;
+        if (window.$) { $(sel).trigger('change'); }
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) { basculerOrg(true); orgInput.value = orgInput.value.trim(); }
+  }
+
+  // Sync Select2 change event
+  if (window.$) {
+    $('#loge-selector').on('select2:select', function(e) {
+      document.querySelector('[name="organisation"]').value = e.params.data.id || '';
+    });
+    $('#loge-selector').on('select2:clear', function() {
+      document.querySelector('[name="organisation"]').value = '';
+    });
+  }
+});
+</script>
+{% endblock %}

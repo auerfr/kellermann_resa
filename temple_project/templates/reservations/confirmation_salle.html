@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Demande confirmée{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6 text-center">
+    <div class="card shadow-sm border-0 p-5">
+      <div style="font-size:48px;" class="mb-3">✅</div>
+      <h2 style="color:#0F2137;">Demande reçue !</h2>
+      <p class="text-muted mt-3">
+        Votre demande pour la <strong>{{ reservation.salle }}</strong>
+        le <strong>{{ reservation.date }}</strong>
+        de <strong>{{ reservation.heure_debut }}</strong> à <strong>{{ reservation.heure_fin }}</strong>
+        a bien été enregistrée.
+      </p>
+      <p class="text-muted">Un email de confirmation a été envoyé à <strong>{{ reservation.email_demandeur }}</strong>.</p>
+      <div class="alert alert-light mt-3 text-start">
+        <small class="text-muted">Référence de votre demande :</small><br>
+        <code>{{ reservation.uuid }}</code>
+      </div>
+      <a href="{% url 'calendrier:principal' %}" class="btn mt-3" style="background:#0F2137;color:white;">
+        Retour au calendrier
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Restaurer une sauvegarde{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📤 Restaurer une sauvegarde</h1>
+    <p class="text-muted small mb-0">Restaurez la base de données depuis un fichier de sauvegarde</p>
+  </div>
+  <a href="{% url 'administration:gestion_saison' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-warning text-white">
+        <h5 class="mb-0">⚠️ Attention - Opération critique</h5>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning">
+          <h6>Avant de continuer :</h6>
+          <ul class="mb-0">
+            <li>Assurez-vous que le fichier de sauvegarde provient d'une source fiable</li>
+            <li>Une copie automatique de la base actuelle sera créée</li>
+            <li>Cette opération remplacera complètement la base de données actuelle</li>
+            <li>Les données actuelles seront perdues si la restauration échoue</li>
+          </ul>
+        </div>
+
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label for="backup_file" class="form-label">Fichier de sauvegarde (.sqlite3)</label>
+            <input type="file" class="form-control" id="backup_file" name="backup_file"
+                   accept=".sqlite3" required>
+            <div class="form-text">
+              Sélectionnez un fichier de sauvegarde Kellermann (.sqlite3)
+            </div>
+          </div>
+
+          <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <a href="{% url 'administration:gestion_saison' %}" class="btn btn-outline-secondary">
+              Annuler
+            </a>
+            <button type="submit" class="btn btn-warning">
+              📤 Restaurer la sauvegarde
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

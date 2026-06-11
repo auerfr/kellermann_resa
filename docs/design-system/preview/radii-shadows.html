@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<style>
+@font-face{font-family:'Open Sans';font-style:normal;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype');}
+@font-face{font-family:'Open Sans';font-style:italic;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype');}
+</style>
+
+<title>Radii & shadows</title>
+<style>
+  body{margin:0;font-family:'Open Sans','Segoe UI',Arial,sans-serif;background:#F8FAFC;padding:20px;color:#1E293B;}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
+  .box{background:#fff;padding:14px 12px;text-align:center;font-size:11px;color:#64748B;}
+  .n{font-weight:600;color:#0F2137;display:block;margin-bottom:4px;font-size:12px;}
+  .v{font-family:SFMono-Regular,Menlo,monospace;font-size:10px;color:#94A3B8;}
+  h4{margin:0 0 8px;font-size:10.5px;color:#94A3B8;text-transform:uppercase;letter-spacing:.08em;font-weight:600;}
+</style></head><body>
+<h4>Radii</h4>
+<div class="grid" style="margin-bottom:18px;">
+  <div class="box" style="border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.05);"><span class="n">xs</span><span class="v">4px</span></div>
+  <div class="box" style="border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.05);"><span class="n">sm</span><span class="v">6px · btn,input</span></div>
+  <div class="box" style="border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.05);"><span class="n">md</span><span class="v">10px · alert</span></div>
+  <div class="box" style="border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);"><span class="n">lg</span><span class="v">14px</span></div>
+  <div class="box" style="border-radius:20px;box-shadow:0 1px 3px rgba(0,0,0,.05);"><span class="n">xl</span><span class="v">20px · auth card</span></div>
+</div>
+<h4>Shadows</h4>
+<div class="grid">
+  <div class="box" style="border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.05);"><span class="n">xs</span><span class="v">subtle</span></div>
+  <div class="box" style="border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);"><span class="n">sm</span><span class="v">cards</span></div>
+  <div class="box" style="border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.10);"><span class="n">md</span><span class="v">hover</span></div>
+  <div class="box" style="border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.13);"><span class="n">lg</span><span class="v">KPI hover</span></div>
+  <div class="box" style="border-radius:8px;box-shadow:0 0 0 3px rgba(200,168,75,.28);"><span class="n">focus</span><span class="v">gold ring</span></div>
+</div>
+</body></html>

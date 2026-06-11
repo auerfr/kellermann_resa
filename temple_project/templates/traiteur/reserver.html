@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Traiteur — Réservation directe{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="h3 mb-0">➕ Réservation directe</h1>
+            <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-sm btn-outline-secondary">← Retour</a>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header" style="background:#0F2137;color:white;">
+                <strong>Nouvelle réservation salle agapes — validée immédiatement</strong>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ form.loge.label }}</label>
+                            {{ form.loge }}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ form.organisation.label }}</label>
+                            {{ form.organisation }}
+                            {% if form.organisation.errors %}<div class="text-danger small">{{ form.organisation.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.salle.label }}</label>
+                        {{ form.salle }}
+                        {% if form.salle.errors %}<div class="text-danger small">{{ form.salle.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">{{ form.date.label }}</label>
+                            {{ form.date }}
+                            {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">{{ form.heure_debut.label }}</label>
+                            {{ form.heure_debut }}
+                            {% if form.heure_debut.errors %}<div class="text-danger small">{{ form.heure_debut.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">{{ form.heure_fin.label }}</label>
+                            {{ form.heure_fin }}
+                            {% if form.heure_fin.errors %}<div class="text-danger small">{{ form.heure_fin.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">{{ form.nombre_repas.label }}</label>
+                        {{ form.nombre_repas }}
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">{{ form.commentaire.label }}</label>
+                        {{ form.commentaire }}
+                    </div>
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                    {% endif %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success">✅ Créer et valider</button>
+                        <a href="{% url 'traiteur:planning' %}" class="btn btn-outline-secondary">Annuler</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

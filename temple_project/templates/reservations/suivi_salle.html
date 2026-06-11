@@ -1,0 +1,27 @@
+﻿{% extends "base.html" %}
+{% block title %}Suivi de votre demande de salle{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <h1 class="h3 mb-4" style="color:#0F2137;">Suivi de votre demande de salle</h1>
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        {% if reservation.statut == "validee" %}
+        <div class="alert alert-success">Votre reservation de salle est validee.</div>
+        {% elif reservation.statut == "refusee" %}
+        <div class="alert alert-danger">Votre reservation a ete refusee.</div>
+        {% else %}
+        <div class="alert alert-warning">Votre demande est en attente de validation.</div>
+        {% endif %}
+        <table class="table table-borderless">
+          <tr><td class="text-muted">Salle</td><td>{{ reservation.salle }}</td></tr>
+          <tr><td class="text-muted">Date</td><td>{{ reservation.date }}</td></tr>
+          <tr><td class="text-muted">Horaires</td><td>{{ reservation.heure_debut }} - {{ reservation.heure_fin }}</td></tr>
+          <tr><td class="text-muted">Objet</td><td>{{ reservation.objet }}</td></tr>
+        </table>
+      </div>
+    </div>
+    <a href="{% url 'calendrier:principal' %}" class="btn mt-3" style="background:#0F2137;color:white;">Retour au calendrier</a>
+  </div>
+</div>
+{% endblock %}

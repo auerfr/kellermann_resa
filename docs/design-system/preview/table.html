@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<style>
+@font-face{font-family:'Open Sans';font-style:normal;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-VariableFont_wdth_wght.ttf') format('truetype');}
+@font-face{font-family:'Open Sans';font-style:italic;font-weight:300 800;font-stretch:75% 125%;font-display:swap;src:url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype-variations'),url('../fonts/OpenSans-Italic-VariableFont_wdth_wght.ttf') format('truetype');}
+</style>
+
+<title>Table</title>
+<style>
+  body{margin:0;font-family:'Open Sans','Segoe UI',Arial,sans-serif;background:#fff;padding:0;color:#1E293B;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{background:#0F2137;color:#C8A84B;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:10px 14px;text-align:left;}
+  tbody td{padding:11px 14px;border-bottom:1px solid #F1F5F9;vertical-align:middle;}
+  tbody tr:nth-child(odd){background:#FCFCFD;}
+  tbody tr:hover td{background:#F0F9FF;}
+  .abrev{background:#0F2137;color:#C8A84B;font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;}
+  .val{background:#DCFCE7;color:#166534;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;}
+  .att{background:#FEF9C3;color:#92400E;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;}
+  .bar{width:60px;height:6px;background:#F1F5F9;border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle;}
+  .bar>div{height:100%;background:#0F2137;}
+</style></head><body>
+<table>
+  <thead><tr><th>ABRÉV.</th><th>NOM</th><th>OBÉDIENCE</th><th>TENUES</th><th>STATUT</th></tr></thead>
+  <tbody>
+    <tr><td><span class="abrev">LL</span></td><td style="color:#0F2137;font-weight:600;">Loge Lafayette</td><td style="color:#64748B;">GLDF</td><td><span class="bar"><div style="width:60%"></div></span> <span style="color:#64748B;">15</span></td><td><span class="val">Validée</span></td></tr>
+    <tr><td><span class="abrev">LÉ</span></td><td style="color:#0F2137;font-weight:600;">Loge Égalité</td><td style="color:#64748B;">GLNF</td><td><span class="bar"><div style="width:80%"></div></span> <span style="color:#64748B;">20</span></td><td><span class="att">En attente</span></td></tr>
+    <tr><td><span class="abrev">LF</span></td><td style="color:#0F2137;font-weight:600;">Loge Fraternité</td><td style="color:#64748B;">GLFF</td><td><span class="bar"><div style="width:40%"></div></span> <span style="color:#64748B;">10</span></td><td><span class="val">Validée</span></td></tr>
+  </tbody>
+</table>
+</body></html>

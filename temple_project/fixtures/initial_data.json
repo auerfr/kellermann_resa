@@ -1,0 +1,113 @@
+[
+  {
+    "model": "reservations.temple",
+    "pk": 1,
+    "fields": {
+      "nom": "lafayette",
+      "description": "Temple Lafayette",
+      "capacite": 100
+    }
+  },
+  {
+    "model": "reservations.temple",
+    "pk": 2,
+    "fields": {
+      "nom": "liberte",
+      "description": "Temple Liberté",
+      "capacite": 80
+    }
+  },
+  {
+    "model": "reservations.temple",
+    "pk": 3,
+    "fields": {
+      "nom": "egalite",
+      "description": "Temple Égalité",
+      "capacite": 80
+    }
+  },
+  {
+    "model": "reservations.temple",
+    "pk": 4,
+    "fields": {
+      "nom": "fraternite",
+      "description": "Temple Fraternité",
+      "capacite": 60
+    }
+  },
+  {
+    "model": "reservations.cabinet",
+    "pk": 1,
+    "fields": {
+      "nom": "Cabinet de réflexion 1",
+      "numero": 1
+    }
+  },
+  {
+    "model": "reservations.cabinet",
+    "pk": 2,
+    "fields": {
+      "nom": "Cabinet de réflexion 2",
+      "numero": 2
+    }
+  },
+  {
+    "model": "reservations.cabinet",
+    "pk": 3,
+    "fields": {
+      "nom": "Cabinet de réflexion 3",
+      "numero": 3
+    }
+  },
+  {
+    "model": "reservations.sallereunion",
+    "pk": 1,
+    "fields": {
+      "nom": "Salle A",
+      "capacite": 6,
+      "description": "Petite salle de réunion — 6 places",
+      "actif": true
+    }
+  },
+  {
+    "model": "reservations.sallereunion",
+    "pk": 2,
+    "fields": {
+      "nom": "Salle B",
+      "capacite": 6,
+      "description": "Petite salle de réunion — 6 places",
+      "actif": true
+    }
+  },
+  {
+    "model": "reservations.sallereunion",
+    "pk": 3,
+    "fields": {
+      "nom": "Salle C",
+      "capacite": 10,
+      "description": "Salle de réunion moyenne — 10 places",
+      "actif": true
+    }
+  },
+  {
+    "model": "reservations.sallereunion",
+    "pk": 4,
+    "fields": {
+      "nom": "Salle D",
+      "capacite": 20,
+      "description": "Grande salle de réunion — 20 places",
+      "actif": true
+    }
+  },
+  {
+    "model": "reservations.sallereunion",
+    "pk": 5,
+    "fields": {
+      "nom": "L'Oie et le Grill",
+      "type_salle": "agapes",
+      "capacite": 50,
+      "description": "Salle de banquet d'ordre — 50 places",
+      "actif": true
+    }
+  }
+]
