@@ -1,4 +1,4 @@
-from django import forms
+﻿from django import forms
 from django.contrib import admin
 from django.contrib import messages
 from django.utils.safestring import mark_safe
@@ -12,18 +12,22 @@ from .models import (
 )
 
 
+def _fmt_heure(t):
+    return t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)[:5]
+
+
 MOIS_CHOICES = [
-    (1, "Jan"), (2, "Fév"), (3, "Mar"), (4, "Avr"),
-    (5, "Mai"), (6, "Juin"), (7, "Juil"), (8, "Aoû"),
-    (9, "Sep"), (10, "Oct"), (11, "Nov"), (12, "Déc"),
+    (1, "Jan"), (2, "FÃ©v"), (3, "Mar"), (4, "Avr"),
+    (5, "Mai"), (6, "Juin"), (7, "Juil"), (8, "AoÃ»"),
+    (9, "Sep"), (10, "Oct"), (11, "Nov"), (12, "DÃ©c"),
 ]
 
 
 TRANCHES_HORAIRES = [
     ("Matin",           "09:00", "12:00"),
-    ("Après-midi",      "14:00", "17:00"),
+    ("AprÃ¨s-midi",      "14:00", "17:00"),
     ("Soir",            "19:00", "22:30"),
-    ("Journée complète","09:00", "17:00"),
+    ("JournÃ©e complÃ¨te","09:00", "17:00"),
 ]
 
 
@@ -37,7 +41,7 @@ class TrancheHoraireWidget(forms.Widget):
                 f'<button type="button" onclick="setHoraire(\'{debut}\',\'{fin}\')" '
                 f'style="padding:3px 10px;border:1px solid #ccc;border-radius:4px;'
                 f'background:#f8f8f8;cursor:pointer;font-size:12px;">'
-                f'{label} <small style="color:#888;">({debut}–{fin})</small></button>'
+                f'{label} <small style="color:#888;">({debut}â€“{fin})</small></button>'
             )
         html += '</div>'
         html += (
@@ -63,7 +67,7 @@ class TrancheHoraireField(forms.Field):
 
 
 class MoisActifsWidget(forms.Widget):
-    """Widget cases à cocher horizontales pour les mois actifs."""
+    """Widget cases Ã  cocher horizontales pour les mois actifs."""
 
     def render(self, name, value, attrs=None, renderer=None):
         if not isinstance(value, list):
@@ -77,7 +81,7 @@ class MoisActifsWidget(forms.Widget):
                 f'{label}</label>'
             )
         html += '</div>'
-        html += '<p class="help" style="color:#999;font-size:11px;margin-top:4px;">Laisser tout décoché = tous les mois (juil.–août exclus automatiquement).</p>'
+        html += '<p class="help" style="color:#999;font-size:11px;margin-top:4px;">Laisser tout dÃ©cochÃ© = tous les mois (juil.â€“aoÃ»t exclus automatiquement).</p>'
         return mark_safe(html)
 
     def value_from_datadict(self, data, files, name):
@@ -105,7 +109,7 @@ class RegleRecurrenceForm(forms.ModelForm):
         fields = "__all__"
 
     def save(self, commit=True):
-        # tranche_horaire est un champ virtuel, ne pas le passer au modèle
+        # tranche_horaire est un champ virtuel, ne pas le passer au modÃ¨le
         self.cleaned_data.pop("tranche_horaire", None)
         return super().save(commit=commit)
 
@@ -149,9 +153,9 @@ class RegleAdmin(admin.ModelAdmin):
         }),
         ("Mois actifs", {
             "fields": ("mois_actifs",),
-            "description": "Cochez les mois où cette loge se réunit. Tout décoché = tous les mois.",
+            "description": "Cochez les mois oÃ¹ cette loge se rÃ©unit. Tout dÃ©cochÃ© = tous les mois.",
         }),
-        ("Validité & statut", {
+        ("ValiditÃ© & statut", {
             "fields": ("date_debut", "date_fin", "actif"),
         }),
     )
@@ -179,7 +183,7 @@ class DemandeRegleAdmin(admin.ModelAdmin):
                        "heure_debut", "heure_fin", "mois_actifs",
                        "nom_demandeur", "email_demandeur", "commentaire", "date_demande"),
         }),
-        ("Décision", {
+        ("DÃ©cision", {
             "fields": ("statut", "commentaire_admin", "regle_creee"),
         }),
     )
@@ -189,7 +193,7 @@ class DemandeRegleAdmin(admin.ModelAdmin):
         ancienne_statut = DemandeRegleRecurrence.objects.filter(pk=obj.pk).values_list("statut", flat=True).first()
         super().save_model(request, obj, form, change)
         if obj.statut == "validee" and ancienne_statut != "validee":
-            # Créer la règle de récurrence
+            # CrÃ©er la rÃ¨gle de rÃ©currence
             regle = RegleRecurrence.objects.create(
                 loge=obj.loge, temple=obj.temple,
                 jour_semaine=obj.jour_semaine, numero_semaine=obj.numero_semaine,
@@ -199,27 +203,27 @@ class DemandeRegleAdmin(admin.ModelAdmin):
             obj.regle_creee = regle
             obj.save(update_fields=["regle_creee"])
             self._notifier(obj, validee=True)
-            messages.success(request, f"Règle créée ({regle}) et loge notifiée.")
+            messages.success(request, f"RÃ¨gle crÃ©Ã©e ({regle}) et loge notifiÃ©e.")
         elif obj.statut == "refusee" and ancienne_statut != "refusee":
             self._notifier(obj, validee=False)
-            messages.info(request, "Demande refusée, loge notifiée.")
+            messages.info(request, "Demande refusÃ©e, loge notifiÃ©e.")
 
     def _notifier(self, obj, validee):
         if validee:
-            sujet = f"[Kellermann] Votre demande de récurrence a été validée"
+            sujet = f"[Kellermann] Votre demande de rÃ©currence a Ã©tÃ© validÃ©e"
             corps = (
                 f"Bonjour {obj.nom_demandeur},\n\n"
-                f"Votre demande de règle de récurrence a été acceptée.\n\n"
+                f"Votre demande de rÃ¨gle de rÃ©currence a Ã©tÃ© acceptÃ©e.\n\n"
                 f"  Loge      : {obj.loge}\n"
                 f"  Temple    : {obj.temple}\n"
-                f"  Fréquence : {obj.get_numero_semaine_display()} {obj.get_jour_semaine_display()}\n"
-                f"  Horaires  : {obj.heure_debut:%H:%M} – {obj.heure_fin:%H:%M}\n\n"
+                f"  FrÃ©quence : {obj.get_numero_semaine_display()} {obj.get_jour_semaine_display()}\n"
+                f"  Horaires  : {_fmt_heure(obj.heure_debut)} â€“ {_fmt_heure(obj.heure_fin)}\n\n"
             )
         else:
-            sujet = f"[Kellermann] Votre demande de récurrence n'a pas été retenue"
+            sujet = f"[Kellermann] Votre demande de rÃ©currence n'a pas Ã©tÃ© retenue"
             corps = (
                 f"Bonjour {obj.nom_demandeur},\n\n"
-                f"Votre demande de règle de récurrence n'a pas pu être acceptée.\n\n"
+                f"Votre demande de rÃ¨gle de rÃ©currence n'a pas pu Ãªtre acceptÃ©e.\n\n"
             )
         if obj.commentaire_admin:
             corps += f"Message de l'administration :\n{obj.commentaire_admin}\n\n"
@@ -227,25 +231,25 @@ class DemandeRegleAdmin(admin.ModelAdmin):
         send_mail(sujet, corps, settings.DEFAULT_FROM_EMAIL,
                   [obj.email_demandeur], fail_silently=True)
 
-    @admin.action(description="Valider les demandes sélectionnées")
+    @admin.action(description="Valider les demandes sÃ©lectionnÃ©es")
     def valider_demandes(self, request, queryset):
         for obj in queryset.filter(statut="attente"):
             obj.statut = "validee"
             self.save_model(request, obj, None, True)
 
-    @admin.action(description="Refuser les demandes sélectionnées")
+    @admin.action(description="Refuser les demandes sÃ©lectionnÃ©es")
     def refuser_demandes(self, request, queryset):
         for obj in queryset.filter(statut="attente"):
             obj.statut = "refusee"
             self.save_model(request, obj, None, True)
 
-    @admin.display(description="Fréquence")
+    @admin.display(description="FrÃ©quence")
     def frequence_display(self, obj):
         return f"{obj.get_numero_semaine_display()} {obj.get_jour_semaine_display()}"
 
     @admin.display(description="Horaires")
     def horaires_display(self, obj):
-        return f"{obj.heure_debut:%H:%M}–{obj.heure_fin:%H:%M}"
+        return f"{_fmt_heure(obj.heure_debut)}â€“{_fmt_heure(obj.heure_fin)}"
 
     @admin.display(description="Mois")
     def mois_display(self, obj):
