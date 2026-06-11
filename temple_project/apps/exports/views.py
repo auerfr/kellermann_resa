@@ -433,6 +433,408 @@ def planning_pdf(request):
     return response
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ── Helpers partagés PDF grille / annuel ──────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_MOIS_LONG  = {1:'Janvier',2:'Février',3:'Mars',4:'Avril',5:'Mai',6:'Juin',
+               7:'Juillet',8:'Août',9:'Septembre',10:'Octobre',
+               11:'Novembre',12:'Décembre'}
+_MOIS_COURT = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
+_JOURS_G    = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
+_JOURS_M    = ['L','M','M','J','V','S','D']
+
+
+def _short_loge(resa):
+    if resa.loge and resa.loge.abreviation:
+        return resa.loge.abreviation
+    if resa.loge:
+        return resa.loge.nom[:6]
+    return (getattr(resa, 'nom_organisation', None) or '—')[:6]
+
+
+def _short_heure(t):
+    if hasattr(t, 'hour'):
+        return f"{t.hour}h" if t.minute == 0 else f"{t.hour}h{t.minute:02d}"
+    h, m = str(t)[:5].split(':')
+    return f"{int(h)}h" if m == '00' else f"{int(h)}h{m}"
+
+
+def _resa_par_jour(annee, mois, temple_pk=None, loge=None):
+    qs = Reservation.objects.select_related('loge').filter(
+        statut='validee', date__year=annee, date__month=mois,
+    )
+    if temple_pk:
+        qs = qs.filter(temple_id=temple_pk)
+    if loge:
+        qs = qs.filter(loge=loge)
+    res = {}
+    for r in qs.order_by('heure_debut'):
+        res.setdefault(r.date.day, []).append(
+            f"{_short_loge(r)} {_short_heure(r.heure_debut)}"
+        )
+    return res
+
+
+def _semaines(annee, mois):
+    import calendar as _cal
+    fw, nd = _cal.monthrange(annee, mois)
+    weeks, week = [], [0] * fw
+    for d in range(1, nd + 1):
+        week.append(d)
+        if len(week) == 7:
+            weeks.append(week); week = []
+    if week:
+        weeks.append(week + [0] * (7 - len(week)))
+    while len(weeks) < 6:
+        weeks.append([0] * 7)
+    return weeks
+
+
+def _mini_mois_table(annee, mois, resa_dict, col_w, hdr_h, day_h, row_h, fsize):
+    """Mini-calendrier compact (pour formats annuels)."""
+    from reportlab.platypus import Table, TableStyle, Paragraph
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+
+    C_BDR = colors.HexColor('#444444')
+    C_MHD = colors.HexColor('#CCCCCC')
+    C_DHD = colors.HexColor('#E0E0E0')
+    C_ALT = colors.HexColor('#F5F5F5')
+
+    def _sty(name, bold=False, sz=None, align=1):
+        return ParagraphStyle(name,
+            fontName='Helvetica-Bold' if bold else 'Helvetica',
+            fontSize=sz or fsize, leading=(sz or fsize) + 1.5,
+            alignment=align, spaceAfter=0, spaceBefore=0)
+
+    s_hdr  = _sty('mh', bold=True,  sz=fsize + 0.5)
+    s_jour = _sty('mj', bold=True,  sz=fsize - 0.5)
+    s_cell = _sty('mc', bold=False, sz=fsize - 0.5, align=0)
+
+    semaines = _semaines(annee, mois)
+    label    = f"{_MOIS_COURT[mois - 1]} {annee}"
+
+    data = [[Paragraph(label, s_hdr)] + [''] * 6]
+    data.append([Paragraph(j, s_jour) for j in _JOURS_M])
+    for sem in semaines:
+        row = []
+        for day in sem:
+            if day == 0:
+                row.append('')
+            else:
+                entries = resa_dict.get(day, [])
+                html = f"<b>{day}</b>" + ''.join(f'<br/>{e}' for e in entries)
+                row.append(Paragraph(html, s_cell))
+        data.append(row)
+
+    tbl = Table(data, colWidths=[col_w] * 7,
+                rowHeights=[hdr_h, day_h] + [row_h] * 6)
+    tbl.setStyle(TableStyle([
+        ('SPAN',          (0, 0), (6, 0)),
+        ('BACKGROUND',    (0, 0), (6, 0), C_MHD),
+        ('BACKGROUND',    (0, 1), (6, 1), C_DHD),
+        ('ALIGN',         (0, 0), (6, 1), 'CENTER'),
+        ('VALIGN',        (0, 0), (6, 1), 'MIDDLE'),
+        ('VALIGN',        (0, 2), (-1, -1), 'TOP'),
+        ('ROWBACKGROUNDS',(0, 2), (-1, -1), [colors.white, C_ALT]),
+        ('GRID',          (0, 0), (-1, -1), 0.25, C_BDR),
+        ('BOX',           (0, 0), (-1, -1), 0.5,  C_BDR),
+        ('TOPPADDING',    (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
+    ]))
+    return tbl
+
+
+def _pdf_grille_mensuelle(annee, mois, titre, nom_fichier, temple_pk=None, loge=None):
+    """Génère le PDF grille mensuelle A4 paysage."""
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    resa = _resa_par_jour(annee, mois, temple_pk=temple_pk, loge=loge)
+
+    PAGE  = landscape(A4)
+    MG    = 0.8 * cm
+    UW    = PAGE[0] - 2 * MG
+    UH    = PAGE[1] - 2 * MG
+
+    TITLE_H = 0.6  * cm
+    SPACE_H = 0.15 * cm
+    COL_W   = UW / 7
+    DAY_H   = 0.45 * cm
+    ROW_H   = (UH - TITLE_H - SPACE_H - DAY_H) / 6
+
+    C_BDR = colors.HexColor('#333333')
+    C_DHD = colors.HexColor('#DDDDDD')
+    C_ALT = colors.HexColor('#F8F8F8')
+
+    sty_title = ParagraphStyle('gt', fontName='Helvetica-Bold', fontSize=10,
+                                textColor=colors.HexColor('#222222'),
+                                alignment=TA_CENTER, spaceAfter=0)
+    sty_jour  = ParagraphStyle('gj', fontName='Helvetica-Bold', fontSize=8,
+                                leading=10, alignment=TA_CENTER)
+    sty_cell  = ParagraphStyle('gc', fontName='Helvetica', fontSize=7.5,
+                                leading=9.5, alignment=TA_LEFT)
+
+    semaines = _semaines(annee, mois)
+
+    data = [[Paragraph(j, sty_jour) for j in _JOURS_G]]
+    for sem in semaines:
+        row = []
+        for day in sem:
+            if day == 0:
+                row.append('')
+            else:
+                entries = resa.get(day, [])
+                html = f"<b>{day}</b>" + ''.join(f'<br/>{e}' for e in entries)
+                row.append(Paragraph(html, sty_cell))
+        data.append(row)
+
+    tbl = Table(data, colWidths=[COL_W] * 7,
+                rowHeights=[DAY_H] + [ROW_H] * 6)
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, 0), C_DHD),
+        ('ALIGN',         (0, 0), (-1, 0), 'CENTER'),
+        ('VALIGN',        (0, 0), (-1, 0), 'MIDDLE'),
+        ('VALIGN',        (0, 1), (-1, -1), 'TOP'),
+        ('ROWBACKGROUNDS',(0, 1), (-1, -1), [colors.white, C_ALT]),
+        ('GRID',          (0, 0), (-1, -1), 0.4, C_BDR),
+        ('BOX',           (0, 0), (-1, -1), 0.8, C_BDR),
+        ('TOPPADDING',    (0, 0), (-1,  0), 4),
+        ('BOTTOMPADDING', (0, 0), (-1,  0), 4),
+        ('TOPPADDING',    (0, 1), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 2),
+        ('LEFTPADDING',   (0, 1), (-1, -1), 3),
+        ('RIGHTPADDING',  (0, 1), (-1, -1), 2),
+    ]))
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=PAGE,
+                            leftMargin=MG, rightMargin=MG,
+                            topMargin=MG,  bottomMargin=MG)
+    doc.build([Paragraph(titre, sty_title), Spacer(1, SPACE_H), tbl])
+    buf.seek(0)
+    response = HttpResponse(buf, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.pdf"'
+    return response
+
+
+def _pdf_annuel(annee, titre, nom_fichier, base_pagesize, ncols, temple_pk=None, loge=None):
+    """
+    Génère le PDF annuel (saison Sep→Aug).
+    ncols=4 → A3 landscape, 1 page (4×3 mois)
+    ncols=3 → A4 landscape, 2 pages (3×2 mois par page)
+    """
+    from io import BytesIO
+    from reportlab.lib.pagesizes import landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle,
+        Paragraph, Spacer, PageBreak,
+    )
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+
+    mois_saison = ([(annee, m) for m in range(9, 13)]
+                   + [(annee + 1, m) for m in range(1, 9)])
+
+    PAGE = landscape(base_pagesize)
+    MG   = 0.8 * cm
+    UW   = PAGE[0] - 2 * MG
+    UH   = PAGE[1] - 2 * MG
+
+    sty_title = ParagraphStyle('at', fontName='Helvetica-Bold', fontSize=9,
+                                textColor=colors.HexColor('#222222'),
+                                alignment=TA_CENTER, spaceAfter=0)
+
+    TITLE_H = 16
+    SPACE_H = 6
+
+    if ncols == 4:          # A3 : 4×3 sur 1 page
+        fsize     = 6.0
+        hdr_h     = 12
+        day_h     = 8
+        nrows_pg  = 3
+        row_gap   = 4
+        avail     = UH - TITLE_H - SPACE_H - (nrows_pg - 1) * row_gap
+        row_h     = (avail - nrows_pg * (hdr_h + day_h)) / (nrows_pg * 6)
+    else:                   # A4 : 3×2 sur 2 pages
+        fsize     = 7.0
+        hdr_h     = 13
+        day_h     = 9
+        nrows_pg  = 2
+        row_gap   = 4
+        avail     = UH - TITLE_H - SPACE_H - (nrows_pg - 1) * row_gap
+        row_h     = (avail - nrows_pg * (hdr_h + day_h)) / (nrows_pg * 6)
+
+    col_w       = UW / (ncols * 7)
+    outer_col_w = UW / ncols
+    outer_row_h = hdr_h + day_h + 6 * row_h
+
+    months_per_page = ncols * nrows_pg
+
+    def _build_page_table(page_months):
+        outer_data = []
+        for r in range(nrows_pg):
+            outer_row = []
+            for c in range(ncols):
+                idx = r * ncols + c
+                if idx < len(page_months) and page_months[idx] is not None:
+                    a, m = page_months[idx]
+                    rd  = _resa_par_jour(a, m, temple_pk=temple_pk, loge=loge)
+                    outer_row.append(
+                        _mini_mois_table(a, m, rd, col_w, hdr_h, day_h, row_h, fsize)
+                    )
+                else:
+                    outer_row.append('')
+            outer_data.append(outer_row)
+
+        outer = Table(outer_data,
+                      colWidths=[outer_col_w] * ncols,
+                      rowHeights=[outer_row_h] * nrows_pg)
+        outer.setStyle(TableStyle([
+            ('VALIGN',       (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING',   (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING',(0, 0), (-1, -1), 0),
+        ]))
+        return outer
+
+    story = []
+    for page_idx in range(0, 12, months_per_page):
+        if page_idx > 0:
+            story.append(PageBreak())
+        page_months = mois_saison[page_idx:page_idx + months_per_page]
+        story.append(Paragraph(titre, sty_title))
+        story.append(Spacer(1, SPACE_H))
+        story.append(_build_page_table(page_months))
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=PAGE,
+                            leftMargin=MG, rightMargin=MG,
+                            topMargin=MG,  bottomMargin=MG)
+    doc.build(story)
+    buf.seek(0)
+    response = HttpResponse(buf, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.pdf"'
+    return response
+
+
+# ── Vues admin ────────────────────────────────────────────────────────────────
+
+@login_required
+def planning_pdf_grille_mensuelle(request):
+    today    = date.today()
+    mois_p   = int(request.GET.get('mois',  today.month))
+    annee_p  = int(request.GET.get('annee', today.year))
+    temple_p = request.GET.get('temple') or None
+
+    titre = f"Kellermann — {_MOIS_LONG[mois_p]} {annee_p}"
+    if temple_p:
+        t_obj = Temple.objects.filter(pk=temple_p).first()
+        if t_obj:
+            titre += f" · {t_obj}"
+
+    return _pdf_grille_mensuelle(
+        annee_p, mois_p, titre,
+        nom_fichier=f"grille_{annee_p}_{mois_p:02d}",
+        temple_pk=temple_p,
+    )
+
+
+@login_required
+def planning_pdf_annuel_a3(request):
+    from reportlab.lib.pagesizes import A3
+    today    = date.today()
+    default_annee = today.year if today.month >= 9 else today.year - 1
+    annee_p  = int(request.GET.get('annee', default_annee))
+    temple_p = request.GET.get('temple') or None
+
+    titre = f"Kellermann — Saison {annee_p}–{annee_p + 1}"
+    if temple_p:
+        t_obj = Temple.objects.filter(pk=temple_p).first()
+        if t_obj:
+            titre += f" · {t_obj}"
+
+    return _pdf_annuel(
+        annee_p, titre,
+        nom_fichier=f"annuel_a3_{annee_p}-{annee_p + 1}",
+        base_pagesize=A3, ncols=4,
+        temple_pk=temple_p,
+    )
+
+
+@login_required
+def planning_pdf_annuel_a4(request):
+    from reportlab.lib.pagesizes import A4
+    today    = date.today()
+    default_annee = today.year if today.month >= 9 else today.year - 1
+    annee_p  = int(request.GET.get('annee', default_annee))
+    temple_p = request.GET.get('temple') or None
+
+    titre = f"Kellermann — Saison {annee_p}–{annee_p + 1}"
+    if temple_p:
+        t_obj = Temple.objects.filter(pk=temple_p).first()
+        if t_obj:
+            titre += f" · {t_obj}"
+
+    return _pdf_annuel(
+        annee_p, titre,
+        nom_fichier=f"annuel_a4_{annee_p}-{annee_p + 1}",
+        base_pagesize=A4, ncols=3,
+        temple_pk=temple_p,
+    )
+
+
+# ── Vues portail (token) ─────────────────────────────────────────────────────
+
+def planning_loge_grille_pdf(request, token):
+    demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    loge    = demande.loge
+    if not loge:
+        return HttpResponse("Aucune loge associée à ce token.", status=400)
+
+    today   = date.today()
+    mois_p  = int(request.GET.get('mois',  today.month))
+    annee_p = int(request.GET.get('annee', today.year))
+
+    titre = f"{loge.nom} — {_MOIS_LONG[mois_p]} {annee_p}"
+    return _pdf_grille_mensuelle(
+        annee_p, mois_p, titre,
+        nom_fichier=f"grille_{loge.nom.replace(' ', '_')}_{annee_p}_{mois_p:02d}",
+        loge=loge,
+    )
+
+
+def planning_loge_annuel_pdf(request, token):
+    from reportlab.lib.pagesizes import A4
+    demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    loge    = demande.loge
+    if not loge:
+        return HttpResponse("Aucune loge associée à ce token.", status=400)
+
+    today         = date.today()
+    annee_default = today.year if today.month >= 9 else today.year - 1
+    annee_p       = int(request.GET.get('annee', annee_default))
+
+    titre = f"{loge.nom} — Saison {annee_p}–{annee_p + 1}"
+    return _pdf_annuel(
+        annee_p, titre,
+        nom_fichier=f"annuel_{loge.nom.replace(' ', '_')}_{annee_p}-{annee_p + 1}",
+        base_pagesize=A4, ncols=3,
+        loge=loge,
+    )
+
+
 def planning_loge_pdf(request, token):
     """Export PDF du planning de saison d'une loge, accessible via token portail."""
     from io import BytesIO
