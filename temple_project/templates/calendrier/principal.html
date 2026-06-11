@@ -411,19 +411,19 @@ function exportGrilleMensuelle() {
   var a   = document.getElementById('pdf-cal-annee').value;
   var url = "{% url 'exports:planning_pdf_grille_mensuelle' %}?mois=" + m + "&annee=" + a;
   if (t) url += "&temple=" + t;
-  window.open(url, '_blank');
+  window.location = url;
 }
 function exportAnnuelA3() {
   var t   = document.getElementById('pdf-cal-temple').value;
   var url = "{% url 'exports:planning_pdf_annuel_a3' %}?annee=" + _anneeForAnnuel();
   if (t) url += "&temple=" + t;
-  window.open(url, '_blank');
+  window.location = url;
 }
 function exportAnnuelA4() {
   var t   = document.getElementById('pdf-cal-temple').value;
   var url = "{% url 'exports:planning_pdf_annuel_a4' %}?annee=" + _anneeForAnnuel();
   if (t) url += "&temple=" + t;
-  window.open(url, '_blank');
+  window.location = url;
 }
 function exportPdfPlanning() {
   var mode = document.querySelector('input[name="pdf-mode"]:checked').value;

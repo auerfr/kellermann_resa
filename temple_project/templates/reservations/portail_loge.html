@@ -238,11 +238,11 @@
           📄 Planning liste (PDF)
         </a>
         <a href="{% url 'exports:planning_loge_grille_pdf' token=demande.token %}?mois={{ today.month }}&annee={{ today.year }}"
-           class="btn btn-sm btn-outline-secondary" target="_blank">
+           class="btn btn-sm btn-outline-secondary">
           📅 Grille mensuelle
         </a>
         <a href="{% url 'exports:planning_loge_annuel_pdf' token=demande.token %}?annee={{ annee_saison }}"
-           class="btn btn-sm btn-outline-secondary" target="_blank">
+           class="btn btn-sm btn-outline-secondary">
           📆 Annuel A4
         </a>
       </div>
