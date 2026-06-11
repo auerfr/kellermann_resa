@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Gestion des accès portail{% endblock %}
+
+{% block content %}
+<style>
+  .filter-btn        { border-radius: 20px; font-size: 13px; }
+  .filter-btn.active { background: #0F2137; color: #C8A84B; border-color: #0F2137; }
+  .lien-portail      { font-size: 12px; max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+
+{# ── En-tête ──────────────────────────────────────────────────────────────── #}
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-1 fw-semibold" style="color:#0F2137;">🔑 Gestion des accès portail</h1>
+    <p class="text-muted small mb-0">Créer et envoyer les liens d'accès aux loges</p>
+  </div>
+  <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">
+    ← Tableau de bord
+  </a>
+</div>
+
+{# ── KPIs ─────────────────────────────────────────────────────────────────── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card border-0 text-white h-100" style="background:linear-gradient(135deg,#1E40AF,#3B82F6);">
+      <div class="card-body p-3 text-center">
+        <div style="font-size:2rem;font-weight:700;">{{ nb_total }}</div>
+        <div style="font-size:12px;opacity:.85;">Loges actives</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 text-white h-100" style="background:linear-gradient(135deg,#059669,#34D399);">
+      <div class="card-body p-3 text-center">
+        <div style="font-size:2rem;font-weight:700;">{{ nb_avec }}</div>
+        <div style="font-size:12px;opacity:.85;">Avec accès actif</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 text-white h-100" style="background:linear-gradient(135deg,#9CA3AF,#6B7280);">
+      <div class="card-body p-3 text-center">
+        <div style="font-size:2rem;font-weight:700;">{{ nb_sans }}</div>
+        <div style="font-size:12px;opacity:.85;">Sans accès</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 text-white h-100" style="background:linear-gradient(135deg,#D97706,#F59E0B);">
+      <div class="card-body p-3 text-center">
+        <div style="font-size:2rem;font-weight:700;">{{ nb_sans_email }}</div>
+        <div style="font-size:12px;opacity:.85;">Sans email</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Filtres ──────────────────────────────────────────────────────────────── #}
+<div class="d-flex gap-2 flex-wrap mb-3">
+  <a href="?filtre=tous"
+     class="btn btn-outline-secondary filter-btn {% if filtre == 'tous' %}active{% endif %}">
+    Toutes ({{ nb_total }})
+  </a>
+  <a href="?filtre=avec_acces"
+     class="btn btn-outline-success filter-btn {% if filtre == 'avec_acces' %}active{% endif %}">
+    Avec accès ({{ nb_avec }})
+  </a>
+  <a href="?filtre=sans_acces"
+     class="btn btn-outline-secondary filter-btn {% if filtre == 'sans_acces' %}active{% endif %}">
+    Sans accès ({{ nb_sans }})
+  </a>
+  <a href="?filtre=sans_email"
+     class="btn btn-outline-warning filter-btn {% if filtre == 'sans_email' %}active{% endif %}">
+    Sans email ({{ nb_sans_email }})
+  </a>
+</div>
+
+{# ── Table ────────────────────────────────────────────────────────────────── #}
+<div class="card shadow-sm border-0">
+  <div class="card-header d-flex align-items-center"
+       style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+    <span>Loges — {{ loges_data|length }} résultat{{ loges_data|length|pluralize }}</span>
+  </div>
+
+  {% if loges_data %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead style="background:#F8FAFC;font-size:12px;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;">
+        <tr>
+          <th class="ps-4 py-3">Loge</th>
+          <th class="py-3">Email</th>
+          <th class="py-3">Statut</th>
+          <th class="py-3">Lien portail</th>
+          <th class="py-3 text-end pe-4">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in loges_data %}
+        <tr>
+          {# Loge #}
+          <td class="ps-4">
+            <div class="fw-semibold" style="color:#0F2137;font-size:14px;">{{ item.loge.nom }}</div>
+            {% if item.loge.abreviation %}
+            <div class="text-muted" style="font-size:11px;">{{ item.loge.abreviation }}{% if item.loge.obedience %} · {{ item.loge.obedience }}{% endif %}</div>
+            {% endif %}
+          </td>
+
+          {# Email #}
+          <td>
+            {% if item.loge.email %}
+              <a href="mailto:{{ item.loge.email }}" class="text-decoration-none small text-muted">
+                {{ item.loge.email }}
+              </a>
+            {% else %}
+              <span class="badge bg-warning text-dark" style="font-size:10px;">Aucun email</span>
+            {% endif %}
+          </td>
+
+          {# Statut #}
+          <td>
+            {% if item.demande %}
+              <span class="badge" style="background:#D1FAE5;color:#065F46;font-size:11px;padding:5px 10px;border-radius:20px;">
+                ✅ Actif
+              </span>
+            {% else %}
+              <span class="badge" style="background:#F3F4F6;color:#6B7280;font-size:11px;padding:5px 10px;border-radius:20px;">
+                — Aucun accès
+              </span>
+            {% endif %}
+          </td>
+
+          {# Lien portail #}
+          <td>
+            {% if item.lien %}
+            <div class="d-flex align-items-center gap-2">
+              <a href="{{ item.lien }}" target="_blank"
+                 class="lien-portail text-decoration-none text-muted font-monospace"
+                 title="{{ item.lien }}">
+                {{ item.lien }}
+              </a>
+              <button type="button"
+                      class="btn btn-link btn-sm p-0 text-secondary"
+                      title="Copier le lien"
+                      onclick="navigator.clipboard.writeText('{{ item.lien }}');this.textContent='✓';setTimeout(()=>this.textContent='📋',1500)">
+                📋
+              </button>
+            </div>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+
+          {# Actions #}
+          <td class="text-end pe-4">
+            <div class="d-flex gap-2 justify-content-end flex-wrap">
+              {% if item.demande %}
+                {# Voir le portail #}
+                <a href="{{ item.lien }}" target="_blank"
+                   class="btn btn-outline-secondary btn-sm" style="font-size:12px;">
+                  🔗 Voir portail
+                </a>
+              {% else %}
+                {# Créer l'accès #}
+                <form method="post" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="action"  value="creer_acces">
+                  <input type="hidden" name="loge_id" value="{{ item.loge.pk }}">
+                  <button type="submit" class="btn btn-primary btn-sm" style="font-size:12px;">
+                    ➕ Créer l'accès
+                  </button>
+                </form>
+              {% endif %}
+
+              {# Envoyer le lien #}
+              {% if item.demande and item.loge.email %}
+                <form method="post" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="action"  value="envoyer_lien">
+                  <input type="hidden" name="loge_id" value="{{ item.loge.pk }}">
+                  <button type="submit" class="btn btn-outline-primary btn-sm" style="font-size:12px;"
+                          onclick="return confirm('Envoyer le lien à {{ item.loge.email }} ?')">
+                    ✉️ Envoyer
+                  </button>
+                </form>
+              {% elif item.demande and not item.loge.email %}
+                <span class="text-muted small" title="Email manquant">✉️ —</span>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-5 text-muted">
+    <div style="font-size:2.5rem;">🔑</div>
+    <p class="mt-2">Aucune loge dans ce filtre.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

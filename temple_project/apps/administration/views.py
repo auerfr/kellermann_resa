@@ -2466,3 +2466,102 @@ def journal(request):
         'f_user':            f_user,
         'total':             qs.count(),
     })
+
+
+# ── Gestion des accès portail ─────────────────────────────────────────────────
+
+@login_required
+def portail_acces_admin(request):
+    if request.method == 'POST':
+        action  = request.POST.get('action')
+        loge_id = request.POST.get('loge_id')
+        loge    = get_object_or_404(Loge, pk=loge_id)
+
+        if action == 'creer_acces':
+            existant = DemandeAccesPortail.objects.filter(loge=loge, statut='validee').first()
+            if existant:
+                messages.info(request, f"Un accès actif existe déjà pour {loge.nom}.")
+            else:
+                DemandeAccesPortail.objects.create(
+                    loge=loge,
+                    nom_venerable='Administration',
+                    email=loge.email or '',
+                    statut='validee',
+                )
+                messages.success(request, f"Accès portail créé pour {loge.nom}.")
+                log_evenement('creation_acces_portail',
+                    f"Accès portail créé administrativement pour : {loge.nom}",
+                    request=request, objet=loge)
+
+        elif action == 'envoyer_lien':
+            demande = DemandeAccesPortail.objects.filter(loge=loge, statut='validee').first()
+            if not demande:
+                messages.error(request, f"Aucun accès actif pour {loge.nom} — créez-le d'abord.")
+            elif not loge.email:
+                messages.error(request, f"La loge {loge.nom} n'a pas d'email renseigné.")
+            else:
+                lien = request.build_absolute_uri(f'/reservations/portail/{demande.token}/')
+                send_mail_kellermann(
+                    subject=f"[Kellermann] Votre lien d'accès au portail loge",
+                    message=(
+                        f"Bonjour,\n\n"
+                        f"Vous trouverez ci-dessous le lien personnel d'accès au portail loge "
+                        f"des Temples Kellermann pour la loge {loge.nom}.\n\n"
+                        f"Lien d'accès :\n{lien}\n\n"
+                        f"Ce lien est personnel et unique à votre loge. "
+                        f"Il vous permet de consulter vos réservations, votre calendrier de saison "
+                        f"et de valider vos tenues.\n\n"
+                        f"En cas de problème, contactez l'administration.\n\n"
+                        f"Fraternellement,\nL'administration des Temples Kellermann"
+                    ),
+                    recipient_list=[loge.email],
+                )
+                messages.success(request, f"Lien envoyé à {loge.email}.")
+                log_evenement('envoi_lien_portail',
+                    f"Lien portail envoyé à {loge.email} pour : {loge.nom}",
+                    request=request, objet=loge)
+
+        return redirect('administration:portail_acces_admin')
+
+    # ── GET — liste ───────────────────────────────────────────────────────────
+    from django.db.models import Prefetch
+
+    loges = Loge.objects.filter(actif=True).order_by('nom').prefetch_related(
+        Prefetch(
+            'demandes_portail',
+            queryset=DemandeAccesPortail.objects.filter(statut='validee').order_by('-created_at'),
+            to_attr='acces_valides',
+        )
+    )
+
+    all_data = []
+    for loge in loges:
+        demande = loge.acces_valides[0] if loge.acces_valides else None
+        all_data.append({
+            'loge':    loge,
+            'demande': demande,
+            'lien':    request.build_absolute_uri(f'/reservations/portail/{demande.token}/') if demande else None,
+        })
+
+    nb_avec      = sum(1 for d in all_data if d['demande'])
+    nb_sans      = len(all_data) - nb_avec
+    nb_sans_email = sum(1 for d in all_data if not d['loge'].email)
+
+    filtre = request.GET.get('filtre', 'tous')
+    if filtre == 'avec_acces':
+        loges_data = [d for d in all_data if d['demande']]
+    elif filtre == 'sans_acces':
+        loges_data = [d for d in all_data if not d['demande']]
+    elif filtre == 'sans_email':
+        loges_data = [d for d in all_data if not d['loge'].email]
+    else:
+        loges_data = all_data
+
+    return render(request, 'administration/portail_acces.html', {
+        'loges_data':    loges_data,
+        'filtre':        filtre,
+        'nb_total':      len(all_data),
+        'nb_avec':       nb_avec,
+        'nb_sans':       nb_sans,
+        'nb_sans_email': nb_sans_email,
+    })

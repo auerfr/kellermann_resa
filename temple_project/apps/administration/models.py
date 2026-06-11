@@ -37,6 +37,8 @@ class JournalEvenement(models.Model):
         ('import_excel',                 'Import Excel'),
         ('backup_base',                  'Backup base de données'),
         ('creation_reservation_directe', 'Création réservation directe'),
+        ('creation_acces_portail',       'Création accès portail'),
+        ('envoi_lien_portail',           'Envoi lien portail'),
     ]
 
     OBJET_TYPE_CHOICES = [
