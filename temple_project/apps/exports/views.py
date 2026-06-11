@@ -731,7 +731,6 @@ def _pdf_annuel(annee, titre, nom_fichier, base_pagesize, ncols, temple_pk=None,
 
 # ── Vues admin ────────────────────────────────────────────────────────────────
 
-@login_required
 def planning_pdf_grille_mensuelle(request):
     today    = date.today()
     mois_p   = int(request.GET.get('mois',  today.month))
@@ -751,7 +750,6 @@ def planning_pdf_grille_mensuelle(request):
     )
 
 
-@login_required
 def planning_pdf_annuel_a3(request):
     from reportlab.lib.pagesizes import A3
     today    = date.today()
@@ -773,7 +771,6 @@ def planning_pdf_annuel_a3(request):
     )
 
 
-@login_required
 def planning_pdf_annuel_a4(request):
     from reportlab.lib.pagesizes import A4
     today    = date.today()
