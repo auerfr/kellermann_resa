@@ -622,7 +622,7 @@ def _pdf_grille_mensuelle(annee, mois, titre, nom_fichier, temple_pk=None, loge=
     doc.build([Paragraph(titre, sty_title), Spacer(1, SPACE_H), tbl])
     buf.seek(0)
     response = HttpResponse(buf, content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="{nom_fichier}.pdf"'
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.pdf"'
     return response
 
 
@@ -725,7 +725,7 @@ def _pdf_annuel(annee, titre, nom_fichier, base_pagesize, ncols, temple_pk=None,
     doc.build(story)
     buf.seek(0)
     response = HttpResponse(buf, content_type='application/pdf')
-    response['Content-Disposition'] = f'inline; filename="{nom_fichier}.pdf"'
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}.pdf"'
     return response
 
 
