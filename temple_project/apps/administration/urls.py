@@ -38,4 +38,6 @@ urlpatterns = [
     path("annonces/<int:pk>/modifier/", views.annonce_form, name="annonce_modifier"),
     path("annonces/<int:pk>/basculer/", views.annonce_toggle, name="annonce_toggle"),
     path("annonces/<int:pk>/supprimer/", views.annonce_supprimer, name="annonce_supprimer"),
+    path("facturation/", views.facturation, name="facturation"),
+    path("facturation/export/", views.facturation_export_excel, name="facturation_export"),
 ]

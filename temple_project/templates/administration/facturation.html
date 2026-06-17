@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Facturation{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 temple-title mb-1">💶 Facturation</h1>
+    <p class="text-muted mb-0">Récapitulatif des réservations exceptionnelles et congrès (validées) pour le trésorier.</p>
+  </div>
+  <a href="/admin/" class="btn btn-sm btn-outline-secondary">← Tableau de bord</a>
+</div>
+
+{# ── Tarifs en vigueur (modifiables) ── #}
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;cursor:pointer;"
+       data-bs-toggle="collapse" data-bs-target="#bloc-tarifs">
+    <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">⚙️ Tarifs en vigueur</span>
+    <span class="small" style="color:#C8A84B;">Modifier ▾</span>
+  </div>
+  <div class="collapse" id="bloc-tarifs">
+    <div class="card-body">
+      <p class="text-muted small">À ajuster après un vote en assemblée générale. Les nouveaux tarifs ne s'appliquent qu'aux réservations validées <em>après</em> la modification (les anciennes gardent leur prix).</p>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="maj_tarifs">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Exceptionnelle sans agapes (€)</label>
+            <input type="number" step="0.01" min="0" name="tarif_exc_sans_agapes" class="form-control" value="{{ params.tarif_exc_sans_agapes }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Exceptionnelle avec agapes (€)</label>
+            <input type="number" step="0.01" min="0" name="tarif_exc_avec_agapes" class="form-control" value="{{ params.tarif_exc_avec_agapes }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Congrès, par jour (€)</label>
+            <input type="number" step="0.01" min="0" name="tarif_congres_jour" class="form-control" value="{{ params.tarif_congres_jour }}">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-temple mt-3">💾 Enregistrer les tarifs</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+{# ── Filtre de période + export ── #}
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Du</label>
+        <input type="date" name="date_debut" class="form-control" value="{{ date_debut|date:'Y-m-d' }}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-semibold">Au</label>
+        <input type="date" name="date_fin" class="form-control" value="{{ date_fin|date:'Y-m-d' }}">
+      </div>
+      <div class="col-md-4 d-flex gap-2">
+        <button type="submit" class="btn btn-temple">🔎 Afficher</button>
+        <a class="btn btn-success" href="{% url 'administration:facturation_export' %}?date_debut={{ date_debut|date:'Y-m-d' }}&amp;date_fin={{ date_fin|date:'Y-m-d' }}">⬇ Excel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Total global ── #}
+<div class="alert alert-info d-flex justify-content-between align-items-center">
+  <span>{{ nb_resa }} réservation(s) facturable(s) sur la période</span>
+  <strong style="font-size:1.2rem;">Total : {{ total_global|floatformat:2 }} €</strong>
+</div>
+
+{# ── Récap par loge ── #}
+{% for grp in groupes %}
+<div class="card shadow-sm border-0 mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;">
+    <span style="color:#C8A84B;font-weight:600;">{{ grp.nom }}</span>
+    <span class="badge" style="background:#C8A84B;color:#0F2137;">{{ grp.total|floatformat:2 }} €</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0 align-middle">
+      <thead>
+        <tr><th>Date</th><th>Type</th><th>Agapes</th><th>Temple</th><th class="text-end">Tarif</th></tr>
+      </thead>
+      <tbody>
+        {% for l in grp.lignes %}
+        <tr>
+          <td data-label="Date">{{ l.date|date:"d/m/Y" }}</td>
+          <td data-label="Type">{{ l.type }}</td>
+          <td data-label="Agapes">{% if l.agapes %}Oui{% else %}Non{% endif %}</td>
+          <td data-label="Temple">{{ l.temple }}</td>
+          <td data-label="Tarif" class="text-end">{{ l.tarif|floatformat:2 }} €</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% empty %}
+<div class="text-center text-muted p-4">Aucune réservation facturable sur cette période.</div>
+{% endfor %}
+{% endblock %}

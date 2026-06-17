@@ -14,6 +14,17 @@ class Parametres(models.Model):
     smtp_password = models.CharField(max_length=255, blank=True)
     smtp_tls = models.BooleanField(default=True)
 
+    # ── Tarifs de facturation des réservations exceptionnelles ────────────────
+    tarif_exc_sans_agapes = models.DecimalField(
+        max_digits=8, decimal_places=2, default=100,
+        help_text="Occupation exceptionnelle sans agapes (€)")
+    tarif_exc_avec_agapes = models.DecimalField(
+        max_digits=8, decimal_places=2, default=200,
+        help_text="Occupation exceptionnelle avec agapes (€)")
+    tarif_congres_jour = models.DecimalField(
+        max_digits=8, decimal_places=2, default=300,
+        help_text="Congrès / session régionale, par jour (€)")
+
     class Meta:
         verbose_name = "Paramètres"
         verbose_name_plural = "Paramètres"

@@ -46,6 +46,20 @@ def tableau_de_bord(request):
     return render(request, 'administration/tableau_de_bord.html', context)
 
 
+# ── Tarification ──────────────────────────────────────────────────────────────
+
+def tarif_reservation(resa, params=None):
+    """Tarif théorique d'une réservation selon son type et les agapes."""
+    from decimal import Decimal
+    if params is None:
+        params = Parametres.get_instance()
+    if resa.type_reservation == 'congres':
+        return params.tarif_congres_jour
+    if resa.type_reservation == 'exceptionnelle':
+        return params.tarif_exc_avec_agapes if resa.besoin_agapes else params.tarif_exc_sans_agapes
+    return Decimal('0')
+
+
 # ── Validation réservations ───────────────────────────────────────────────────
 
 @login_required
@@ -70,6 +84,9 @@ def valider_reservation(request, pk):
             return redirect('administration:tableau_de_bord')
 
         resa.statut = 'validee' if action == 'valider' else 'refusee'
+        if action == 'valider':
+            # Fige le tarif en vigueur au moment de la validation
+            resa.tarif = tarif_reservation(resa)
         resa.save()
 
         _envoyer_email_decision(resa, action, commentaire_admin)
@@ -2564,6 +2581,8 @@ def reservation_directe(request):
                 email_demandeur=email_dem,
                 commentaire=note,
             )
+            resa.tarif = tarif_reservation(resa)
+            resa.save(update_fields=['tarif'])
             messages.success(request, "Réservation temple créée et validée.")
             log_evenement('creation_reservation_directe',
                 f"Réservation directe temple : {loge or org} — {date_r:%d/%m/%Y} {hd}–{hf} ({temple})",
@@ -2856,3 +2875,141 @@ def annonce_supprimer(request, pk):
         messages.success(request, "Annonce supprimée.")
         return redirect('administration:annonces_liste')
     return render(request, 'administration/annonce_supprimer.html', {'annonce': annonce})
+
+
+# ── Facturation (trésorier) ───────────────────────────────────────────────────
+
+def _periode_facturation(request):
+    """Période demandée (GET date_debut/date_fin), défaut = saison courante."""
+    today = date.today()
+    annee = today.year if today.month >= 9 else today.year - 1
+    defaut_debut, defaut_fin = date(annee, 9, 1), date(annee + 1, 6, 30)
+
+    def _p(val, defaut):
+        try:
+            return date.fromisoformat(val)
+        except (ValueError, TypeError):
+            return defaut
+    return _p(request.GET.get('date_debut'), defaut_debut), _p(request.GET.get('date_fin'), defaut_fin)
+
+
+def _facturation_data(date_debut, date_fin, params):
+    """Réservations facturables (exceptionnelles + congrès, validées) groupées par loge."""
+    from decimal import Decimal
+    qs = Reservation.objects.filter(
+        type_reservation__in=['exceptionnelle', 'congres'],
+        statut='validee',
+        date__gte=date_debut, date__lte=date_fin,
+    ).select_related('loge', 'temple').order_by('date')
+
+    groupes = {}
+    total = Decimal('0')
+    nb = 0
+    for r in qs:
+        tarif = r.tarif if r.tarif is not None else tarif_reservation(r, params)
+        nom = r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur or '—')
+        ligne = {
+            'date': r.date, 'temple': str(r.temple) if r.temple else '',
+            'type': r.get_type_reservation_display(), 'type_code': r.type_reservation,
+            'agapes': r.besoin_agapes, 'tarif': tarif,
+        }
+        g = groupes.setdefault(nom, {'nom': nom, 'lignes': [], 'total': Decimal('0')})
+        g['lignes'].append(ligne)
+        g['total'] += tarif
+        total += tarif
+        nb += 1
+    groupes_list = sorted(groupes.values(), key=lambda d: d['nom'].lower())
+    return groupes_list, total, nb
+
+
+@login_required
+def facturation(request):
+    from decimal import Decimal, InvalidOperation
+    params = Parametres.get_instance()
+
+    if request.method == 'POST' and request.POST.get('action') == 'maj_tarifs':
+        try:
+            params.tarif_exc_sans_agapes = Decimal(request.POST.get('tarif_exc_sans_agapes') or '0')
+            params.tarif_exc_avec_agapes = Decimal(request.POST.get('tarif_exc_avec_agapes') or '0')
+            params.tarif_congres_jour    = Decimal(request.POST.get('tarif_congres_jour') or '0')
+            params.save(update_fields=['tarif_exc_sans_agapes', 'tarif_exc_avec_agapes', 'tarif_congres_jour'])
+            messages.success(request, "Tarifs mis à jour. Ils s'appliqueront aux prochaines validations.")
+        except (InvalidOperation, ValueError):
+            messages.error(request, "Tarifs invalides : saisissez des montants numériques.")
+        qs = request.META.get('QUERY_STRING', '')
+        return redirect(f"{request.path}?{qs}" if qs else request.path)
+
+    date_debut, date_fin = _periode_facturation(request)
+    groupes, total, nb = _facturation_data(date_debut, date_fin, params)
+
+    return render(request, 'administration/facturation.html', {
+        'params': params,
+        'date_debut': date_debut, 'date_fin': date_fin,
+        'groupes': groupes, 'total_global': total, 'nb_resa': nb,
+    })
+
+
+@login_required
+def facturation_export_excel(request):
+    params = Parametres.get_instance()
+    date_debut, date_fin = _periode_facturation(request)
+    groupes, total, nb = _facturation_data(date_debut, date_fin, params)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Facturation"
+    navy = Font(bold=True, color="FFFFFF")
+    navy_fill = PatternFill("solid", fgColor="0F2137")
+    loge_fill = PatternFill("solid", fgColor="1E3A5F")
+    total_fill = PatternFill("solid", fgColor="DBEAFE")
+    bold = Font(bold=True)
+    euro = '#,##0.00\\ €'
+
+    ws.append([f"Récapitulatif de facturation — {date_debut:%d/%m/%Y} au {date_fin:%d/%m/%Y}"])
+    ws.merge_cells('A1:E1')
+    ws['A1'].font = Font(bold=True, size=13, color="0F2137")
+    ws.append([])
+
+    headers = ["Date", "Type", "Agapes", "Temple", "Tarif (€)"]
+    for grp in groupes:
+        ws.append([grp['nom']])
+        r = ws.max_row
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
+        ws.cell(r, 1).font = navy
+        ws.cell(r, 1).fill = loge_fill
+        ws.append(headers)
+        hr = ws.max_row
+        for c in range(1, 6):
+            ws.cell(hr, c).font = navy
+            ws.cell(hr, c).fill = navy_fill
+        for l in grp['lignes']:
+            ws.append([
+                l['date'].strftime('%d/%m/%Y'), l['type'],
+                "Oui" if l['agapes'] else "Non", l['temple'], float(l['tarif']),
+            ])
+            ws.cell(ws.max_row, 5).number_format = euro
+        ws.append(["", "", "", "Sous-total", float(grp['total'])])
+        sr = ws.max_row
+        ws.cell(sr, 4).font = bold
+        ws.cell(sr, 5).font = bold
+        ws.cell(sr, 5).number_format = euro
+        ws.cell(sr, 5).fill = total_fill
+        ws.append([])
+
+    ws.append(["", "", "", "TOTAL GÉNÉRAL", float(total)])
+    tr = ws.max_row
+    ws.cell(tr, 4).font = Font(bold=True, size=12)
+    ws.cell(tr, 5).font = Font(bold=True, size=12)
+    ws.cell(tr, 5).number_format = euro
+    ws.cell(tr, 5).fill = total_fill
+
+    widths = [14, 28, 9, 20, 14]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = (
+        f'attachment; filename="facturation_{date_debut}_{date_fin}.xlsx"')
+    wb.save(response)
+    return response
