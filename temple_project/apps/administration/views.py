@@ -82,6 +82,9 @@ def tarif_reservation(resa, params=None):
         if resa.date_fin and resa.date_fin > resa.date:
             jours = (resa.date_fin - resa.date).days
         return params.tarif_congres_jour * jours
+    # Tenue funèbre : tarif spécifique (week-end / vacances)
+    if resa.sous_type == 'funebre':
+        return params.tarif_funebre
     return params.tarif_exc_avec_agapes if resa.besoin_agapes else params.tarif_exc_sans_agapes
 
 
@@ -3180,10 +3183,11 @@ def facturation(request):
             params.tarif_exc_sans_agapes = Decimal(request.POST.get('tarif_exc_sans_agapes') or '0')
             params.tarif_exc_avec_agapes = Decimal(request.POST.get('tarif_exc_avec_agapes') or '0')
             params.tarif_congres_jour    = Decimal(request.POST.get('tarif_congres_jour') or '0')
+            params.tarif_funebre         = Decimal(request.POST.get('tarif_funebre') or '0')
             de = (request.POST.get('tarif_date_effet') or '').strip()
             params.tarif_date_effet = date.fromisoformat(de) if de else None
             params.save(update_fields=['tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
-                                       'tarif_congres_jour', 'tarif_date_effet'])
+                                       'tarif_congres_jour', 'tarif_funebre', 'tarif_date_effet'])
             messages.success(request, "Tarifs mis à jour. Ils ne s'appliquent pas aux dates antérieures à leur entrée en vigueur.")
         except (InvalidOperation, ValueError):
             messages.error(request, "Valeurs invalides : vérifiez les montants et la date.")

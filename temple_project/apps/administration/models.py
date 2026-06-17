@@ -25,6 +25,9 @@ class Parametres(models.Model):
     tarif_congres_jour = models.DecimalField(
         max_digits=8, decimal_places=2, default=300,
         help_text="Congrès / session régionale, par jour (€)")
+    tarif_funebre = models.DecimalField(
+        max_digits=8, decimal_places=2, default=100,
+        help_text="Tenue funèbre exceptionnelle (week-end / vacances) (€)")
     tarif_date_effet = models.DateField(
         null=True, blank=True, default=date(2026, 6, 12),
         help_text="Date d'entrée en vigueur des tarifs (vote AG). Les occupations "

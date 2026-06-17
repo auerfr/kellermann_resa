@@ -33,6 +33,10 @@
         <div class="fw-bold temple-title" style="font-size:1.15rem;">{{ params.tarif_congres_jour|floatformat:0 }} €</div>
       </div>
       <div class="col-6 col-md-3">
+        <div class="small text-muted text-uppercase">Funèbre</div>
+        <div class="fw-bold temple-title" style="font-size:1.15rem;">{{ params.tarif_funebre|floatformat:0 }} €</div>
+      </div>
+      <div class="col-6 col-md-3">
         <div class="small text-muted text-uppercase">En vigueur depuis</div>
         <div class="fw-bold temple-title" style="font-size:1.15rem;">{% if params.tarif_date_effet %}{{ params.tarif_date_effet|date:"d/m/Y" }}{% else %}—{% endif %}</div>
       </div>
@@ -61,6 +65,11 @@
           <div class="col-md-4">
             <label class="form-label fw-semibold">Congrès, par jour (€)</label>
             <input type="number" step="0.01" min="0" name="tarif_congres_jour" class="form-control" value="{{ params.tarif_congres_jour }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Tenue funèbre (week-end / vacances) (€)</label>
+            <input type="number" step="0.01" min="0" name="tarif_funebre" class="form-control" value="{{ params.tarif_funebre }}">
+            <div class="form-text">Tarif spécifique des tenues funèbres ; à ajuster quand il sera décidé.</div>
           </div>
         </div>
         <div class="row g-3 mt-1">
