@@ -33,36 +33,29 @@
                         </div>
                     </div>
 
-                    <div id="bloc-temple" class="mb-3">
-                        <div id="dr-temple-unique">
-                          <label class="form-label fw-semibold">{{ form.temple.label }}</label>
-                          {{ form.temple }}
-                          {% if form.temple.errors %}<div class="text-danger small">{{ form.temple.errors }}</div>{% endif %}
+                    <div id="bloc-exceptionnelle" class="mb-3" style="display:none;">
+                        <label class="form-label fw-semibold">{{ form.temple.label }}</label>
+                        {{ form.temple }}
+                        {% if form.temple.errors %}<div class="text-danger small">{{ form.temple.errors }}</div>{% endif %}
+                    </div>
+
+                    <div id="bloc-congres" class="mb-3" style="display:none;">
+                        <label class="form-label fw-semibold">{{ form.temples_congres.label }}</label>
+                        <div>
+                          {% for cb in form.temples_congres %}
+                          <div class="form-check form-check-inline">{{ cb.tag }}<label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label></div>
+                          {% endfor %}
                         </div>
-                        <div class="row g-2 mt-2">
-                          <div class="col-md-6">
-                            <label class="form-label fw-semibold">{{ form.nature.label }}</label>
-                            {{ form.nature }}
-                          </div>
-                          <div class="col-md-6" id="bloc-date-fin" style="display:none;">
-                            <label class="form-label fw-semibold">{{ form.date_fin.label }}</label>
-                            {{ form.date_fin }}
-                          </div>
+                        {% if form.temples_congres.errors %}<div class="text-danger small">{{ form.temples_congres.errors|striptags }}</div>{% endif %}
+                        <label class="form-label fw-semibold mt-3">{{ form.salles_reunion.label }}</label>
+                        <div>
+                          {% for cb in form.salles_reunion %}
+                          <div class="form-check form-check-inline">{{ cb.tag }}<label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label></div>
+                          {% endfor %}
                         </div>
-                        <div id="dr-temples-congres" class="mt-2" style="display:none;">
-                          <label class="form-label fw-semibold">{{ form.temples_congres.label }}</label>
-                          <div>
-                            {% for cb in form.temples_congres %}
-                            <div class="form-check form-check-inline">{{ cb.tag }}<label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label></div>
-                            {% endfor %}
-                          </div>
-                          {% if form.temples_congres.errors %}<div class="text-danger small">{{ form.temples_congres.errors|striptags }}</div>{% endif %}
-                          <label class="form-label fw-semibold mt-2">{{ form.salles_reunion.label }}</label>
-                          <div>
-                            {% for cb in form.salles_reunion %}
-                            <div class="form-check form-check-inline">{{ cb.tag }}<label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label></div>
-                            {% endfor %}
-                          </div>
+                        <div class="mt-3" style="max-width:260px;">
+                          <label class="form-label fw-semibold">{{ form.date_fin.label }}</label>
+                          {{ form.date_fin }}
                         </div>
                     </div>
 
@@ -129,7 +122,35 @@
 
                     {# ── Résultat du contrôle de disponibilité ── #}
                     {% if dispo_verifiee %}
-                      {% if conflits %}
+                      {% if grille_congres %}
+                      <div class="alert {% if grille_congres.nb_conflits %}alert-warning{% else %}alert-success{% endif %}">
+                        <strong>Disponibilité du congrès</strong> —
+                        {{ creneau.date|date:"d/m/Y" }}{% if creneau.date_fin %} → {{ creneau.date_fin|date:"d/m/Y" }}{% endif %},
+                        {{ creneau.hd }}–{{ creneau.hf }}
+                        <div class="table-responsive mt-2">
+                          <table class="table table-sm bg-white mb-0 align-middle">
+                            <thead><tr><th>Date</th>{% for t in grille_congres.temples %}<th>{{ t }}</th>{% endfor %}</tr></thead>
+                            <tbody>
+                              {% for j in grille_congres.jours %}
+                              <tr>
+                                <td class="text-nowrap">{{ j.date|date:"D d/m/Y" }}</td>
+                                {% for c in j.cells %}
+                                <td>{% if c.libre %}<span class="text-success">✅ libre</span>{% else %}<span class="text-danger">⛔ {{ c.detail }}</span>{% endif %}</td>
+                                {% endfor %}
+                              </tr>
+                              {% endfor %}
+                            </tbody>
+                          </table>
+                        </div>
+                        {% if grille_congres.nb_conflits %}<div class="small mt-2">Certaines dates/temples sont occupés — vous pouvez ajuster les dates, ou forcer.</div>{% else %}<div class="small mt-2">Tous les temples sont libres sur toute la période.</div>{% endif %}
+                      </div>
+                      {% if grille_congres.nb_conflits %}
+                      <div class="form-check mb-3">
+                        <input type="checkbox" name="forcer" id="id_forcer" class="form-check-input">
+                        <label class="form-check-label text-danger" for="id_forcer">Forcer malgré les conflits (passe-droit admin)</label>
+                      </div>
+                      {% endif %}
+                      {% elif conflits %}
                       <div class="alert alert-danger">
                         <strong>⛔ Créneau indisponible</strong> — {{ creneau.ressource }},
                         le {{ creneau.date|date:"d/m/Y" }} de {{ creneau.hd }} à {{ creneau.hf }} :
@@ -190,28 +211,19 @@
 jQuery(function ($) {
     var $sel = $('#id_type_resa');
     var blocs = {
-        temple:  '#bloc-temple',
-        reunion: '#bloc-reunion',
-        cabinet: '#bloc-cabinet',
-        agapes:  '#bloc-agapes',
+        exceptionnelle: '#bloc-exceptionnelle',
+        congres:        '#bloc-congres',
+        reunion:        '#bloc-reunion',
+        cabinet:        '#bloc-cabinet',
+        agapes:         '#bloc-agapes',
     };
-    var $nature = $('#id_nature');
-    function toggleCongres() {
-        var c = $nature.val() === 'congres';
-        $('#bloc-date-fin').toggle(c);
-        $('#dr-temple-unique').toggle(!c);
-        $('#dr-temples-congres').toggle(c);
-    }
     function toggle() {
         var v = $sel.val();
         $.each(blocs, function (type, sel) { $(sel).toggle(type === v); });
-        if (v === 'temple') toggleCongres();
     }
     // .on('change') capte aussi l'événement déclenché par Select2
     $sel.on('change', toggle);
-    $nature.on('change', toggleCongres);
     toggle();
-    toggleCongres();
 
     // Sélection d'une alternative proposée → on l'applique et on revérifie
     $('.alt-btn').on('click', function () {

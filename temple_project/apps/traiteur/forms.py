@@ -35,10 +35,11 @@ HORAIRES_GROUPED = [
 class ReservationDirecteForm(forms.Form):
     """Réservation directe admin : temple, salle de réunion, cabinet ou agapes (statut validée)."""
     TYPE_CHOICES = [
-        ("temple",  "Temple"),
-        ("reunion", "Salle de réunion"),
-        ("cabinet", "Cabinet de réflexion"),
-        ("agapes",  "Salle d'agapes / Banquet"),
+        ("exceptionnelle", "Tenue exceptionnelle (temple)"),
+        ("congres",        "Congrès / session régionale"),
+        ("reunion",        "Salle de réunion"),
+        ("cabinet",        "Cabinet de réflexion"),
+        ("agapes",         "Salle d'agapes / Banquet"),
     ]
 
     # Champ de salle correspondant à chaque type (le cabinet est géré par quantité)
@@ -66,14 +67,6 @@ class ReservationDirecteForm(forms.Form):
         required=False, label="Temple",
         widget=forms.Select(attrs={"class": "form-select"}),
         empty_label="— Choisir un temple —",
-    )
-    nature = forms.ChoiceField(
-        choices=[
-            ("exceptionnelle", "Tenue exceptionnelle"),
-            ("congres",        "Congrès / session régionale"),
-        ],
-        required=False, initial="exceptionnelle", label="Nature",
-        widget=forms.Select(attrs={"class": "form-select no-select2"}),
     )
     date_fin = forms.DateField(
         required=False, label="Date de fin (congrès)",
@@ -140,21 +133,20 @@ class ReservationDirecteForm(forms.Form):
     def clean(self):
         cleaned = super().clean()
         type_resa = cleaned.get("type_resa")
-        if type_resa == "temple":
-            if cleaned.get("nature") == "congres":
-                if not cleaned.get("temples_congres"):
-                    self.add_error("temples_congres", "Sélectionnez au moins un temple pour le congrès.")
-            elif not cleaned.get("temple"):
+        if type_resa == "exceptionnelle":
+            if not cleaned.get("temple"):
                 self.add_error("temple", "Veuillez choisir un temple.")
+        elif type_resa == "congres":
+            if not cleaned.get("temples_congres"):
+                self.add_error("temples_congres", "Sélectionnez au moins un temple pour le congrès.")
         else:
             champ = self.SALLE_FIELDS.get(type_resa)
             if champ and not cleaned.get(champ):
                 self.add_error(champ, "Veuillez choisir une salle.")
         hd = cleaned.get("heure_debut")
         hf = cleaned.get("heure_fin")
-        is_congres = (type_resa == "temple" and cleaned.get("nature") == "congres")
         # Un congrès peut s'étendre sur plusieurs jours (fin < début côté horaire)
-        if hd and hf and hf <= hd and not is_congres:
+        if hd and hf and hf <= hd and type_resa != "congres":
             self.add_error("heure_fin", "L'heure de fin doit être après l'heure de début.")
         return cleaned
 

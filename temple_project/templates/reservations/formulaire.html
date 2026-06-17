@@ -30,6 +30,10 @@
       <div class="card-body p-4">
         <form method="post" novalidate>
           {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nature de la demande</label>
+            {{ form.type_reservation }}
+          </div>
           <div class="row g-3 mb-3">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Votre loge / organisation</label>
@@ -80,12 +84,8 @@
                 </div>
                 {% endfor %}
               </div>
-              <div class="form-text">Les cabinets de réflexion restent disponibles plus bas si besoin (rare).</div>
+              <div class="form-text">Un congrès ne nécessite pas de cabinet de réflexion.</div>
             </div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Nature de la demande</label>
-            {{ form.type_reservation }}
           </div>
           <div class="row g-3 mb-3">
             <div class="col-md-4">
@@ -114,7 +114,7 @@
               <label class="form-label fw-semibold">Type de tenue</label>
               {{ form.sous_type }}
             </div>
-            <div class="col-md-6">
+            <div class="col-md-6" id="bloc-cabinets-demande">
               <label class="form-label fw-semibold">Cabinets de reflexion</label>
               {{ form.cabinets }}
               <p id="cabinets-count" class="text-muted small mt-1">0 cabinet(s) sélectionné(s)</p>
@@ -298,11 +298,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const blocDateFin = document.getElementById('bloc-date-fin');
     const blocTempleUnique = document.getElementById('bloc-temple-unique');
     const blocCongres = document.getElementById('bloc-congres');
+    const blocCabinetsDemande = document.getElementById('bloc-cabinets-demande');
     function toggleCongres() {
         const congres = typeSelect && typeSelect.value === 'congres';
         if (blocDateFin) blocDateFin.style.display = congres ? '' : 'none';
         if (blocTempleUnique) blocTempleUnique.style.display = congres ? 'none' : '';
         if (blocCongres) blocCongres.style.display = congres ? '' : 'none';
+        if (blocCabinetsDemande) blocCabinetsDemande.style.display = congres ? 'none' : '';
     }
     if (typeSelect) typeSelect.addEventListener('change', toggleCongres);
     toggleCongres();

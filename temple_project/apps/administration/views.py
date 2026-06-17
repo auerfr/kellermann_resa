@@ -2428,31 +2428,41 @@ def _cabinets_libres(date_r, hd, hf):
     return libres
 
 
-def _conflits_congres(temples, date_debut, date_fin, hd, hf):
-    """Conflits sur l'ensemble des temples et des jours d'un congrès."""
+def _grille_congres(temples, date_debut, date_fin, hd, hf):
+    """Grille de disponibilité d'un congrès : pour chaque jour et chaque temple,
+    libre ou occupé (avec détail). Permet de voir les dispos selon les dates."""
     from datetime import timedelta
-    conflits = []
     hd_t = _to_time(hd)
     hf_t = _to_time(hf)
     fin = date_fin or date_debut
-    jours = []
+    jours_list = []
     j = date_debut
     while j <= fin:
-        jours.append(j)
+        jours_list.append(j)
         j += timedelta(days=1)
-    for tp in temples:
-        for jour in jours:
+
+    grille = []
+    nb_conflits = 0
+    for jour in jours_list:
+        cells = []
+        for tp in temples:
+            occup = []
             for r in Reservation.objects.filter(
                 temple=tp, date=jour, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
                 statut__in=['attente', 'validee'],
             ).select_related('loge'):
                 qui = r.loge or r.nom_organisation or r.nom_demandeur
-                conflits.append(f"{tp} — {jour:%d/%m/%Y} {r.heure_debut:%H:%M}–{r.heure_fin:%H:%M} : {qui}")
+                occup.append(f"{r.heure_debut:%H:%M}–{r.heure_fin:%H:%M} {qui}")
             for i in Indisponibilite.objects.filter(
                 temples=tp, date_debut__lte=jour, date_fin__gte=jour,
             ):
-                conflits.append(f"{tp} — {jour:%d/%m/%Y} indisponibilité : {i.motif}")
-    return conflits
+                occup.append(f"indispo : {i.motif}")
+            libre = not occup
+            if not libre:
+                nb_conflits += 1
+            cells.append({'temple': str(tp), 'libre': libre, 'detail': ' ; '.join(occup)})
+        grille.append({'date': jour, 'cells': cells})
+    return {'temples': [str(t) for t in temples], 'jours': grille, 'nb_conflits': nb_conflits}
 
 
 def _analyser_disponibilite(type_resa, ressource, date_r, hd, hf):
@@ -2583,23 +2593,24 @@ def reservation_directe(request):
                 request=request, objet=crees[0] if crees else None)
             return redirect("administration:tableau_de_bord")
 
-        # ── Congrès multi-temples (type temple + nature congrès) ─────────────
-        if type_resa == "temple" and cd.get("nature") == "congres":
+        # ── Congrès multi-temples ────────────────────────────────────────────
+        if type_resa == "congres":
             temples_c = list(cd.get("temples_congres") or [])
             date_fin_c = cd.get("date_fin")
-            conflits = _conflits_congres(temples_c, date_r, date_fin_c, hd, hf)
+            grille = _grille_congres(temples_c, date_r, date_fin_c, hd, hf)
+            conflits_exist = grille['nb_conflits'] > 0
             creneau = {'date': date_r, 'hd': hd, 'hf': hf, 'date_fin': date_fin_c,
                        'ressource': "Congrès — " + ", ".join(str(t) for t in temples_c)}
-            ctx_c = {"form": form, "conflits": conflits, "alternatives": [],
-                     "dispo_verifiee": True, "creneau": creneau}
+            ctx_c = {"form": form, "alternatives": [], "dispo_verifiee": True,
+                     "creneau": creneau, "grille_congres": grille}
             if action == "verifier":
                 return render(request, "administration/reservation_directe.html", ctx_c)
             if not nom_dem or not email_dem:
                 messages.error(request, "Le nom et l'email du demandeur sont requis pour créer la réservation.")
                 return render(request, "administration/reservation_directe.html", ctx_c)
-            if conflits and not forcer:
+            if conflits_exist and not forcer:
                 messages.warning(request, "Conflit détecté sur le congrès : réservation non créée. "
-                                          "Vérifiez les créneaux ou cochez « Forcer ».")
+                                          "Consultez la grille de disponibilité ou cochez « Forcer ».")
                 return render(request, "administration/reservation_directe.html", {**ctx_c, "bloque": True})
             premier = None
             for tp in temples_c:
@@ -2630,10 +2641,11 @@ def reservation_directe(request):
                 request=request, objet=premier)
             return redirect("administration:tableau_de_bord")
 
-        ressource = cd.get("temple") if type_resa == "temple" else form.salle_choisie()
+        ressource = cd.get("temple") if type_resa == "exceptionnelle" else form.salle_choisie()
+        type_dispo = 'temple' if type_resa == "exceptionnelle" else type_resa
 
         # ── Contrôle de disponibilité ───────────────────────────────────────
-        conflits, alternatives = _analyser_disponibilite(type_resa, ressource, date_r, hd, hf)
+        conflits, alternatives = _analyser_disponibilite(type_dispo, ressource, date_r, hd, hf)
         dispo_verifiee = True
         creneau = {'date': date_r, 'hd': hd, 'hf': hf, 'ressource': ressource}
 
@@ -2662,19 +2674,16 @@ def reservation_directe(request):
             return render(request, "administration/reservation_directe.html",
                           {**ctx_dispo, "bloque": True})
 
-        if type_resa == "temple":
+        if type_resa == "exceptionnelle":
             temple = cd["temple"]
-            nature = cd.get("nature") or "exceptionnelle"
-            date_fin = cd.get("date_fin") if nature == "congres" else None
             resa = Reservation.objects.create(
                 loge=loge,
                 nom_organisation=org,
                 temple=temple,
-                type_reservation=nature,
+                type_reservation="exceptionnelle",
                 sous_type="standard",
                 statut="validee",
                 date=date_r,
-                date_fin=date_fin,
                 heure_debut=hd,
                 heure_fin=hf,
                 besoin_agapes=couverts > 0,
