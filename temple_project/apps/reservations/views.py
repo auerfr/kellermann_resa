@@ -39,7 +39,10 @@ def soumettre_demande(request):
             return redirect("reservations:confirmation", uuid=resa.uuid)
     else:
         form = DemandeReservationForm()
-    return render(request, "reservations/formulaire.html", {"form": form})
+    from temple_project.apps.administration.models import Parametres
+    return render(request, "reservations/formulaire.html", {
+        "form": form, "tarifs": Parametres.get_instance(),
+    })
 
 
 def soumettre_demande_salle(request):
@@ -597,6 +600,7 @@ def confirmation_contact(request):
 def portail_loge(request, token):
     from datetime import date as date_cls
     from django.utils import timezone
+    from temple_project.apps.administration.models import Parametres
 
     demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
     today   = date_cls.today()
@@ -795,4 +799,5 @@ def portail_loge(request, token):
         'saisons_disponibles':   saisons_disponibles,
         'today':                 today,
         'rites':                 Loge.RITE_CHOICES,
+        'tarifs':                Parametres.get_instance(),
     })

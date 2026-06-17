@@ -7,6 +7,24 @@
       <h1 class="h3" style="color:#0F2137;">Demande de reservation de temple</h1>
       <p class="text-muted">Remplissez ce formulaire pour demander un creneau. Vous recevrez une confirmation par email.</p>
     </div>
+
+    {# ── Information facturation ───────────────────────────────────────────── #}
+    <div class="alert alert-warning" id="info-facturation">
+      <strong>💶 Occupation exceptionnelle facturée</strong>
+      <div class="small mt-1">
+        Une demande via ce formulaire correspond à une occupation <strong>exceptionnelle</strong>
+        (week-end ou hors période d'ouverture), facturée à la loge pour couvrir les charges
+        du bâtiment (fluides, etc.). Tarif <strong>à la journée</strong>, quel que soit le nombre de temples :
+        <ul class="mb-1 mt-1">
+          <li>Sans agapes : <strong>{{ tarifs.tarif_exc_sans_agapes|floatformat:0 }} €</strong></li>
+          <li>Avec agapes : <strong>{{ tarifs.tarif_exc_avec_agapes|floatformat:0 }} €</strong></li>
+          <li>Congrès / session régionale : <strong>{{ tarifs.tarif_congres_jour|floatformat:0 }} € / jour</strong></li>
+        </ul>
+        <span class="text-muted">Les tenues régulières (récurrentes) ne sont pas facturées.</span>
+        <div id="note-weekend" class="mt-2 fw-semibold" style="display:none;color:#92400E;"></div>
+      </div>
+    </div>
+
     <div class="card shadow-sm border-0">
       <div class="card-body p-4">
         <form method="post" novalidate>
@@ -212,6 +230,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
     cabinetsCheckboxes.forEach(cb => cb.addEventListener('change', updateCabinetsCount));
     updateCabinetsCount(); // Initial count
+
+    // Mise en évidence week-end / hors période (occupation exceptionnelle facturée)
+    const noteWeekend = document.getElementById('note-weekend');
+    function verifierPeriode() {
+        if (!noteWeekend || !dateInput.value) { if (noteWeekend) noteWeekend.style.display = 'none'; return; }
+        const d = new Date(dateInput.value + 'T00:00:00');
+        const jour = d.getDay();         // 0 = dimanche, 6 = samedi
+        const mois = d.getMonth() + 1;   // 1-12
+        const weekend = (jour === 0 || jour === 6);
+        const horsPeriode = (mois === 7 || mois === 8);
+        if (weekend || horsPeriode) {
+            let motifs = [];
+            if (weekend) motifs.push('week-end');
+            if (horsPeriode) motifs.push("hors période d'ouverture");
+            noteWeekend.textContent = '⚠️ Date en ' + motifs.join(' et ') + ' : occupation exceptionnelle facturée.';
+            noteWeekend.style.display = 'block';
+        } else {
+            noteWeekend.style.display = 'none';
+        }
+    }
+    dateInput.addEventListener('change', verifierPeriode);
+    verifierPeriode();
 });
 </script>
 {% endblock %}
