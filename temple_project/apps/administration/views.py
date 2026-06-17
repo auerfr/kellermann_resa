@@ -91,7 +91,7 @@ def tarif_reservation(resa, params=None):
 def valider_reservation(request, pk):
     resa = get_object_or_404(Reservation, pk=pk)
 
-    # Détection conflits
+    # Détection conflits (réservations validées qui chevauchent, même temple)
     conflits = Reservation.objects.filter(
         temple=resa.temple,
         date=resa.date,
@@ -99,6 +99,29 @@ def valider_reservation(request, pk):
         heure_debut__lt=resa.heure_fin,
         heure_fin__gt=resa.heure_debut,
     ).exclude(pk=pk).select_related('loge')
+
+    # Autres demandes EN ATTENTE sur le même créneau (priorité au premier)
+    demandes_attente = Reservation.objects.filter(
+        temple=resa.temple, date=resa.date,
+        heure_debut__lt=resa.heure_fin, heure_fin__gt=resa.heure_debut,
+        statut='attente',
+    ).exclude(pk=pk).select_related('loge')
+
+    # Blocages / indisponibilités sur le temple
+    blocages = BlocageCreneaux.objects.filter(
+        temples=resa.temple, date=resa.date,
+        heure_debut__lt=resa.heure_fin, heure_fin__gt=resa.heure_debut,
+    )
+    indisponibilites = Indisponibilite.objects.filter(
+        temples=resa.temple, date_debut__lte=resa.date, date_fin__gte=resa.date,
+    )
+
+    # Temples alternatifs libres si le créneau est occupé
+    temples_alternatives = []
+    if conflits.exists() or blocages.exists() or indisponibilites.exists():
+        for tp in Temple.objects.exclude(pk=resa.temple_id).order_by('nom'):
+            if not _temple_occupe(tp, resa.date, resa.heure_debut, resa.heure_fin):
+                temples_alternatives.append(tp)
 
     if request.method == 'POST':
         action            = request.POST.get('action')
@@ -130,8 +153,12 @@ def valider_reservation(request, pk):
         return redirect('administration:tableau_de_bord')
 
     return render(request, 'administration/valider_reservation.html', {
-        'reservation': resa,
-        'conflits':    conflits,
+        'reservation':         resa,
+        'conflits':            conflits,
+        'demandes_attente':    demandes_attente,
+        'blocages':            blocages,
+        'indisponibilites':    indisponibilites,
+        'temples_alternatives': temples_alternatives,
     })
 
 

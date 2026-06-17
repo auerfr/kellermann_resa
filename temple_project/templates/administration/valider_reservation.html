@@ -74,13 +74,42 @@
       </div>
     </div>
 
-    {# Vérification conflits #}
-    {% if conflits %}
-    <div class="alert alert-warning mb-4">
-      <strong>⚠️ Attention — Conflits détectés</strong>
+    {# Disponibilité du créneau #}
+    {% if conflits or blocages or indisponibilites %}
+    <div class="alert alert-danger mb-3">
+      <strong>⛔ Créneau NON disponible</strong> — {{ reservation.temple }},
+      {{ reservation.date|date:"d/m/Y" }} {{ reservation.heure_debut|time:"H:i" }}–{{ reservation.heure_fin|time:"H:i" }}
       <ul class="mb-0 mt-2">
-        {% for c in conflits %}
-        <li>{{ c.loge }} — {{ c.heure_debut|time:"H:i" }} à {{ c.heure_fin|time:"H:i" }}</li>
+        {% for c in conflits %}<li>Déjà réservé : <strong>{{ c.loge|default:c.nom_organisation|default:c.nom_demandeur }}</strong> — {{ c.heure_debut|time:"H:i" }} à {{ c.heure_fin|time:"H:i" }}</li>{% endfor %}
+        {% for b in blocages %}<li>Blocage : {{ b.motif }} ({{ b.heure_debut|time:"H:i" }}–{{ b.heure_fin|time:"H:i" }})</li>{% endfor %}
+        {% for i in indisponibilites %}<li>Indisponibilité : {{ i.motif }}</li>{% endfor %}
+      </ul>
+      <hr class="my-2">
+      {% if temples_alternatives %}
+      <div><strong>💡 Temples libres sur ce créneau</strong> — à proposer au demandeur (qui reconfirmera) :
+        <ul class="mb-0 mt-1">{% for t in temples_alternatives %}<li>{{ t }}</li>{% endfor %}</ul>
+      </div>
+      {% else %}
+      <div>Aucun autre temple n'est libre sur ce créneau — <strong>proposez une autre date</strong> au demandeur.</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="alert alert-success mb-3">
+      <strong>✅ Créneau disponible</strong> — {{ reservation.temple }},
+      {{ reservation.date|date:"d/m/Y" }} {{ reservation.heure_debut|time:"H:i" }}–{{ reservation.heure_fin|time:"H:i" }}.
+      Aucune réservation validée sur ce créneau.
+    </div>
+    {% endif %}
+
+    {# Autres demandes EN ATTENTE sur le même créneau #}
+    {% if demandes_attente %}
+    <div class="alert alert-warning mb-4">
+      <strong>⏳ {{ demandes_attente|length }} autre(s) demande(s) en attente sur ce créneau</strong>
+      <div class="small">Priorité au premier demandeur — comparez les dates de réception avant de valider.</div>
+      <ul class="mb-0 mt-2">
+        {% for d in demandes_attente %}
+        <li>{{ d.loge|default:d.nom_organisation|default:d.nom_demandeur }} — reçue le {{ d.created_at|date:"d/m/Y à H:i" }}
+            ({{ d.heure_debut|time:"H:i" }}–{{ d.heure_fin|time:"H:i" }})</li>
         {% endfor %}
       </ul>
     </div>
