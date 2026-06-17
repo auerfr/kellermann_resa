@@ -18,7 +18,7 @@
   </div>
   <div class="collapse" id="bloc-tarifs">
     <div class="card-body">
-      <p class="text-muted small">À ajuster après un vote en assemblée générale. Les nouveaux tarifs ne s'appliquent qu'aux réservations validées <em>après</em> la modification (les anciennes gardent leur prix).</p>
+      <p class="text-muted small">À ajuster après un vote en assemblée générale. Les nouveaux tarifs ne s'appliquent qu'aux réservations validées <em>après</em> la modification (les anciennes gardent leur prix). <strong>Tarifs hors prestation traiteur.</strong></p>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="maj_tarifs">
