@@ -167,6 +167,22 @@ def valider_reservation_salle(request, pk):
                 'prefere': resa.cabinet_prefere_id == cabinet.pk,
             })
 
+    # Autres demandes EN ATTENTE sur le même créneau (priorité au premier)
+    demandes_attente = ReservationSalle.objects.filter(
+        salle=resa.salle, date=resa.date,
+        heure_debut__lt=resa.heure_fin, heure_fin__gt=resa.heure_debut,
+        statut='attente',
+    ).exclude(pk=pk).select_related('loge')
+
+    # Blocages / indisponibilités sur la salle
+    blocages = BlocageCreneaux.objects.filter(
+        salles=resa.salle, date=resa.date,
+        heure_debut__lt=resa.heure_fin, heure_fin__gt=resa.heure_debut,
+    )
+    indisponibilites = Indisponibilite.objects.filter(
+        salles=resa.salle, date_debut__lte=resa.date, date_fin__gte=resa.date,
+    )
+
     if request.method == 'POST':
         action            = request.POST.get('action')
         commentaire_admin = request.POST.get('commentaire_admin', '').strip()
@@ -203,10 +219,13 @@ def valider_reservation_salle(request, pk):
         return redirect('administration:tableau_de_bord')
 
     return render(request, 'administration/valider_reservation_salle.html', {
-        'reservation':   resa,
-        'conflits':      conflits,
-        'is_cabinet':    is_cabinet,
-        'cabinets_dispo': cabinets_dispo,
+        'reservation':      resa,
+        'conflits':         conflits,
+        'is_cabinet':       is_cabinet,
+        'cabinets_dispo':   cabinets_dispo,
+        'demandes_attente': demandes_attente,
+        'blocages':         blocages,
+        'indisponibilites': indisponibilites,
     })
 
 
