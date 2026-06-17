@@ -16,6 +16,33 @@
     <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">⚙️ Tarifs en vigueur</span>
     <span class="small" style="color:#C8A84B;">Modifier ▾</span>
   </div>
+
+  {# Récapitulatif toujours visible #}
+  <div class="card-body pb-2">
+    <div class="row text-center g-2">
+      <div class="col-6 col-md-3">
+        <div class="small text-muted text-uppercase">Sans agapes</div>
+        <div class="fw-bold temple-title" style="font-size:1.15rem;">{{ params.tarif_exc_sans_agapes|floatformat:0 }} €</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="small text-muted text-uppercase">Avec agapes</div>
+        <div class="fw-bold temple-title" style="font-size:1.15rem;">{{ params.tarif_exc_avec_agapes|floatformat:0 }} €</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="small text-muted text-uppercase">Congrès / jour</div>
+        <div class="fw-bold temple-title" style="font-size:1.15rem;">{{ params.tarif_congres_jour|floatformat:0 }} €</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="small text-muted text-uppercase">En vigueur depuis</div>
+        <div class="fw-bold temple-title" style="font-size:1.15rem;">{% if params.tarif_date_effet %}{{ params.tarif_date_effet|date:"d/m/Y" }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+    <div class="text-muted small mt-2 text-center">
+      Tarifs à la journée, hors prestation traiteur — votés en assemblée générale
+      {% if params.tarif_date_effet %}le <strong>{{ params.tarif_date_effet|date:"d/m/Y" }}</strong>{% endif %}.
+    </div>
+  </div>
+
   <div class="collapse" id="bloc-tarifs">
     <div class="card-body">
       <p class="text-muted small">À ajuster après un vote en assemblée générale. Les nouveaux tarifs ne s'appliquent qu'aux réservations validées <em>après</em> la modification (les anciennes gardent leur prix). <strong>Tarifs hors prestation traiteur.</strong></p>
