@@ -1,5 +1,5 @@
 from django import forms
-from .models import Reservation, ReservationSalle, SalleReunion
+from .models import Reservation, ReservationSalle, SalleReunion, Temple
 
 HORAIRES_GROUPED = [
     ("Matin (06:00–12:00)", [
@@ -52,6 +52,16 @@ class DemandeReservationForm(forms.ModelForm):
         initial="exceptionnelle", label="Nature de la demande",
         widget=forms.Select(attrs={"class": "form-select no-select2"}),
     )
+    temples = forms.ModelMultipleChoiceField(
+        queryset=Temple.objects.all(),
+        widget=forms.CheckboxSelectMultiple(),
+        required=False, label="Temples souhaités (congrès)",
+    )
+    salles_reunion = forms.ModelMultipleChoiceField(
+        queryset=SalleReunion.objects.filter(type_salle='reunion', actif=True),
+        widget=forms.CheckboxSelectMultiple(),
+        required=False, label="Salles de réunion (congrès)",
+    )
 
     class Meta:
         model = Reservation
@@ -83,6 +93,11 @@ class DemandeReservationForm(forms.ModelForm):
             "nombre_repas":     forms.NumberInput(attrs={"class": "form-control", "min": 0}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Le temple unique n'est pas requis pour un congrès (on utilise « temples »)
+        self.fields['temple'].required = False
+
     def clean(self):
         cleaned = super().clean()
         if not cleaned.get('loge') and not cleaned.get('nom_organisation', '').strip():
@@ -92,10 +107,14 @@ class DemandeReservationForm(forms.ModelForm):
         date = cleaned.get('date')
         date_fin = cleaned.get('date_fin')
         if cleaned.get('type_reservation') == 'congres':
+            if not cleaned.get('temples'):
+                self.add_error('temples', "Sélectionnez au moins un temple pour le congrès.")
             if date_fin and date and date_fin < date:
                 self.add_error('date_fin', "La date de fin doit être postérieure ou égale à la date de début.")
         else:
             cleaned['date_fin'] = None  # la date de fin ne concerne que les congrès
+            if not cleaned.get('temple'):
+                self.add_error('temple', "Veuillez choisir un temple.")
         return cleaned
 
 

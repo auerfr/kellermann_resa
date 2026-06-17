@@ -19,21 +19,72 @@ def soumettre_demande(request):
     if request.method == "POST":
         form = DemandeReservationForm(request.POST)
         if form.is_valid():
+            cd = form.cleaned_data
+            type_resa = cd.get('type_reservation') or 'exceptionnelle'
+
+            if type_resa == 'congres':
+                # Un congrès peut occuper plusieurs temples (+ salles de réunion).
+                commun = dict(
+                    loge=cd.get('loge'),
+                    nom_organisation=cd.get('nom_organisation') or '',
+                    type_reservation='congres',
+                    sous_type=cd.get('sous_type') or 'standard',
+                    statut='attente',
+                    date=cd['date'], date_fin=cd.get('date_fin'),
+                    heure_debut=cd['heure_debut'], heure_fin=cd['heure_fin'],
+                    besoin_agapes=cd.get('besoin_agapes') or False,
+                    nombre_repas=cd.get('nombre_repas') or 0,
+                    besoin_micro=cd.get('besoin_micro') or False,
+                    besoin_enceintes=cd.get('besoin_enceintes') or False,
+                    profanes_admis=cd.get('profanes_admis') or False,
+                    nom_demandeur=cd['nom_demandeur'],
+                    email_demandeur=cd['email_demandeur'],
+                    commentaire=cd.get('commentaire') or '',
+                )
+                premier = None
+                for tp in cd['temples']:
+                    r = Reservation.objects.create(temple=tp, **commun)
+                    if premier is None:
+                        premier = r
+                if cd.get('cabinets'):
+                    premier.cabinets.set(cd['cabinets'])
+                org_nom = cd['loge'].nom if cd.get('loge') else (cd.get('nom_organisation') or '')
+                for salle in cd.get('salles_reunion') or []:
+                    ReservationSalle.objects.create(
+                        loge=cd.get('loge'), salle=salle,
+                        date=cd['date'], heure_debut=cd['heure_debut'], heure_fin=cd['heure_fin'],
+                        statut='attente', nom_demandeur=cd['nom_demandeur'],
+                        email_demandeur=cd['email_demandeur'], organisation=org_nom,
+                        objet='Congrès', nombre_participants=cd.get('nombre_repas') or 1,
+                        commentaire=cd.get('commentaire') or '',
+                    )
+                envoyer_email_nouvelle_demande(premier)
+                lien = request.build_absolute_uri('/reservations/suivi/' + str(premier.uuid) + '/')
+                temples_str = ', '.join(str(t) for t in cd['temples'])
+                send_mail_kellermann(
+                    subject="Confirmation de votre demande de congres",
+                    message=f"""Votre demande de congres du {cd['date']} a bien ete recue.
+Temples : {temples_str}
+Reference : {premier.uuid}
+Vous pouvez suivre votre demande sur : {lien}""",
+                    recipient_list=[cd['email_demandeur']],
+                )
+                messages.success(request, "Votre demande de congres a ete soumise avec succes.")
+                return redirect("reservations:confirmation", uuid=premier.uuid)
+
+            # Tenue exceptionnelle : une seule réservation
             resa = form.save(commit=False)
-            if resa.type_reservation not in ('exceptionnelle', 'congres'):
-                resa.type_reservation = "exceptionnelle"
+            resa.type_reservation = "exceptionnelle"
             resa.statut = "attente"
             resa.save()
             form.save_m2m()
             envoyer_email_nouvelle_demande(resa)
+            lien = request.build_absolute_uri('/reservations/suivi/' + str(resa.uuid) + '/')
             send_mail_kellermann(
                 subject="Confirmation de votre demande de reservation",
-                message=(
-                    f"Votre demande pour le {resa.date} a bien ete recue.\n"
-                    f"Reference : {resa.uuid}\n"
-                    f"Vous pouvez suivre votre demande sur : "
-                    f"{request.build_absolute_uri('/reservations/suivi/' + str(resa.uuid) + '/')}"
-                ),
+                message=f"""Votre demande pour le {resa.date} a bien ete recue.
+Reference : {resa.uuid}
+Vous pouvez suivre votre demande sur : {lien}""",
                 recipient_list=[resa.email_demandeur],
             )
             messages.success(request, "Votre demande a ete soumise avec succes.")

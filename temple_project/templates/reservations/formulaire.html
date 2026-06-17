@@ -50,9 +50,37 @@
                 </div>
               </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-md-6" id="bloc-temple-unique">
               <label class="form-label fw-semibold">Temple souhaite</label>
               {{ form.temple }}
+            </div>
+          </div>
+
+          {# Congrès : plusieurs temples + salles de réunion #}
+          <div id="bloc-congres" style="display:none;">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Temples souhaités (1 à 3)</label>
+              <div>
+                {% for cb in form.temples %}
+                <div class="form-check form-check-inline">
+                  {{ cb.tag }}
+                  <label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label>
+                </div>
+                {% endfor %}
+              </div>
+              {% if form.temples.errors %}<div class="text-danger small">{{ form.temples.errors|striptags }}</div>{% endif %}
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Salles de réunion (optionnel)</label>
+              <div>
+                {% for cb in form.salles_reunion %}
+                <div class="form-check form-check-inline">
+                  {{ cb.tag }}
+                  <label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label>
+                </div>
+                {% endfor %}
+              </div>
+              <div class="form-text">Les cabinets de réflexion restent disponibles plus bas si besoin (rare).</div>
             </div>
           </div>
           <div class="mb-3">
@@ -265,9 +293,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Date de fin affichée uniquement pour les congrès
     const typeSelect = document.querySelector('[name="type_reservation"]');
     const blocDateFin = document.getElementById('bloc-date-fin');
+    const blocTempleUnique = document.getElementById('bloc-temple-unique');
+    const blocCongres = document.getElementById('bloc-congres');
     function toggleCongres() {
         const congres = typeSelect && typeSelect.value === 'congres';
         if (blocDateFin) blocDateFin.style.display = congres ? '' : 'none';
+        if (blocTempleUnique) blocTempleUnique.style.display = congres ? 'none' : '';
+        if (blocCongres) blocCongres.style.display = congres ? '' : 'none';
     }
     if (typeSelect) typeSelect.addEventListener('change', toggleCongres);
     toggleCongres();
