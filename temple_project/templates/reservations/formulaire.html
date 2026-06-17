@@ -311,36 +311,61 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Bouton explicite de vérification de disponibilité
     const btnVerif = document.getElementById('btn-verif-dispo');
+    function escapeHtml(s) { return (s || '').replace(/[&<>]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
     function verifierDispoBouton() {
         const congres = typeSelect && typeSelect.value === 'congres';
         if (!congres) { verifierConflit(); return; }
-        const temples = Array.from(document.querySelectorAll('input[name="temples"]:checked'));
-        const date = dateInput.value, hd = heureDebutInput.value, hf = heureFinInput.value;
-        if (!temples.length || !date || !hd || !hf) {
+        const temples = Array.from(document.querySelectorAll('input[name="temples"]:checked')).map(function (t) { return t.value; });
+        const salles = Array.from(document.querySelectorAll('input[name="salles_reunion"]:checked')).map(function (s) { return s.value; });
+        const dd = dateInput.value;
+        const dfEl = document.querySelector('[name="date_fin"]');
+        const df = (dfEl && dfEl.value) ? dfEl.value : dd;
+        const hd = heureDebutInput.value, hf = heureFinInput.value;
+        if (!temples.length || !dd || !hd || !hf) {
             conflitMessage.innerHTML = '<div class="alert alert-info">Sélectionnez les temples, la date et les heures pour vérifier.</div>';
             conflitMessage.style.display = 'block';
             return;
         }
-        Promise.all(temples.map(function (t) {
-            return fetch('/reservations/api/verifier-conflit/?temple=' + encodeURIComponent(t.value)
-                + '&date=' + encodeURIComponent(date)
-                + '&heure_debut=' + encodeURIComponent(hd)
-                + '&heure_fin=' + encodeURIComponent(hf))
-              .then(function (r) { return r.json(); })
-              .then(function (d) {
-                  var lbl = t.nextElementSibling ? t.nextElementSibling.textContent.trim() : t.value;
-                  return { label: lbl, data: d };
+        var params = new URLSearchParams();
+        temples.forEach(function (t) { params.append('temples', t); });
+        salles.forEach(function (s) { params.append('salles', s); });
+        params.set('date_debut', dd); params.set('date_fin', df);
+        params.set('heure_debut', hd); params.set('heure_fin', hf);
+        fetch('/reservations/api/grille-congres/?' + params.toString())
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+              if (d.error) {
+                  conflitMessage.innerHTML = '<div class="alert alert-info">' + escapeHtml(d.error) + '</div>';
+                  conflitMessage.style.display = 'block';
+                  return;
+              }
+              var html = '<div class="alert ' + (d.nb_conflits ? 'alert-warning' : 'alert-success') + '">';
+              html += '<strong>Disponibilité du congrès</strong>';
+              html += '<div class="table-responsive mt-2"><table class="table table-sm bg-white mb-0 align-middle"><thead><tr><th>Date</th>';
+              d.temples.forEach(function (t) { html += '<th>' + escapeHtml(t) + '</th>'; });
+              html += '</tr></thead><tbody>';
+              d.jours.forEach(function (j) {
+                  html += '<tr><td class="text-nowrap">' + j.date + '</td>';
+                  j.cells.forEach(function (c) {
+                      html += '<td>' + (c.libre ? '<span class="text-success">✅ libre</span>'
+                                                 : '<span class="text-danger">⛔ ' + escapeHtml(c.detail) + '</span>') + '</td>';
+                  });
+                  html += '</tr>';
               });
-        })).then(function (results) {
-            var conflits = results.filter(function (r) { return r.data.conflit; });
-            if (conflits.length) {
-                conflitMessage.innerHTML = '<div class="alert alert-warning"><strong>Conflits :</strong><br>'
-                    + conflits.map(function (r) { return r.label + ' — ' + r.data.message; }).join('<br>') + '</div>';
-            } else {
-                conflitMessage.innerHTML = '<div class="alert alert-success">Tous les temples sélectionnés sont disponibles sur ce créneau.</div>';
-            }
-            conflitMessage.style.display = 'block';
-        });
+              html += '</tbody></table></div>';
+              if (d.salles && d.salles.length) {
+                  html += '<div class="mt-2"><strong>Salles de réunion</strong><ul class="mb-0">';
+                  d.salles.forEach(function (s) {
+                      html += '<li>' + escapeHtml(s.nom) + ' : '
+                            + (s.libre ? '<span class="text-success">libre</span>'
+                                       : '<span class="text-danger">occupée (' + escapeHtml(s.detail) + ')</span>') + '</li>';
+                  });
+                  html += '</ul></div>';
+              }
+              html += '</div>';
+              conflitMessage.innerHTML = html;
+              conflitMessage.style.display = 'block';
+          });
     }
     if (btnVerif) btnVerif.addEventListener('click', verifierDispoBouton);
 });

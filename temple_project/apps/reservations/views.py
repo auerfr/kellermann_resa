@@ -550,17 +550,81 @@ def api_verifier_conflit(request):
         return JsonResponse({
             'conflit': True,
             'niveau': 'erreur',
-            'message': 'ðŸ”´ Ce crÃ©neau est dÃ©jÃ  validÃ© et occupÃ©.',
+            'message': 'Ce créneau est déjà validé et occupé.',
         })
     if en_attente:
         return JsonResponse({
             'conflit': True,
             'niveau': 'avertissement',
-            'message': 'âš ï¸ Une demande est en cours de traitement pour ce crÃ©neau – prioritÃ© au premier demandeur.',
+            'message': 'Une demande est en cours de traitement pour ce créneau — priorité au premier demandeur.',
         })
     return JsonResponse({
         'conflit': False,
-        'message': 'âœ… Ce crÃ©neau semble disponible.',
+        'message': 'Ce créneau semble disponible.',
+    })
+
+
+def api_grille_congres(request):
+    """Grille de disponibilité d'un congrès (jours × temples) + salles, en JSON propre."""
+    from datetime import date as _date, timedelta
+    temples_ids = request.GET.getlist('temples')
+    salles_ids  = request.GET.getlist('salles')
+    hd = request.GET.get('heure_debut')
+    hf = request.GET.get('heure_fin')
+    try:
+        d1 = _date.fromisoformat(request.GET.get('date_debut'))
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'date invalide'}, status=400)
+    try:
+        d2 = _date.fromisoformat(request.GET.get('date_fin')) if request.GET.get('date_fin') else d1
+    except ValueError:
+        d2 = d1
+    if d2 < d1:
+        d2 = d1
+    if not all([hd, hf]) or not temples_ids:
+        return JsonResponse({'error': 'parametres manquants'}, status=400)
+
+    temples = list(Temple.objects.filter(pk__in=temples_ids).order_by('nom'))
+    salles  = list(SalleReunion.objects.filter(pk__in=salles_ids, type_salle='reunion').order_by('nom'))
+
+    jours = []
+    cur = d1
+    while cur <= d2:
+        jours.append(cur)
+        cur += timedelta(days=1)
+
+    def occ_temple(tp, jour):
+        return [str(r.loge or r.nom_organisation or r.nom_demandeur)
+                for r in Reservation.objects.filter(
+                    temple=tp, date=jour, heure_debut__lt=hf, heure_fin__gt=hd,
+                    statut__in=['attente', 'validee']).select_related('loge')]
+
+    def occ_salle(s, jour):
+        return [str(r.organisation or (r.loge.nom if r.loge else r.nom_demandeur))
+                for r in ReservationSalle.objects.filter(
+                    salle=s, date=jour, heure_debut__lt=hf, heure_fin__gt=hd,
+                    statut__in=['attente', 'validee']).select_related('loge')]
+
+    data_jours, nb_conflits = [], 0
+    for j in jours:
+        cells = []
+        for tp in temples:
+            occ = occ_temple(tp, j)
+            if occ:
+                nb_conflits += 1
+            cells.append({'libre': not occ, 'detail': ', '.join(occ)})
+        data_jours.append({'date': j.strftime('%d/%m/%Y'), 'cells': cells})
+
+    data_salles = []
+    for s in salles:
+        occ_days = [j.strftime('%d/%m') for j in jours if occ_salle(s, j)]
+        data_salles.append({'nom': str(s), 'libre': not occ_days, 'detail': ', '.join(occ_days)})
+
+    return JsonResponse({
+        'temples': [str(t) for t in temples],
+        'jours': data_jours,
+        'salles': data_salles,
+        'nb_conflits': nb_conflits,
     })
 
 

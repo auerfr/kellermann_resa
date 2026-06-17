@@ -17,6 +17,9 @@ urlpatterns = [
     path("api/verifier-conflit/",
          views.api_verifier_conflit,
          name="api_verifier_conflit"),
+    path("api/grille-congres/",
+         views.api_grille_congres,
+         name="api_grille_congres"),
 
     # Salles de réunion
     path("demande-salle/",
