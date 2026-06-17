@@ -602,6 +602,28 @@ def portail_loge(request, token):
     today   = date_cls.today()
     loge    = demande.loge
 
+    # ── Mise à jour des informations de la loge par la loge elle-même ──────────
+    if request.method == 'POST' and request.POST.get('action') == 'modifier_infos':
+        if not loge:
+            messages.error(request, "Aucune loge n'est associée à ce portail.")
+            return redirect('reservations:portail_loge', token=token)
+        loge.nom_contact    = request.POST.get('nom_contact', '').strip()
+        loge.email          = request.POST.get('email', '').strip()
+        loge.telephone      = request.POST.get('telephone', '').strip()
+        loge.rite_precision = request.POST.get('rite_precision', '').strip()
+        rite = request.POST.get('rite', '')
+        if rite in dict(Loge.RITE_CHOICES):
+            loge.rite = rite
+        try:
+            loge.effectif_total        = int(request.POST.get('effectif_total') or 0)
+            loge.effectif_moyen_agapes = int(request.POST.get('effectif_moyen_agapes') or 0)
+        except (ValueError, TypeError):
+            messages.error(request, "Les effectifs doivent être des nombres entiers.")
+            return redirect('reservations:portail_loge', token=token)
+        loge.save()
+        messages.success(request, "Les informations de votre loge ont bien été mises à jour.")
+        return redirect('reservations:portail_loge', token=token)
+
     # â”€â”€ Saison courante (par dÃ©faut) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     annee_courante = today.year if today.month >= 9 else today.year - 1
 
@@ -772,4 +794,5 @@ def portail_loge(request, token):
         'annee_courante':        annee_courante,
         'saisons_disponibles':   saisons_disponibles,
         'today':                 today,
+        'rites':                 Loge.RITE_CHOICES,
     })

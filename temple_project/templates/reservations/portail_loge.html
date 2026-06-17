@@ -130,6 +130,76 @@
       </div>
     </div>
 
+    {# ── Mes informations (modifiables par la loge) ───────────────────────── #}
+    {% if loge %}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center"
+           style="background:#0F2137;cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#bloc-infos-loge">
+        <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+          🛈 Informations de la loge
+        </span>
+        <span class="small" style="color:#C8A84B;">Modifier ▾</span>
+      </div>
+      <div class="collapse" id="bloc-infos-loge">
+        <div class="card-body">
+          <p class="text-muted small">Tenez à jour les coordonnées, le contact, les effectifs et le rite de votre loge.</p>
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="modifier_infos">
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Nom du contact / vénérable</label>
+                <input type="text" name="nom_contact" maxlength="200" class="form-control"
+                       value="{{ loge.nom_contact }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Email de contact</label>
+                <input type="email" name="email" maxlength="254" class="form-control"
+                       value="{{ loge.email }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Téléphone</label>
+                <input type="text" name="telephone" maxlength="30" class="form-control"
+                       value="{{ loge.telephone }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Rite</label>
+                <select name="rite" class="form-select no-select2">
+                  <option value="">— Non précisé —</option>
+                  {% for val, lib in rites %}
+                  <option value="{{ val }}" {% if loge.rite == val %}selected{% endif %}>{{ lib }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-12">
+                <label class="form-label fw-semibold">Précision sur le rite (optionnel)</label>
+                <input type="text" name="rite_precision" maxlength="200" class="form-control"
+                       value="{{ loge.rite_precision }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Effectif total</label>
+                <input type="number" name="effectif_total" min="0" class="form-control"
+                       value="{{ loge.effectif_total }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">Effectif moyen aux agapes</label>
+                <input type="number" name="effectif_moyen_agapes" min="0" class="form-control"
+                       value="{{ loge.effectif_moyen_agapes }}">
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <button type="submit" class="btn fw-semibold" style="background:#0F2137;color:#C8A84B;">
+                💾 Enregistrer mes informations
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     {# ── Tableau réservations de la saison ───────────────────────────────── #}
     <div class="card shadow-sm border-0 mb-4">
       <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2"
