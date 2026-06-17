@@ -85,6 +85,16 @@
           {% for b in blocages %}<li>Blocage : {{ b.motif }} ({{ b.heure_debut|time:"H:i" }}–{{ b.heure_fin|time:"H:i" }})</li>{% endfor %}
           {% for i in indisponibilites %}<li>Indisponibilité : {{ i.motif }}</li>{% endfor %}
         </ul>
+        <hr class="my-2">
+        {% if salles_alternatives %}
+        <div><strong>💡 Salles libres sur ce créneau</strong> — à proposer au demandeur (qui reconfirmera) :
+          <ul class="mb-0 mt-1">
+            {% for s in salles_alternatives %}<li>{{ s.nom }} ({{ s.capacite }} places)</li>{% endfor %}
+          </ul>
+        </div>
+        {% else %}
+        <div>Aucune autre salle de ce type n'est libre sur ce créneau — <strong>proposez une autre date</strong> au demandeur.</div>
+        {% endif %}
       </div>
       {% else %}
       <div class="alert alert-success mb-3">

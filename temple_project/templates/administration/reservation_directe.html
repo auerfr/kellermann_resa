@@ -142,7 +142,16 @@
                             </tbody>
                           </table>
                         </div>
-                        {% if grille_congres.nb_conflits %}<div class="small mt-2">Certaines dates/temples sont occupés — vous pouvez ajuster les dates, ou forcer.</div>{% else %}<div class="small mt-2">Tous les temples sont libres sur toute la période.</div>{% endif %}
+                        {% if grille_congres.salles %}
+                        <div class="mt-2"><strong>Salles de réunion</strong>
+                          <ul class="mb-0">
+                            {% for s in grille_congres.salles %}
+                            <li>{{ s.nom }} : {% if s.libre %}<span class="text-success">libre</span>{% else %}<span class="text-danger">occupée ({{ s.detail }})</span>{% endif %}</li>
+                            {% endfor %}
+                          </ul>
+                        </div>
+                        {% endif %}
+                        {% if grille_congres.nb_conflits %}<div class="small mt-2">Certaines dates/temples/salles sont occupés — ajustez les dates, ou forcez.</div>{% else %}<div class="small mt-2">Tout est libre sur toute la période.</div>{% endif %}
                       </div>
                       {% if grille_congres.nb_conflits %}
                       <div class="form-check mb-3">

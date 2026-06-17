@@ -152,7 +152,6 @@ def valider_reservation_salle(request, pk):
     # Disponibilité des cabinets (en excluant la demande en cours)
     cabinets_dispo = []
     if is_cabinet:
-        from temple_project.apps.reservations.models import SalleReunion
         for cabinet in SalleReunion.objects.filter(type_salle='cabinet_reflexion', actif=True).order_by('nom'):
             occupe = ReservationSalle.objects.filter(
                 salle=cabinet,
@@ -183,6 +182,15 @@ def valider_reservation_salle(request, pk):
         salles=resa.salle, date_debut__lte=resa.date, date_fin__gte=resa.date,
     )
 
+    # Salles alternatives libres (même type) si le créneau est occupé
+    salles_alternatives = []
+    if not is_cabinet and (conflits.exists() or blocages.exists() or indisponibilites.exists()):
+        for s in SalleReunion.objects.filter(
+            type_salle=resa.salle.type_salle, actif=True,
+        ).exclude(pk=resa.salle_id).order_by('nom'):
+            if not _salle_occupee(s, resa.date, resa.heure_debut, resa.heure_fin):
+                salles_alternatives.append(s)
+
     if request.method == 'POST':
         action            = request.POST.get('action')
         commentaire_admin = request.POST.get('commentaire_admin', '').strip()
@@ -194,7 +202,6 @@ def valider_reservation_salle(request, pk):
         if action == 'valider' and is_cabinet:
             cabinet_attribue_id = request.POST.get('cabinet_attribue_id')
             if cabinet_attribue_id:
-                from temple_project.apps.reservations.models import SalleReunion
                 try:
                     resa.salle = SalleReunion.objects.get(pk=cabinet_attribue_id, type_salle='cabinet_reflexion')
                 except SalleReunion.DoesNotExist:
@@ -226,6 +233,7 @@ def valider_reservation_salle(request, pk):
         'demandes_attente': demandes_attente,
         'blocages':         blocages,
         'indisponibilites': indisponibilites,
+        'salles_alternatives': salles_alternatives,
     })
 
 
@@ -2465,9 +2473,9 @@ def _cabinets_etat(date_r, hd, hf):
     return etat
 
 
-def _grille_congres(temples, date_debut, date_fin, hd, hf):
+def _grille_congres(temples, date_debut, date_fin, hd, hf, salles=None):
     """Grille de disponibilité d'un congrès : pour chaque jour et chaque temple,
-    libre ou occupé (avec détail). Permet de voir les dispos selon les dates."""
+    libre ou occupé (avec détail), plus l'état des salles de réunion."""
     from datetime import timedelta
     hd_t = _to_time(hd)
     hf_t = _to_time(hf)
@@ -2499,7 +2507,17 @@ def _grille_congres(temples, date_debut, date_fin, hd, hf):
                 nb_conflits += 1
             cells.append({'temple': str(tp), 'libre': libre, 'detail': ' ; '.join(occup)})
         grille.append({'date': jour, 'cells': cells})
-    return {'temples': [str(t) for t in temples], 'jours': grille, 'nb_conflits': nb_conflits}
+
+    salles_etat = []
+    for s in (salles or []):
+        occ_days = [jour.strftime('%d/%m') for jour in jours_list
+                    if _salle_occupee(s, jour, hd_t, hf_t)]
+        if occ_days:
+            nb_conflits += 1
+        salles_etat.append({'nom': str(s), 'libre': not occ_days, 'detail': ', '.join(occ_days)})
+
+    return {'temples': [str(t) for t in temples], 'jours': grille,
+            'salles': salles_etat, 'nb_conflits': nb_conflits}
 
 
 def _analyser_disponibilite(type_resa, ressource, date_r, hd, hf):
@@ -2636,7 +2654,8 @@ def reservation_directe(request):
         if type_resa == "congres":
             temples_c = list(cd.get("temples_congres") or [])
             date_fin_c = cd.get("date_fin")
-            grille = _grille_congres(temples_c, date_r, date_fin_c, hd, hf)
+            grille = _grille_congres(temples_c, date_r, date_fin_c, hd, hf,
+                                     salles=list(cd.get("salles_reunion") or []))
             conflits_exist = grille['nb_conflits'] > 0
             creneau = {'date': date_r, 'hd': hd, 'hf': hf, 'date_fin': date_fin_c,
                        'ressource': "Congrès — " + ", ".join(str(t) for t in temples_c)}
