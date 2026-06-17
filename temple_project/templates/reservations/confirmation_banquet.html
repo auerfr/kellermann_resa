@@ -14,6 +14,11 @@
       </p>
       <p class="text-muted">Nombre de repas : <strong>{{ reservation.nombre_participants }}</strong></p>
       <p class="text-muted">Un email de confirmation a été envoyé à <strong>{{ reservation.email_demandeur }}</strong>.</p>
+      <div class="alert alert-warning mt-3 text-start">
+        ⚠️ <strong>Pensez à contacter le traiteur en parallèle.</strong><br>
+        <small>Cette réservation de salle ne vaut pas accord du traiteur : adressez-lui une demande
+        pour vérifier sa capacité à assurer ce banquet d'ordre.</small>
+      </div>
       <div class="alert alert-light mt-3 text-start">
         <small class="text-muted">Référence de votre demande :</small><br>
         <code>{{ reservation.uuid }}</code>

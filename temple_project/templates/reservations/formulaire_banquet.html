@@ -9,10 +9,24 @@
       <p class="text-muted">Remplissez ce formulaire pour réserver une salle pour votre banquet d'ordre. Vous recevrez une confirmation par email.</p>
     </div>
 
+    {# Rappel : demande parallèle au traiteur #}
+    <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+      <span style="font-size:1.2rem;">⚠️</span>
+      <div>
+        <strong>Cette réservation de salle ne vaut pas accord du traiteur.</strong><br>
+        Une demande doit être adressée <strong>en parallèle au traiteur</strong> afin de vérifier
+        sa capacité à assurer un ou plusieurs banquets d'ordre sur la date choisie.
+      </div>
+    </div>
+
     <div class="card shadow-sm border-0">
       <div class="card-body p-4">
         <form method="post" novalidate>
           {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
 
           {# Salle souhaitée #}
           <div class="mb-3">
@@ -25,11 +39,7 @@
               </div>
               {% endfor %}
             </div>
-            {% if salle_humide_dispo %}
-            <div id="note-salle-humide" class="form-text text-warning mt-1" style="display:none;">
-              ⚠️ La Salle Humide est disponible sur accord du traiteur uniquement. Votre demande reste soumise à validation.
-            </div>
-            {% endif %}
+            {% if form.salle_preference.errors %}<div class="text-danger small">{{ form.salle_preference.errors|striptags }}</div>{% endif %}
           </div>
 
           {# Loge + date #}
@@ -75,9 +85,20 @@
           </div>
 
           {# Commentaire #}
-          <div class="mb-4">
+          <div class="mb-3">
             <label class="form-label fw-semibold">Commentaire (optionnel)</label>
             {{ form.commentaire }}
+          </div>
+
+          {# Engagement demande traiteur #}
+          <div class="mb-4">
+            <div class="form-check">
+              {{ form.demande_traiteur }}
+              <label class="form-check-label" for="{{ form.demande_traiteur.id_for_label }}">
+                {{ form.demande_traiteur.label }}
+              </label>
+            </div>
+            {% if form.demande_traiteur.errors %}<div class="text-danger small">{{ form.demande_traiteur.errors|striptags }}</div>{% endif %}
           </div>
 
           <div class="d-flex gap-3">
@@ -91,18 +112,4 @@
     </div>
   </div>
 </div>
-{% if salle_humide_dispo %}
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const note = document.getElementById('note-salle-humide');
-  const radios = document.querySelectorAll('input[name="salle_preference"]');
-  function toggleNote() {
-    const checked = document.querySelector('input[name="salle_preference"]:checked');
-    if (note) note.style.display = (checked && checked.value === 'salle_humide') ? 'block' : 'none';
-  }
-  radios.forEach(r => r.addEventListener('change', toggleNote));
-  toggleNote();
-});
-</script>
-{% endif %}
 {% endblock %}

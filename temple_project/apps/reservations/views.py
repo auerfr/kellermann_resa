@@ -261,11 +261,10 @@ def api_cabinets_disponibles(request):
 
 
 def demande_banquet(request):
-    salle_principale = SalleReunion.objects.filter(type_salle='agapes', actif=True).exclude(nom__icontains='Salle Humide').first()
-    salle_humide = SalleReunion.objects.filter(type_salle='agapes', actif=True, nom__icontains='Salle Humide').first()
-    if not salle_principale:
-        salle_principale = SalleReunion.objects.filter(type_salle='agapes', actif=True).first()
-    if not salle_principale:
+    salles_agapes = SalleReunion.objects.filter(
+        type_salle='agapes', actif=True
+    ).order_by('-capacite', 'nom')
+    if not salles_agapes.exists():
         messages.error(request, "Aucune salle de banquet n'est disponible.")
         return redirect('reservations:demande')
 
@@ -275,15 +274,11 @@ def demande_banquet(request):
             date = form.cleaned_data['date']
             heure_debut = form.cleaned_data['heure_debut']
             heure_fin = form.cleaned_data['heure_fin']
-            pref = form.cleaned_data.get('salle_preference', 'oie_grill')
+            pref_pk = form.cleaned_data.get('salle_preference')
 
-            # Choisir la salle selon la prÃ©fÃ©rence
-            if pref == 'salle_humide' and salle_humide:
-                salle_banquet = salle_humide
-            else:
-                salle_banquet = salle_principale
+            salle_banquet = salles_agapes.filter(pk=pref_pk).first() or salles_agapes.first()
 
-            # VÃ©rifier s'il y a dÃ©jÃ  une rÃ©servation sur ce crÃ©neau
+            # Verifier s'il y a deja une reservation sur ce creneau
             conflit = ReservationSalle.objects.filter(
                 salle=salle_banquet,
                 date=date,
@@ -293,18 +288,18 @@ def demande_banquet(request):
             ).exists()
 
             if conflit:
-                messages.error(request, f"La salle Â« {salle_banquet.nom} Â» n'est pas disponible sur ce crÃ©neau.")
-                return render(request, "reservations/formulaire_banquet.html", {
-                    "form": form, "salle_humide_dispo": bool(salle_humide),
-                })
+                messages.error(request, f"La salle « {salle_banquet.nom} » n'est pas disponible sur ce créneau.")
+                return render(request, "reservations/formulaire_banquet.html", {"form": form})
 
-            commentaire_complet = form.cleaned_data['commentaire']
-            if pref == 'salle_humide':
-                commentaire_complet = (
-                    "[PrÃ©fÃ©rence : Salle Humide – sous rÃ©serve d'accord du traiteur]\n" + commentaire_complet
-                ).strip()
+            # Tout banquet d'ordre necessite une demande parallele au traiteur
+            note_traiteur = (
+                "[Banquet d'ordre — une demande doit être adressée en parallèle au "
+                "traiteur pour confirmer sa capacité à assurer ce banquet.]"
+            )
+            nl = chr(10)
+            commentaire_complet = (note_traiteur + nl + form.cleaned_data['commentaire']).strip()
 
-            # CrÃ©er la rÃ©servation
+            # Creer la reservation
             resa = ReservationSalle.objects.create(
                 loge=form.cleaned_data.get('loge'),
                 salle=salle_banquet,
@@ -321,34 +316,35 @@ def demande_banquet(request):
                 commentaire=commentaire_complet,
             )
 
-            # Envoyer un email de confirmation
+            # Envoyer un email de confirmation (demandeur + traiteur)
             destinataires = [form.cleaned_data['email_demandeur']]
             email_t = get_email_traiteur()
             if email_t:
                 destinataires.append(email_t)
+            message = (
+                f"Votre demande de banquet d'ordre pour le {date:%d/%m/%Y} "
+                f"de {heure_debut} à {heure_fin} a bien été reçue." + nl +
+                f"Salle : {salle_banquet.nom}" + nl +
+                f"Nombre de repas : {form.cleaned_data['nombre_repas']}" + nl + nl +
+                "IMPORTANT : cette réservation de salle ne vaut pas accord du traiteur. "
+                "Vous devez adresser en parallèle une demande au traiteur afin de "
+                "vérifier sa capacité à assurer ce banquet d'ordre." + nl + nl +
+                f"Référence : {resa.uuid}" + nl +
+                "Vous pouvez suivre votre demande sur : "
+                f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(resa.uuid) + '/')}"
+            )
             send_mail_kellermann(
                 subject="Confirmation de votre demande de banquet d'ordre",
-                message=(
-                    f"Votre demande de banquet d'ordre pour le {date:%d/%m/%Y} "
-                    f"de {heure_debut} Ã  {heure_fin} a bien Ã©tÃ© reÃ§ue.\n"
-                    f"Salle : {salle_banquet.nom}"
-                    + (" (sous rÃ©serve d'accord du traiteur)" if pref == 'salle_humide' else "") + "\n"
-                    f"Nombre de repas : {form.cleaned_data['nombre_repas']}\n"
-                    f"RÃ©fÃ©rence : {resa.uuid}\n"
-                    f"Vous pouvez suivre votre demande sur : "
-                    f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(resa.uuid) + '/')}"
-                ),
+                message=message,
                 recipient_list=destinataires,
             )
 
-            messages.success(request, "Votre demande de banquet d'ordre a Ã©tÃ© soumise avec succÃ¨s.")
+            messages.success(request, "Votre demande de banquet d'ordre a été soumise avec succès.")
             return redirect("reservations:confirmation_banquet", uuid=resa.uuid)
     else:
         form = DemandeBanquetForm()
 
-    return render(request, "reservations/formulaire_banquet.html", {
-        "form": form, "salle_humide_dispo": bool(salle_humide),
-    })
+    return render(request, "reservations/formulaire_banquet.html", {"form": form})
 
 
 def confirmation_banquet(request, uuid):

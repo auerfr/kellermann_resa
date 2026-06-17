@@ -180,20 +180,14 @@ class DemandeCabinetsForm(forms.Form):
 
 
 class DemandeBanquetForm(forms.Form):
-    SALLE_CHOICES = [
-        ("oie_grill", "L'Oie et le Grill"),
-        ("salle_humide", "Salle Humide"),
-    ]
-
     loge = forms.ModelChoiceField(
-        queryset=None,  # Sera défini dans __init__
+        queryset=None,  # Defini dans __init__
         label="Loge",
         widget=forms.Select(attrs={"class": "form-select"})
     )
     salle_preference = forms.ChoiceField(
-        choices=SALLE_CHOICES,
+        choices=[],  # Rempli dynamiquement dans __init__ (salles d'agapes actives)
         label="Salle souhaitée",
-        initial="oie_grill",
         widget=forms.RadioSelect(),
     )
     date = forms.DateField(
@@ -226,8 +220,22 @@ class DemandeBanquetForm(forms.Form):
         required=False, label="Commentaire",
         widget=forms.Textarea(attrs={"rows": 3, "class": "form-control"})
     )
+    demande_traiteur = forms.BooleanField(
+        required=True,
+        label=("Je m'engage à adresser en parallèle une demande au traiteur "
+               "afin de vérifier sa capacité à assurer ce banquet d'ordre."),
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
 
     def __init__(self, *args, **kwargs):
         from temple_project.apps.loges.models import Loge
+        from .models import SalleReunion
         super().__init__(*args, **kwargs)
         self.fields['loge'].queryset = Loge.objects.all().order_by('nom')
+        salles = SalleReunion.objects.filter(
+            type_salle='agapes', actif=True
+        ).order_by('-capacite', 'nom')
+        choices = [(str(s.pk), s.nom) for s in salles]
+        self.fields['salle_preference'].choices = choices
+        if choices:
+            self.fields['salle_preference'].initial = choices[0][0]
