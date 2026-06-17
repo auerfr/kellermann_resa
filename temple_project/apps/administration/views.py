@@ -2897,7 +2897,9 @@ def _periode_facturation(request):
 
 
 def _facturation_data(date_debut, date_fin, params):
-    """Réservations facturables (exceptionnelles + congrès, validées) groupées par loge."""
+    """Facturation par JOURNÉE (un tarif par organisation et par jour, quel que
+    soit le nombre de temples occupés), pour les occupations exceptionnelles et
+    congrès validés (hors récurrentes), groupée par loge."""
     from decimal import Decimal
     qs = Reservation.objects.filter(
         type_reservation__in=['exceptionnelle', 'congres'],
@@ -2906,24 +2908,47 @@ def _facturation_data(date_debut, date_fin, params):
         date__gte=date_debut, date__lte=date_fin,
     ).select_related('loge', 'temple').order_by('date')
 
-    groupes = {}
-    total = Decimal('0')
-    nb = 0
+    # Consolidation par (organisation, jour) : tarif = le plus élevé du jour
+    jours = {}
     for r in qs:
         tarif = r.tarif if r.tarif is not None else tarif_reservation(r, params)
         nom = r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur or '—')
-        ligne = {
-            'date': r.date, 'temple': str(r.temple) if r.temple else '',
-            'type': r.get_type_reservation_display(), 'type_code': r.type_reservation,
-            'agapes': r.besoin_agapes, 'tarif': tarif,
-        }
-        g = groupes.setdefault(nom, {'nom': nom, 'lignes': [], 'total': Decimal('0')})
-        g['lignes'].append(ligne)
-        g['total'] += tarif
-        total += tarif
-        nb += 1
+        key = (nom, r.date)
+        d = jours.get(key)
+        if d is None:
+            jours[key] = {
+                'nom': nom, 'date': r.date,
+                'temples': [str(r.temple)] if r.temple else [],
+                'tarif': tarif,
+                'type': r.get_type_reservation_display(), 'type_code': r.type_reservation,
+                'agapes': r.besoin_agapes,
+            }
+        else:
+            if tarif > d['tarif']:
+                d['tarif'] = tarif
+                d['type'] = r.get_type_reservation_display()
+                d['type_code'] = r.type_reservation
+            d['agapes'] = d['agapes'] or r.besoin_agapes
+            if r.temple and str(r.temple) not in d['temples']:
+                d['temples'].append(str(r.temple))
+
+    groupes = {}
+    total = Decimal('0')
+    nb_jours = 0
+    for d in jours.values():
+        g = groupes.setdefault(d['nom'], {'nom': d['nom'], 'lignes': [], 'total': Decimal('0')})
+        g['lignes'].append({
+            'date': d['date'], 'temple': ', '.join(d['temples']),
+            'type': d['type'], 'type_code': d['type_code'],
+            'agapes': d['agapes'], 'tarif': d['tarif'],
+        })
+        g['total'] += d['tarif']
+        total += d['tarif']
+        nb_jours += 1
+    for g in groupes.values():
+        g['lignes'].sort(key=lambda x: x['date'])
     groupes_list = sorted(groupes.values(), key=lambda d: d['nom'].lower())
-    return groupes_list, total, nb
+    return groupes_list, total, nb_jours
 
 
 @login_required
@@ -2949,7 +2974,7 @@ def facturation(request):
     return render(request, 'administration/facturation.html', {
         'params': params,
         'date_debut': date_debut, 'date_fin': date_fin,
-        'groupes': groupes, 'total_global': total, 'nb_resa': nb,
+        'groupes': groupes, 'total_global': total, 'nb_jours': nb,
     })
 
 
