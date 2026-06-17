@@ -620,10 +620,23 @@ def api_grille_congres(request):
         occ_days = [j.strftime('%d/%m') for j in jours if occ_salle(s, j)]
         data_salles.append({'nom': str(s), 'libre': not occ_days, 'detail': ', '.join(occ_days)})
 
+    # Alternatives : temples non demandés, libres sur toute la période
+    requested = set()
+    for i in temples_ids:
+        try:
+            requested.add(int(i))
+        except (TypeError, ValueError):
+            pass
+    alternatives = []
+    for tp in Temple.objects.exclude(pk__in=requested).order_by('nom'):
+        if all(not occ_temple(tp, j) for j in jours):
+            alternatives.append({'id': tp.pk, 'nom': str(tp)})
+
     return JsonResponse({
         'temples': [str(t) for t in temples],
         'jours': data_jours,
         'salles': data_salles,
+        'alternatives': alternatives,
         'nb_conflits': nb_conflits,
     })
 

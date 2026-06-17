@@ -309,20 +309,26 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeSelect) typeSelect.addEventListener('change', toggleCongres);
     toggleCongres();
 
-    // Bouton explicite de vérification de disponibilité
+    // Bouton explicite de vérification de disponibilité (exceptionnelle + congrès)
     const btnVerif = document.getElementById('btn-verif-dispo');
     function escapeHtml(s) { return (s || '').replace(/[&<>]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
     function verifierDispoBouton() {
         const congres = typeSelect && typeSelect.value === 'congres';
-        if (!congres) { verifierConflit(); return; }
-        const temples = Array.from(document.querySelectorAll('input[name="temples"]:checked')).map(function (t) { return t.value; });
-        const salles = Array.from(document.querySelectorAll('input[name="salles_reunion"]:checked')).map(function (s) { return s.value; });
-        const dd = dateInput.value;
-        const dfEl = document.querySelector('[name="date_fin"]');
-        const df = (dfEl && dfEl.value) ? dfEl.value : dd;
-        const hd = heureDebutInput.value, hf = heureFinInput.value;
+        const dd = dateInput.value, hd = heureDebutInput.value, hf = heureFinInput.value;
+        var temples, salles, df;
+        if (congres) {
+            temples = Array.from(document.querySelectorAll('input[name="temples"]:checked')).map(function (t) { return t.value; });
+            salles  = Array.from(document.querySelectorAll('input[name="salles_reunion"]:checked')).map(function (s) { return s.value; });
+            var dfEl = document.querySelector('[name="date_fin"]');
+            df = (dfEl && dfEl.value) ? dfEl.value : dd;
+        } else {
+            var tEl = document.querySelector('[name="temple"]');
+            temples = (tEl && tEl.value) ? [tEl.value] : [];
+            salles = [];
+            df = dd;
+        }
         if (!temples.length || !dd || !hd || !hf) {
-            conflitMessage.innerHTML = '<div class="alert alert-info">Sélectionnez les temples, la date et les heures pour vérifier.</div>';
+            conflitMessage.innerHTML = '<div class="alert alert-info">Choisissez le temple, la date et les heures pour vérifier la disponibilité.</div>';
             conflitMessage.style.display = 'block';
             return;
         }
@@ -339,8 +345,9 @@ document.addEventListener('DOMContentLoaded', function() {
                   conflitMessage.style.display = 'block';
                   return;
               }
+              var titre = congres ? 'Disponibilité du congrès' : 'Disponibilité';
               var html = '<div class="alert ' + (d.nb_conflits ? 'alert-warning' : 'alert-success') + '">';
-              html += '<strong>Disponibilité du congrès</strong>';
+              html += '<strong>' + titre + '</strong>';
               html += '<div class="table-responsive mt-2"><table class="table table-sm bg-white mb-0 align-middle"><thead><tr><th>Date</th>';
               d.temples.forEach(function (t) { html += '<th>' + escapeHtml(t) + '</th>'; });
               html += '</tr></thead><tbody>';
@@ -362,9 +369,33 @@ document.addEventListener('DOMContentLoaded', function() {
                   });
                   html += '</ul></div>';
               }
+              if (d.alternatives && d.alternatives.length) {
+                  html += '<div class="mt-2"><strong>Autres temples libres sur ce créneau</strong><div class="d-flex flex-wrap gap-2 mt-1">';
+                  d.alternatives.forEach(function (a) {
+                      html += '<button type="button" class="btn btn-sm btn-outline-primary verif-alt" data-id="' + a.id + '">' + escapeHtml(a.nom) + '</button>';
+                  });
+                  html += '</div><div class="form-text">Cliquez pour proposer ce temple.</div></div>';
+              } else if (d.nb_conflits) {
+                  html += '<div class="mt-2 small text-muted">Aucun autre temple libre sur ce créneau — proposez une autre date.</div>';
+              }
               html += '</div>';
               conflitMessage.innerHTML = html;
               conflitMessage.style.display = 'block';
+              conflitMessage.querySelectorAll('.verif-alt').forEach(function (btn) {
+                  btn.addEventListener('click', function () {
+                      var id = btn.dataset.id;
+                      if (congres) {
+                          var cb = document.querySelector('input[name="temples"][value="' + id + '"]');
+                          if (cb) cb.checked = true;
+                      } else if (window.jQuery) {
+                          jQuery('#id_temple').val(id).trigger('change');
+                      } else {
+                          var sel = document.getElementById('id_temple');
+                          if (sel) sel.value = id;
+                      }
+                      verifierDispoBouton();
+                  });
+              });
           });
     }
     if (btnVerif) btnVerif.addEventListener('click', verifierDispoBouton);
