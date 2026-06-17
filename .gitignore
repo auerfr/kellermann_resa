@@ -18,6 +18,13 @@ media/
 .vscode/
 *.code-workspace
 
+# Claude Code (worktrees, sessions — ne jamais versionner)
+.claude/
+
+# Fragments de conflit Proton Drive
+*Name clash*
+*Edit conflict*
+
 # OS
 .DS_Store
 Thumbs.db
