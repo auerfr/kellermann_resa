@@ -79,6 +79,15 @@ class ReservationDirecteForm(forms.Form):
         required=False, label="Date de fin (congrès)",
         widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
     )
+    temples_congres = forms.ModelMultipleChoiceField(
+        queryset=_Temple.objects.all(), required=False,
+        widget=forms.CheckboxSelectMultiple(), label="Temples du congrès (1 à 3)",
+    )
+    salles_reunion = forms.ModelMultipleChoiceField(
+        queryset=SalleReunion.objects.filter(actif=True, type_salle="reunion").order_by("nom"),
+        required=False, widget=forms.CheckboxSelectMultiple(),
+        label="Salles de réunion (congrès, optionnel)",
+    )
     salle_reunion = forms.ModelChoiceField(
         queryset=SalleReunion.objects.filter(actif=True, type_salle="reunion").order_by("nom"),
         required=False, label="Salle de réunion",
@@ -132,7 +141,10 @@ class ReservationDirecteForm(forms.Form):
         cleaned = super().clean()
         type_resa = cleaned.get("type_resa")
         if type_resa == "temple":
-            if not cleaned.get("temple"):
+            if cleaned.get("nature") == "congres":
+                if not cleaned.get("temples_congres"):
+                    self.add_error("temples_congres", "Sélectionnez au moins un temple pour le congrès.")
+            elif not cleaned.get("temple"):
                 self.add_error("temple", "Veuillez choisir un temple.")
         else:
             champ = self.SALLE_FIELDS.get(type_resa)
@@ -140,7 +152,9 @@ class ReservationDirecteForm(forms.Form):
                 self.add_error(champ, "Veuillez choisir une salle.")
         hd = cleaned.get("heure_debut")
         hf = cleaned.get("heure_fin")
-        if hd and hf and hf <= hd:
+        is_congres = (type_resa == "temple" and cleaned.get("nature") == "congres")
+        # Un congrès peut s'étendre sur plusieurs jours (fin < début côté horaire)
+        if hd and hf and hf <= hd and not is_congres:
             self.add_error("heure_fin", "L'heure de fin doit être après l'heure de début.")
         return cleaned
 

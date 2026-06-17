@@ -2428,6 +2428,33 @@ def _cabinets_libres(date_r, hd, hf):
     return libres
 
 
+def _conflits_congres(temples, date_debut, date_fin, hd, hf):
+    """Conflits sur l'ensemble des temples et des jours d'un congrès."""
+    from datetime import timedelta
+    conflits = []
+    hd_t = _to_time(hd)
+    hf_t = _to_time(hf)
+    fin = date_fin or date_debut
+    jours = []
+    j = date_debut
+    while j <= fin:
+        jours.append(j)
+        j += timedelta(days=1)
+    for tp in temples:
+        for jour in jours:
+            for r in Reservation.objects.filter(
+                temple=tp, date=jour, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+                statut__in=['attente', 'validee'],
+            ).select_related('loge'):
+                qui = r.loge or r.nom_organisation or r.nom_demandeur
+                conflits.append(f"{tp} — {jour:%d/%m/%Y} {r.heure_debut:%H:%M}–{r.heure_fin:%H:%M} : {qui}")
+            for i in Indisponibilite.objects.filter(
+                temples=tp, date_debut__lte=jour, date_fin__gte=jour,
+            ):
+                conflits.append(f"{tp} — {jour:%d/%m/%Y} indisponibilité : {i.motif}")
+    return conflits
+
+
 def _analyser_disponibilite(type_resa, ressource, date_r, hd, hf):
     """Renvoie (conflits, alternatives) pour la ressource et le créneau demandés."""
     conflits = []
@@ -2554,6 +2581,53 @@ def reservation_directe(request):
                 f"Réservation directe cabinets : {loge.nom if loge else org} — "
                 f"{date_r:%d/%m/%Y} {hd}–{hf} ({len(crees)} cabinet(s))",
                 request=request, objet=crees[0] if crees else None)
+            return redirect("administration:tableau_de_bord")
+
+        # ── Congrès multi-temples (type temple + nature congrès) ─────────────
+        if type_resa == "temple" and cd.get("nature") == "congres":
+            temples_c = list(cd.get("temples_congres") or [])
+            date_fin_c = cd.get("date_fin")
+            conflits = _conflits_congres(temples_c, date_r, date_fin_c, hd, hf)
+            creneau = {'date': date_r, 'hd': hd, 'hf': hf, 'date_fin': date_fin_c,
+                       'ressource': "Congrès — " + ", ".join(str(t) for t in temples_c)}
+            ctx_c = {"form": form, "conflits": conflits, "alternatives": [],
+                     "dispo_verifiee": True, "creneau": creneau}
+            if action == "verifier":
+                return render(request, "administration/reservation_directe.html", ctx_c)
+            if not nom_dem or not email_dem:
+                messages.error(request, "Le nom et l'email du demandeur sont requis pour créer la réservation.")
+                return render(request, "administration/reservation_directe.html", ctx_c)
+            if conflits and not forcer:
+                messages.warning(request, "Conflit détecté sur le congrès : réservation non créée. "
+                                          "Vérifiez les créneaux ou cochez « Forcer ».")
+                return render(request, "administration/reservation_directe.html", {**ctx_c, "bloque": True})
+            premier = None
+            for tp in temples_c:
+                r = Reservation.objects.create(
+                    loge=loge, nom_organisation=org, temple=tp,
+                    type_reservation='congres', sous_type='standard', statut='validee',
+                    date=date_r, date_fin=date_fin_c, heure_debut=hd, heure_fin=hf,
+                    besoin_agapes=couverts > 0, nombre_repas=couverts,
+                    nom_demandeur=nom_dem, email_demandeur=email_dem, commentaire=note,
+                )
+                r.tarif = tarif_reservation(r)
+                r.save(update_fields=['tarif'])
+                if premier is None:
+                    premier = r
+            org_nom = loge.nom if loge else org
+            for salle in cd.get('salles_reunion') or []:
+                ReservationSalle.objects.create(
+                    loge=loge, salle=salle, date=date_r, heure_debut=hd, heure_fin=hf,
+                    statut='validee', nom_demandeur=nom_dem, email_demandeur=email_dem,
+                    organisation=org_nom, objet='Congrès', nombre_participants=couverts,
+                    commentaire=note,
+                )
+            messages.success(request, f"Congrès créé et validé sur {len(temples_c)} temple(s).")
+            log_evenement('creation_reservation_directe',
+                f"Congrès direct : {org_nom} — {date_r:%d/%m/%Y}"
+                + (f" → {date_fin_c:%d/%m/%Y}" if date_fin_c else "")
+                + f" ({len(temples_c)} temple(s))",
+                request=request, objet=premier)
             return redirect("administration:tableau_de_bord")
 
         ressource = cd.get("temple") if type_resa == "temple" else form.salle_choisie()

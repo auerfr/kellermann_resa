@@ -34,9 +34,11 @@
                     </div>
 
                     <div id="bloc-temple" class="mb-3">
-                        <label class="form-label fw-semibold">{{ form.temple.label }}</label>
-                        {{ form.temple }}
-                        {% if form.temple.errors %}<div class="text-danger small">{{ form.temple.errors }}</div>{% endif %}
+                        <div id="dr-temple-unique">
+                          <label class="form-label fw-semibold">{{ form.temple.label }}</label>
+                          {{ form.temple }}
+                          {% if form.temple.errors %}<div class="text-danger small">{{ form.temple.errors }}</div>{% endif %}
+                        </div>
                         <div class="row g-2 mt-2">
                           <div class="col-md-6">
                             <label class="form-label fw-semibold">{{ form.nature.label }}</label>
@@ -45,6 +47,21 @@
                           <div class="col-md-6" id="bloc-date-fin" style="display:none;">
                             <label class="form-label fw-semibold">{{ form.date_fin.label }}</label>
                             {{ form.date_fin }}
+                          </div>
+                        </div>
+                        <div id="dr-temples-congres" class="mt-2" style="display:none;">
+                          <label class="form-label fw-semibold">{{ form.temples_congres.label }}</label>
+                          <div>
+                            {% for cb in form.temples_congres %}
+                            <div class="form-check form-check-inline">{{ cb.tag }}<label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label></div>
+                            {% endfor %}
+                          </div>
+                          {% if form.temples_congres.errors %}<div class="text-danger small">{{ form.temples_congres.errors|striptags }}</div>{% endif %}
+                          <label class="form-label fw-semibold mt-2">{{ form.salles_reunion.label }}</label>
+                          <div>
+                            {% for cb in form.salles_reunion %}
+                            <div class="form-check form-check-inline">{{ cb.tag }}<label class="form-check-label" for="{{ cb.id_for_label }}">{{ cb.choice_label }}</label></div>
+                            {% endfor %}
                           </div>
                         </div>
                     </div>
@@ -178,18 +195,22 @@ jQuery(function ($) {
         cabinet: '#bloc-cabinet',
         agapes:  '#bloc-agapes',
     };
+    var $nature = $('#id_nature');
+    function toggleCongres() {
+        var c = $nature.val() === 'congres';
+        $('#bloc-date-fin').toggle(c);
+        $('#dr-temple-unique').toggle(!c);
+        $('#dr-temples-congres').toggle(c);
+    }
     function toggle() {
         var v = $sel.val();
         $.each(blocs, function (type, sel) { $(sel).toggle(type === v); });
+        if (v === 'temple') toggleCongres();
     }
     // .on('change') capte aussi l'événement déclenché par Select2
     $sel.on('change', toggle);
-    toggle();
-
-    // Date de fin (congrès) selon la nature
-    var $nature = $('#id_nature');
-    function toggleCongres() { $('#bloc-date-fin').toggle($nature.val() === 'congres'); }
     $nature.on('change', toggleCongres);
+    toggle();
     toggleCongres();
 
     // Sélection d'une alternative proposée → on l'applique et on revérifie
