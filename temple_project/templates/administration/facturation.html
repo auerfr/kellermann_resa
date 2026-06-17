@@ -36,6 +36,13 @@
             <input type="number" step="0.01" min="0" name="tarif_congres_jour" class="form-control" value="{{ params.tarif_congres_jour }}">
           </div>
         </div>
+        <div class="row g-3 mt-1">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Entrée en vigueur (vote AG)</label>
+            <input type="date" name="tarif_date_effet" class="form-control" value="{{ params.tarif_date_effet|date:'Y-m-d' }}">
+            <div class="form-text">Les occupations <strong>antérieures</strong> à cette date ne sont pas facturées.</div>
+          </div>
+        </div>
         <button type="submit" class="btn btn-temple mt-3">💾 Enregistrer les tarifs</button>
       </form>
     </div>

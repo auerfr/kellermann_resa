@@ -48,22 +48,41 @@ def tableau_de_bord(request):
 
 # ── Tarification ──────────────────────────────────────────────────────────────
 
+def _exceptionnelle_facturable(date_):
+    """Une occupation exceptionnelle n'est facturée que le week-end (samedi/dimanche)
+    ou hors période d'ouverture (juillet/août). Les tenues de semaine en saison ne
+    sont pas facturées."""
+    return date_.weekday() >= 5 or date_.month in (7, 8)
+
+
+def _reservation_facturable(resa, params):
+    """Détermine si une réservation est facturable selon toutes les règles."""
+    # Jamais les réservations récurrentes (générées par une règle)
+    if resa.regle_source_id:
+        return False
+    # Tarifs non rétroactifs : rien avant leur date d'entrée en vigueur (vote AG)
+    if params.tarif_date_effet and resa.date < params.tarif_date_effet:
+        return False
+    if resa.type_reservation == 'congres':
+        return True
+    if resa.type_reservation == 'exceptionnelle':
+        return _exceptionnelle_facturable(resa.date)
+    return False
+
+
 def tarif_reservation(resa, params=None):
-    """Tarif théorique d'une réservation selon son type et les agapes."""
+    """Tarif d'une réservation (0 si non facturable)."""
     from decimal import Decimal
     if params is None:
         params = Parametres.get_instance()
-    # Les réservations récurrentes (générées par une règle) ne sont jamais facturées
-    if resa.regle_source_id:
+    if not _reservation_facturable(resa, params):
         return Decimal('0')
     if resa.type_reservation == 'congres':
         jours = 1
         if resa.date_fin and resa.date_fin > resa.date:
             jours = (resa.date_fin - resa.date).days
         return params.tarif_congres_jour * jours
-    if resa.type_reservation == 'exceptionnelle':
-        return params.tarif_exc_avec_agapes if resa.besoin_agapes else params.tarif_exc_sans_agapes
-    return Decimal('0')
+    return params.tarif_exc_avec_agapes if resa.besoin_agapes else params.tarif_exc_sans_agapes
 
 
 # ── Validation réservations ───────────────────────────────────────────────────
@@ -2921,7 +2940,9 @@ def _facturation_data(date_debut, date_fin, params):
 
     # Occupations exceptionnelles : consolidées par (organisation, jour)
     for r in base.filter(type_reservation='exceptionnelle').order_by('date'):
-        tarif = r.tarif if r.tarif is not None else tarif_reservation(r, params)
+        tarif = tarif_reservation(r, params)
+        if tarif <= 0:
+            continue   # tenue de semaine, hors barème, ou antérieure au vote
         nom = _nom(r)
         key = ('exc', nom, r.date)
         e = items.get(key)
@@ -2942,7 +2963,9 @@ def _facturation_data(date_debut, date_fin, params):
     # Congrès : consolidés par (organisation, date début, date fin) — un tarif
     # pour la durée, quel que soit le nombre de temples
     for r in base.filter(type_reservation='congres').order_by('date'):
-        tarif = r.tarif if r.tarif is not None else tarif_reservation(r, params)
+        tarif = tarif_reservation(r, params)
+        if tarif <= 0:
+            continue   # congrès antérieur au vote des tarifs
         nom = _nom(r)
         key = ('cong', nom, r.date, r.date_fin)
         e = items.get(key)
@@ -2989,10 +3012,13 @@ def facturation(request):
             params.tarif_exc_sans_agapes = Decimal(request.POST.get('tarif_exc_sans_agapes') or '0')
             params.tarif_exc_avec_agapes = Decimal(request.POST.get('tarif_exc_avec_agapes') or '0')
             params.tarif_congres_jour    = Decimal(request.POST.get('tarif_congres_jour') or '0')
-            params.save(update_fields=['tarif_exc_sans_agapes', 'tarif_exc_avec_agapes', 'tarif_congres_jour'])
-            messages.success(request, "Tarifs mis à jour. Ils s'appliqueront aux prochaines validations.")
+            de = (request.POST.get('tarif_date_effet') or '').strip()
+            params.tarif_date_effet = date.fromisoformat(de) if de else None
+            params.save(update_fields=['tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
+                                       'tarif_congres_jour', 'tarif_date_effet'])
+            messages.success(request, "Tarifs mis à jour. Ils ne s'appliquent pas aux dates antérieures à leur entrée en vigueur.")
         except (InvalidOperation, ValueError):
-            messages.error(request, "Tarifs invalides : saisissez des montants numériques.")
+            messages.error(request, "Valeurs invalides : vérifiez les montants et la date.")
         qs = request.META.get('QUERY_STRING', '')
         return redirect(f"{request.path}?{qs}" if qs else request.path)
 
