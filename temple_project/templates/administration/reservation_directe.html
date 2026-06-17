@@ -150,6 +150,22 @@
                         <label class="form-check-label text-danger" for="id_forcer">Forcer malgré les conflits (passe-droit admin)</label>
                       </div>
                       {% endif %}
+                      {% elif cabinets_etat %}
+                      <div class="alert {% if conflits %}alert-warning{% else %}alert-success{% endif %}">
+                        <strong>Cabinets de réflexion</strong> — {{ creneau.date|date:"d/m/Y" }} de {{ creneau.hd }} à {{ creneau.hf }} :
+                        <ul class="mb-0 mt-2">
+                          {% for c in cabinets_etat %}
+                          <li>{{ c.nom }} : {% if c.libre %}<span class="text-success">libre</span>{% else %}<span class="text-danger">occupé — {{ c.detail }}</span>{% endif %}</li>
+                          {% endfor %}
+                        </ul>
+                        {% if conflits %}<div class="small mt-2 text-danger">{{ conflits.0 }}</div>{% else %}<div class="small mt-2">Les cabinets libres ci-dessus seront réservés — indiquez au demandeur lesquels il devra occuper.</div>{% endif %}
+                      </div>
+                      {% if conflits %}
+                      <div class="form-check mb-3">
+                        <input type="checkbox" name="forcer" id="id_forcer" class="form-check-input">
+                        <label class="form-check-label text-danger" for="id_forcer">Forcer malgré le manque de cabinets (passe-droit admin)</label>
+                      </div>
+                      {% endif %}
                       {% elif conflits %}
                       <div class="alert alert-danger">
                         <strong>⛔ Créneau indisponible</strong> — {{ creneau.ressource }},

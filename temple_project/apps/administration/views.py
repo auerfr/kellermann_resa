@@ -2428,6 +2428,24 @@ def _cabinets_libres(date_r, hd, hf):
     return libres
 
 
+def _cabinets_etat(date_r, hd, hf):
+    """État de chaque cabinet (libre / occupé par qui) sur le créneau, par nom."""
+    hd_t = _to_time(hd)
+    hf_t = _to_time(hf)
+    etat = []
+    for c in SalleReunion.objects.filter(
+        type_salle='cabinet_reflexion', actif=True,
+    ).order_by('nom'):
+        occ = []
+        for r in ReservationSalle.objects.filter(
+            salle=c, date=date_r, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+            statut__in=['attente', 'validee'],
+        ).select_related('loge'):
+            occ.append(r.organisation or (r.loge.nom if r.loge else r.nom_demandeur))
+        etat.append({'nom': c.nom, 'libre': not occ, 'detail': ', '.join(occ)})
+    return etat
+
+
 def _grille_congres(temples, date_debut, date_fin, hd, hf):
     """Grille de disponibilité d'un congrès : pour chaque jour et chaque temple,
     libre ou occupé (avec détail). Permet de voir les dispos selon les dates."""
@@ -2546,6 +2564,7 @@ def reservation_directe(request):
         if type_resa == "cabinet":
             nb = int(cd.get("nombre_cabinets") or 1)
             libres = _cabinets_libres(date_r, hd, hf)
+            etat = _cabinets_etat(date_r, hd, hf)
             nb_libres = len(libres)
             conflits = []
             if nb_libres < nb:
@@ -2556,7 +2575,7 @@ def reservation_directe(request):
             ctx_cab = {
                 "form": form, "conflits": conflits, "alternatives": [],
                 "dispo_verifiee": True, "creneau": creneau,
-                "cabinets_libres_count": nb_libres,
+                "cabinets_libres_count": nb_libres, "cabinets_etat": etat,
             }
             if action == "verifier":
                 return render(request, "administration/reservation_directe.html", ctx_cab)
@@ -2586,7 +2605,8 @@ def reservation_directe(request):
                     objet=note or "Cabinet de réflexion", nombre_cabinets=1, commentaire=note,
                 )
                 crees.append(rs)
-            messages.success(request, f"{len(crees)} cabinet(s) de réflexion réservé(s) et validé(s).")
+            noms = ', '.join(c.salle.nom for c in crees)
+            messages.success(request, f"{len(crees)} cabinet(s) de réflexion réservé(s) et validé(s) : {noms}.")
             log_evenement('creation_reservation_directe',
                 f"Réservation directe cabinets : {loge.nom if loge else org} — "
                 f"{date_r:%d/%m/%Y} {hd}–{hf} ({len(crees)} cabinet(s))",
