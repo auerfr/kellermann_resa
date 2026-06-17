@@ -67,6 +67,18 @@ class ReservationDirecteForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
         empty_label="— Choisir un temple —",
     )
+    nature = forms.ChoiceField(
+        choices=[
+            ("exceptionnelle", "Tenue exceptionnelle"),
+            ("congres",        "Congrès / session régionale"),
+        ],
+        required=False, initial="exceptionnelle", label="Nature",
+        widget=forms.Select(attrs={"class": "form-select no-select2"}),
+    )
+    date_fin = forms.DateField(
+        required=False, label="Date de fin (congrès)",
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+    )
     salle_reunion = forms.ModelChoiceField(
         queryset=SalleReunion.objects.filter(actif=True, type_salle="reunion").order_by("nom"),
         required=False, label="Salle de réunion",

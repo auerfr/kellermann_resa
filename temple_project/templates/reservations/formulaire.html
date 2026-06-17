@@ -55,10 +55,18 @@
               {{ form.temple }}
             </div>
           </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Nature de la demande</label>
+            {{ form.type_reservation }}
+          </div>
           <div class="row g-3 mb-3">
             <div class="col-md-4">
               <label class="form-label fw-semibold">Date</label>
               {{ form.date }}
+            </div>
+            <div class="col-md-4" id="bloc-date-fin" style="display:none;">
+              <label class="form-label fw-semibold">Date de fin (congrès)</label>
+              {{ form.date_fin }}
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Heure debut</label>
@@ -253,6 +261,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     dateInput.addEventListener('change', verifierPeriode);
     verifierPeriode();
+
+    // Date de fin affichée uniquement pour les congrès
+    const typeSelect = document.querySelector('[name="type_reservation"]');
+    const blocDateFin = document.getElementById('bloc-date-fin');
+    function toggleCongres() {
+        const congres = typeSelect && typeSelect.value === 'congres';
+        if (blocDateFin) blocDateFin.style.display = congres ? '' : 'none';
+    }
+    if (typeSelect) typeSelect.addEventListener('change', toggleCongres);
+    toggleCongres();
 });
 </script>
 {% endblock %}

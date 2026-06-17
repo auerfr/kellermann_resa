@@ -189,6 +189,10 @@ class Reservation(models.Model):
     profanes_admis   = models.BooleanField(default=False)
     statut           = models.CharField(max_length=20, choices=STATUT_CHOICES, default="attente")
     date             = models.DateField()
+    date_fin         = models.DateField(
+        null=True, blank=True,
+        help_text="Congrès : dernier jour. La facturation compte les jours du début à la fin."
+    )
     heure_debut      = models.TimeField()
     heure_fin        = models.TimeField()
     besoin_agapes    = models.BooleanField(default=False)

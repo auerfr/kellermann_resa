@@ -37,6 +37,16 @@
                         <label class="form-label fw-semibold">{{ form.temple.label }}</label>
                         {{ form.temple }}
                         {% if form.temple.errors %}<div class="text-danger small">{{ form.temple.errors }}</div>{% endif %}
+                        <div class="row g-2 mt-2">
+                          <div class="col-md-6">
+                            <label class="form-label fw-semibold">{{ form.nature.label }}</label>
+                            {{ form.nature }}
+                          </div>
+                          <div class="col-md-6" id="bloc-date-fin" style="display:none;">
+                            <label class="form-label fw-semibold">{{ form.date_fin.label }}</label>
+                            {{ form.date_fin }}
+                          </div>
+                        </div>
                     </div>
 
                     <div id="bloc-reunion" class="mb-3" style="display:none;">
@@ -175,6 +185,12 @@ jQuery(function ($) {
     // .on('change') capte aussi l'événement déclenché par Select2
     $sel.on('change', toggle);
     toggle();
+
+    // Date de fin (congrès) selon la nature
+    var $nature = $('#id_nature');
+    function toggleCongres() { $('#bloc-date-fin').toggle($nature.val() === 'congres'); }
+    $nature.on('change', toggleCongres);
+    toggleCongres();
 
     // Sélection d'une alternative proposée → on l'applique et on revérifie
     $('.alt-btn').on('click', function () {

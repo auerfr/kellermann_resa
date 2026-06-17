@@ -44,11 +44,20 @@ class DemandeReservationForm(forms.ModelForm):
         widget=forms.CheckboxSelectMultiple(),
         required=False
     )
+    type_reservation = forms.ChoiceField(
+        choices=[
+            ("exceptionnelle", "Tenue exceptionnelle"),
+            ("congres",        "Congrès / session régionale"),
+        ],
+        initial="exceptionnelle", label="Nature de la demande",
+        widget=forms.Select(attrs={"class": "form-select no-select2"}),
+    )
 
     class Meta:
         model = Reservation
         fields = [
-            "loge", "nom_organisation", "temple", "date",
+            "loge", "nom_organisation", "temple",
+            "type_reservation", "date", "date_fin",
             "heure_debut", "heure_fin",
             "sous_type",
             "besoin_agapes", "nombre_repas",
@@ -58,6 +67,7 @@ class DemandeReservationForm(forms.ModelForm):
         ]
         widgets = {
             "date":             forms.DateInput(attrs={"type": "date", "class": "form-control"}),
+            "date_fin":         forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "loge":             forms.Select(attrs={"class": "form-select"}),
             "nom_organisation": forms.TextInput(attrs={
                 "class": "form-control",
@@ -79,6 +89,13 @@ class DemandeReservationForm(forms.ModelForm):
             raise forms.ValidationError(
                 "Sélectionnez une loge dans la liste ou saisissez le nom de votre organisation."
             )
+        date = cleaned.get('date')
+        date_fin = cleaned.get('date_fin')
+        if cleaned.get('type_reservation') == 'congres':
+            if date_fin and date and date_fin < date:
+                self.add_error('date_fin', "La date de fin doit être postérieure ou égale à la date de début.")
+        else:
+            cleaned['date_fin'] = None  # la date de fin ne concerne que les congrès
         return cleaned
 
 

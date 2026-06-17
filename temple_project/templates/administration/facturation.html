@@ -64,7 +64,7 @@
 
 {# ── Total global ── #}
 <div class="alert alert-info d-flex justify-content-between align-items-center">
-  <span>{{ nb_jours }} journée(s) facturable(s) sur la période</span>
+  <span>{{ nb_jours }} occupation(s) facturable(s) sur la période</span>
   <strong style="font-size:1.2rem;">Total : {{ total_global|floatformat:2 }} €</strong>
 </div>
 
@@ -83,7 +83,7 @@
       <tbody>
         {% for l in grp.lignes %}
         <tr>
-          <td data-label="Date">{{ l.date|date:"d/m/Y" }}</td>
+          <td data-label="Date">{{ l.date|date:"d/m/Y" }}{% if l.date_fin %} → {{ l.date_fin|date:"d/m/Y" }}{% endif %}</td>
           <td data-label="Type">{{ l.type }}</td>
           <td data-label="Agapes">{% if l.agapes %}Oui{% else %}Non{% endif %}</td>
           <td data-label="Temple">{{ l.temple }}</td>

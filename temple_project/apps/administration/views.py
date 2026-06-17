@@ -57,7 +57,10 @@ def tarif_reservation(resa, params=None):
     if resa.regle_source_id:
         return Decimal('0')
     if resa.type_reservation == 'congres':
-        return params.tarif_congres_jour
+        jours = 1
+        if resa.date_fin and resa.date_fin > resa.date:
+            jours = (resa.date_fin - resa.date).days
+        return params.tarif_congres_jour * jours
     if resa.type_reservation == 'exceptionnelle':
         return params.tarif_exc_avec_agapes if resa.besoin_agapes else params.tarif_exc_sans_agapes
     return Decimal('0')
@@ -2568,14 +2571,17 @@ def reservation_directe(request):
 
         if type_resa == "temple":
             temple = cd["temple"]
+            nature = cd.get("nature") or "exceptionnelle"
+            date_fin = cd.get("date_fin") if nature == "congres" else None
             resa = Reservation.objects.create(
                 loge=loge,
                 nom_organisation=org,
                 temple=temple,
-                type_reservation="exceptionnelle",
+                type_reservation=nature,
                 sous_type="standard",
                 statut="validee",
                 date=date_r,
+                date_fin=date_fin,
                 heure_debut=hd,
                 heure_fin=hf,
                 besoin_agapes=couverts > 0,
@@ -2901,54 +2907,76 @@ def _facturation_data(date_debut, date_fin, params):
     soit le nombre de temples occupés), pour les occupations exceptionnelles et
     congrès validés (hors récurrentes), groupée par loge."""
     from decimal import Decimal
-    qs = Reservation.objects.filter(
-        type_reservation__in=['exceptionnelle', 'congres'],
+
+    def _nom(r):
+        return r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur or '—')
+
+    base = Reservation.objects.filter(
         statut='validee',
         regle_source__isnull=True,   # jamais les réservations récurrentes
         date__gte=date_debut, date__lte=date_fin,
-    ).select_related('loge', 'temple').order_by('date')
+    ).select_related('loge', 'temple')
 
-    # Consolidation par (organisation, jour) : tarif = le plus élevé du jour
-    jours = {}
-    for r in qs:
+    items = {}   # clé -> entrée consolidée
+
+    # Occupations exceptionnelles : consolidées par (organisation, jour)
+    for r in base.filter(type_reservation='exceptionnelle').order_by('date'):
         tarif = r.tarif if r.tarif is not None else tarif_reservation(r, params)
-        nom = r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur or '—')
-        key = (nom, r.date)
-        d = jours.get(key)
-        if d is None:
-            jours[key] = {
-                'nom': nom, 'date': r.date,
+        nom = _nom(r)
+        key = ('exc', nom, r.date)
+        e = items.get(key)
+        if e is None:
+            items[key] = {
+                'nom': nom, 'date': r.date, 'date_fin': None,
                 'temples': [str(r.temple)] if r.temple else [],
-                'tarif': tarif,
-                'type': r.get_type_reservation_display(), 'type_code': r.type_reservation,
-                'agapes': r.besoin_agapes,
+                'tarif': tarif, 'type': r.get_type_reservation_display(),
+                'type_code': r.type_reservation, 'agapes': r.besoin_agapes,
             }
         else:
-            if tarif > d['tarif']:
-                d['tarif'] = tarif
-                d['type'] = r.get_type_reservation_display()
-                d['type_code'] = r.type_reservation
-            d['agapes'] = d['agapes'] or r.besoin_agapes
-            if r.temple and str(r.temple) not in d['temples']:
-                d['temples'].append(str(r.temple))
+            if tarif > e['tarif']:
+                e['tarif'] = tarif
+            e['agapes'] = e['agapes'] or r.besoin_agapes
+            if r.temple and str(r.temple) not in e['temples']:
+                e['temples'].append(str(r.temple))
+
+    # Congrès : consolidés par (organisation, date début, date fin) — un tarif
+    # pour la durée, quel que soit le nombre de temples
+    for r in base.filter(type_reservation='congres').order_by('date'):
+        tarif = r.tarif if r.tarif is not None else tarif_reservation(r, params)
+        nom = _nom(r)
+        key = ('cong', nom, r.date, r.date_fin)
+        e = items.get(key)
+        if e is None:
+            items[key] = {
+                'nom': nom, 'date': r.date, 'date_fin': r.date_fin,
+                'temples': [str(r.temple)] if r.temple else [],
+                'tarif': tarif, 'type': r.get_type_reservation_display(),
+                'type_code': r.type_reservation, 'agapes': r.besoin_agapes,
+            }
+        else:
+            if tarif > e['tarif']:
+                e['tarif'] = tarif
+            if r.temple and str(r.temple) not in e['temples']:
+                e['temples'].append(str(r.temple))
 
     groupes = {}
     total = Decimal('0')
-    nb_jours = 0
-    for d in jours.values():
-        g = groupes.setdefault(d['nom'], {'nom': d['nom'], 'lignes': [], 'total': Decimal('0')})
+    nb_lignes = 0
+    for e in items.values():
+        g = groupes.setdefault(e['nom'], {'nom': e['nom'], 'lignes': [], 'total': Decimal('0')})
         g['lignes'].append({
-            'date': d['date'], 'temple': ', '.join(d['temples']),
-            'type': d['type'], 'type_code': d['type_code'],
-            'agapes': d['agapes'], 'tarif': d['tarif'],
+            'date': e['date'], 'date_fin': e['date_fin'],
+            'temple': ', '.join(e['temples']),
+            'type': e['type'], 'type_code': e['type_code'],
+            'agapes': e['agapes'], 'tarif': e['tarif'],
         })
-        g['total'] += d['tarif']
-        total += d['tarif']
-        nb_jours += 1
+        g['total'] += e['tarif']
+        total += e['tarif']
+        nb_lignes += 1
     for g in groupes.values():
         g['lignes'].sort(key=lambda x: x['date'])
     groupes_list = sorted(groupes.values(), key=lambda d: d['nom'].lower())
-    return groupes_list, total, nb_jours
+    return groupes_list, total, nb_lignes
 
 
 @login_required
@@ -3012,8 +3040,11 @@ def facturation_export_excel(request):
             ws.cell(hr, c).font = navy
             ws.cell(hr, c).fill = navy_fill
         for l in grp['lignes']:
+            date_str = l['date'].strftime('%d/%m/%Y')
+            if l.get('date_fin'):
+                date_str += ' → ' + l['date_fin'].strftime('%d/%m/%Y')
             ws.append([
-                l['date'].strftime('%d/%m/%Y'), l['type'],
+                date_str, l['type'],
                 "Oui" if l['agapes'] else "Non", l['temple'], float(l['tarif']),
             ])
             ws.cell(ws.max_row, 5).number_format = euro

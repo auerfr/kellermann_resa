@@ -20,7 +20,8 @@ def soumettre_demande(request):
         form = DemandeReservationForm(request.POST)
         if form.is_valid():
             resa = form.save(commit=False)
-            resa.type_reservation = "exceptionnelle"
+            if resa.type_reservation not in ('exceptionnelle', 'congres'):
+                resa.type_reservation = "exceptionnelle"
             resa.statut = "attente"
             resa.save()
             form.save_m2m()
