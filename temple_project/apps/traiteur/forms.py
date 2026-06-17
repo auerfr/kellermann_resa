@@ -33,14 +33,22 @@ HORAIRES_GROUPED = [
 
 
 class ReservationDirecteForm(forms.Form):
-    """Formulaire de réservation directe pour l'admin (temple ou salle, statut validée)."""
+    """Réservation directe admin : temple, salle de réunion, cabinet ou agapes (statut validée)."""
     TYPE_CHOICES = [
-        ("temple", "Temple"),
-        ("salle",  "Salle / Agapes"),
+        ("temple",  "Temple"),
+        ("reunion", "Salle de réunion"),
+        ("cabinet", "Cabinet de réflexion"),
+        ("agapes",  "Salle d'agapes / Banquet"),
     ]
 
+    # Champ de salle correspondant à chaque type (le cabinet est géré par quantité)
+    SALLE_FIELDS = {
+        "reunion": "salle_reunion",
+        "agapes":  "salle_agapes",
+    }
+
     type_resa   = forms.ChoiceField(choices=TYPE_CHOICES, label="Type de réservation",
-                                    widget=forms.Select(attrs={"class": "form-select"}))
+                                    widget=forms.Select(attrs={"class": "form-select no-select2"}))
     loge        = forms.ModelChoiceField(
         queryset=Loge.objects.filter(actif=True).order_by("nom"),
         required=False, label="Loge (si connue)",
@@ -59,9 +67,20 @@ class ReservationDirecteForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
         empty_label="— Choisir un temple —",
     )
-    salle       = forms.ModelChoiceField(
+    salle_reunion = forms.ModelChoiceField(
+        queryset=SalleReunion.objects.filter(actif=True, type_salle="reunion").order_by("nom"),
+        required=False, label="Salle de réunion",
+        widget=forms.Select(attrs={"class": "form-select"}),
+        empty_label="— Choisir une salle —",
+    )
+    nombre_cabinets = forms.ChoiceField(
+        choices=[("1", "1 cabinet"), ("2", "2 cabinets"), ("3", "3 cabinets")],
+        required=False, initial="1", label="Nombre de cabinets",
+        widget=forms.Select(attrs={"class": "form-select no-select2"}),
+    )
+    salle_agapes = forms.ModelChoiceField(
         queryset=SalleReunion.objects.filter(actif=True, type_salle="agapes").order_by("nom"),
-        required=False, label="Salle agapes",
+        required=False, label="Salle d'agapes",
         widget=forms.Select(attrs={"class": "form-select"}),
         empty_label="— Choisir une salle —",
     )
@@ -76,15 +95,15 @@ class ReservationDirecteForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     nombre_repas = forms.IntegerField(
-        min_value=0, required=False, initial=0, label="Nombre de couverts",
+        min_value=0, required=False, initial=0, label="Nombre de couverts / participants",
         widget=forms.NumberInput(attrs={"class": "form-control"})
     )
     nom_demandeur = forms.CharField(
-        max_length=200, label="Nom du demandeur",
+        max_length=200, required=False, label="Nom du demandeur",
         widget=forms.TextInput(attrs={"class": "form-control"})
     )
     email_demandeur = forms.EmailField(
-        label="Email du demandeur",
+        required=False, label="Email du demandeur",
         widget=forms.EmailInput(attrs={"class": "form-control"})
     )
     note = forms.CharField(
@@ -92,13 +111,21 @@ class ReservationDirecteForm(forms.Form):
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3})
     )
 
+    def salle_choisie(self):
+        """Renvoie la salle sélectionnée selon le type (ou None)."""
+        champ = self.SALLE_FIELDS.get(self.cleaned_data.get("type_resa"))
+        return self.cleaned_data.get(champ) if champ else None
+
     def clean(self):
         cleaned = super().clean()
         type_resa = cleaned.get("type_resa")
-        if type_resa == "temple" and not cleaned.get("temple"):
-            self.add_error("temple", "Veuillez choisir un temple.")
-        if type_resa == "salle" and not cleaned.get("salle"):
-            self.add_error("salle", "Veuillez choisir une salle agapes.")
+        if type_resa == "temple":
+            if not cleaned.get("temple"):
+                self.add_error("temple", "Veuillez choisir un temple.")
+        else:
+            champ = self.SALLE_FIELDS.get(type_resa)
+            if champ and not cleaned.get(champ):
+                self.add_error(champ, "Veuillez choisir une salle.")
         hd = cleaned.get("heure_debut")
         hf = cleaned.get("heure_fin")
         if hd and hf and hf <= hd:

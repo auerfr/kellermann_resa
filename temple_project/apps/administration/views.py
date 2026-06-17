@@ -12,6 +12,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from temple_project.apps.reservations.models import (
     Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle,
     DemandeAccesPortail, ValidationSaison, ValidationSaisonLigne,
+    Indisponibilite, BlocageCreneaux,
 )
 from temple_project.apps.loges.models import Loge, Obedience
 from .models import Parametres, JournalEvenement, Annonce
@@ -2327,25 +2328,223 @@ def _nieme_jour_du_mois(annee, mois, n, jour):
 
 # ── Réservation directe (admin) ───────────────────────────────────────────────
 
+def _to_time(val):
+    """Convertit 'HH:MM' en datetime.time (ou renvoie tel quel si déjà un time)."""
+    from datetime import datetime, time as _time
+    if isinstance(val, _time):
+        return val
+    return datetime.strptime(val, "%H:%M").time()
+
+
+def _temple_occupe(temple, date_r, hd_t, hf_t):
+    if Reservation.objects.filter(
+        temple=temple, date=date_r, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+        statut__in=['attente', 'validee'],
+    ).exists():
+        return True
+    if Indisponibilite.objects.filter(
+        temples=temple, date_debut__lte=date_r, date_fin__gte=date_r,
+    ).exists():
+        return True
+    return False
+
+
+def _salle_occupee(salle, date_r, hd_t, hf_t):
+    if ReservationSalle.objects.filter(
+        salle=salle, date=date_r, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+        statut__in=['attente', 'validee'],
+    ).exists():
+        return True
+    if BlocageCreneaux.objects.filter(
+        salles=salle, date=date_r, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+    ).exists():
+        return True
+    if Indisponibilite.objects.filter(
+        salles=salle, date_debut__lte=date_r, date_fin__gte=date_r,
+    ).exists():
+        return True
+    return False
+
+
+_SALLE_FIELD_IDS = {
+    "reunion": "id_salle_reunion",
+    "cabinet": "id_salle_cabinet",
+    "agapes":  "id_salle_agapes",
+}
+
+
+def _cabinets_libres(date_r, hd, hf):
+    """Liste des cabinets de réflexion libres sur le créneau."""
+    hd_t = _to_time(hd)
+    hf_t = _to_time(hf)
+    libres = []
+    for c in SalleReunion.objects.filter(
+        type_salle='cabinet_reflexion', actif=True,
+    ).order_by('nom'):
+        if not _salle_occupee(c, date_r, hd_t, hf_t):
+            libres.append(c)
+    return libres
+
+
+def _analyser_disponibilite(type_resa, ressource, date_r, hd, hf):
+    """Renvoie (conflits, alternatives) pour la ressource et le créneau demandés."""
+    conflits = []
+    alternatives = []
+    if not ressource:
+        return conflits, alternatives
+    hd_t = _to_time(hd)
+    hf_t = _to_time(hf)
+
+    if type_resa == "temple":
+        temple = ressource
+        for r in Reservation.objects.filter(
+            temple=temple, date=date_r, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+            statut__in=['attente', 'validee'],
+        ).select_related('loge'):
+            qui = r.loge or r.nom_organisation or r.nom_demandeur
+            conflits.append(f"{r.heure_debut:%H:%M}–{r.heure_fin:%H:%M} : {qui} ({r.get_statut_display()})")
+        for i in Indisponibilite.objects.filter(
+            temples=temple, date_debut__lte=date_r, date_fin__gte=date_r,
+        ):
+            conflits.append(f"Indisponibilité : {i.motif}")
+        if conflits:
+            for t in Temple.objects.exclude(pk=temple.pk).order_by('nom'):
+                if not _temple_occupe(t, date_r, hd_t, hf_t):
+                    alternatives.append({'field': 'id_temple', 'id': t.pk, 'label': str(t)})
+    else:
+        salle = ressource
+        for r in ReservationSalle.objects.filter(
+            salle=salle, date=date_r, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+            statut__in=['attente', 'validee'],
+        ).select_related('loge'):
+            qui = r.organisation or (r.loge.nom if r.loge else r.nom_demandeur)
+            conflits.append(f"{r.heure_debut:%H:%M}–{r.heure_fin:%H:%M} : {qui} — {r.objet} ({r.get_statut_display()})")
+        for b in BlocageCreneaux.objects.filter(
+            salles=salle, date=date_r, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+        ):
+            conflits.append(f"Blocage {b.heure_debut:%H:%M}–{b.heure_fin:%H:%M} : {b.motif}")
+        for i in Indisponibilite.objects.filter(
+            salles=salle, date_debut__lte=date_r, date_fin__gte=date_r,
+        ):
+            conflits.append(f"Indisponibilité : {i.motif}")
+        if conflits:
+            champ = _SALLE_FIELD_IDS.get(type_resa, "id_salle_agapes")
+            for s in SalleReunion.objects.filter(
+                actif=True, type_salle=salle.type_salle,
+            ).exclude(pk=salle.pk).order_by('nom'):
+                if not _salle_occupee(s, date_r, hd_t, hf_t):
+                    alternatives.append({'field': champ, 'id': s.pk, 'label': str(s)})
+    return conflits, alternatives
+
+
 @login_required
 def reservation_directe(request):
-    """Créer une réservation directement validée (sans workflow de validation)."""
+    """Créer une réservation directement validée, avec contrôle de disponibilité."""
     from temple_project.apps.traiteur.forms import ReservationDirecteForm
 
     form = ReservationDirecteForm(request.POST or None)
+    conflits = []
+    alternatives = []
+    dispo_verifiee = False
+    creneau = None
 
     if request.method == "POST" and form.is_valid():
         cd        = form.cleaned_data
         type_resa = cd["type_resa"]
         loge      = cd.get("loge")
         org       = cd.get("organisation") or ""
-        nom_dem   = cd["nom_demandeur"]
-        email_dem = cd["email_demandeur"]
+        nom_dem   = cd.get("nom_demandeur") or ""
+        email_dem = cd.get("email_demandeur") or ""
         date_r    = cd["date"]
         hd        = cd["heure_debut"]
         hf        = cd["heure_fin"]
         couverts  = cd.get("nombre_repas") or 0
         note      = cd.get("note") or ""
+        action    = request.POST.get("action", "creer")
+        forcer    = request.POST.get("forcer") == "on"
+
+        # ── Cas particulier : cabinets de réflexion (par quantité 1/2/3) ─────
+        if type_resa == "cabinet":
+            nb = int(cd.get("nombre_cabinets") or 1)
+            libres = _cabinets_libres(date_r, hd, hf)
+            nb_libres = len(libres)
+            conflits = []
+            if nb_libres < nb:
+                conflits = [f"Seulement {nb_libres} cabinet(s) libre(s) sur ce créneau "
+                            f"(vous en demandez {nb})."]
+            creneau = {'date': date_r, 'hd': hd, 'hf': hf,
+                       'ressource': f"{nb} cabinet(s) de réflexion"}
+            ctx_cab = {
+                "form": form, "conflits": conflits, "alternatives": [],
+                "dispo_verifiee": True, "creneau": creneau,
+                "cabinets_libres_count": nb_libres,
+            }
+            if action == "verifier":
+                return render(request, "administration/reservation_directe.html", ctx_cab)
+            if not nom_dem or not email_dem:
+                messages.error(request, "Le nom et l'email du demandeur sont requis pour créer la réservation.")
+                return render(request, "administration/reservation_directe.html", ctx_cab)
+            if conflits and not forcer:
+                messages.warning(request, "Pas assez de cabinets libres : réservation non créée. "
+                                          "Réduisez le nombre ou cochez « Forcer ».")
+                return render(request, "administration/reservation_directe.html",
+                              {**ctx_cab, "bloque": True})
+            # Choix des cabinets : libres en priorité, puis occupés si on force
+            cibles = list(libres)
+            if len(cibles) < nb:
+                occupes = [c for c in SalleReunion.objects.filter(
+                    type_salle='cabinet_reflexion', actif=True).order_by('nom')
+                    if c not in libres]
+                cibles = (cibles + occupes)[:nb]
+            else:
+                cibles = cibles[:nb]
+            crees = []
+            for cab in cibles:
+                rs = ReservationSalle.objects.create(
+                    loge=loge, salle=cab, date=date_r, heure_debut=hd, heure_fin=hf,
+                    statut="validee", nom_demandeur=nom_dem, email_demandeur=email_dem,
+                    organisation=loge.nom if loge else org,
+                    objet=note or "Cabinet de réflexion", nombre_cabinets=1, commentaire=note,
+                )
+                crees.append(rs)
+            messages.success(request, f"{len(crees)} cabinet(s) de réflexion réservé(s) et validé(s).")
+            log_evenement('creation_reservation_directe',
+                f"Réservation directe cabinets : {loge.nom if loge else org} — "
+                f"{date_r:%d/%m/%Y} {hd}–{hf} ({len(crees)} cabinet(s))",
+                request=request, objet=crees[0] if crees else None)
+            return redirect("administration:tableau_de_bord")
+
+        ressource = cd.get("temple") if type_resa == "temple" else form.salle_choisie()
+
+        # ── Contrôle de disponibilité ───────────────────────────────────────
+        conflits, alternatives = _analyser_disponibilite(type_resa, ressource, date_r, hd, hf)
+        dispo_verifiee = True
+        creneau = {'date': date_r, 'hd': hd, 'hf': hf, 'ressource': ressource}
+
+        ctx_dispo = {
+            "form": form, "conflits": conflits, "alternatives": alternatives,
+            "dispo_verifiee": dispo_verifiee, "creneau": creneau,
+        }
+
+        # Bouton « Vérifier la disponibilité » : on affiche le résultat sans créer.
+        # Aucune saisie du demandeur n'est requise à ce stade.
+        if action == "verifier":
+            return render(request, "administration/reservation_directe.html", ctx_dispo)
+
+        # À partir d'ici on crée : le demandeur devient obligatoire
+        if not nom_dem or not email_dem:
+            messages.error(request, "Le nom et l'email du demandeur sont requis pour créer la réservation.")
+            return render(request, "administration/reservation_directe.html", ctx_dispo)
+
+        # Blocage si conflit non forcé
+        if conflits and not forcer:
+            messages.warning(
+                request,
+                "Conflit détecté : la réservation n'a pas été créée. "
+                "Choisissez une alternative ou cochez « Forcer malgré le conflit »."
+            )
+            return render(request, "administration/reservation_directe.html",
+                          {**ctx_dispo, "bloque": True})
 
         if type_resa == "temple":
             temple = cd["temple"]
@@ -2367,10 +2566,15 @@ def reservation_directe(request):
             )
             messages.success(request, "Réservation temple créée et validée.")
             log_evenement('creation_reservation_directe',
-                f"Réservation directe temple : {loge or org} — {date_r:%d/%m/%Y} {hd:%H:%M}–{hf:%H:%M} ({temple})",
+                f"Réservation directe temple : {loge or org} — {date_r:%d/%m/%Y} {hd}–{hf} ({temple})",
                 request=request, objet=resa)
         else:
-            salle = cd["salle"]
+            salle = ressource
+            objet_defaut = {
+                "reunion": "Réunion",
+                "cabinet": "Cabinet de réflexion",
+                "agapes":  "Agapes",
+            }.get(type_resa, "Réservation")
             resa_salle = ReservationSalle.objects.create(
                 loge=loge,
                 salle=salle,
@@ -2381,18 +2585,21 @@ def reservation_directe(request):
                 nom_demandeur=nom_dem,
                 email_demandeur=email_dem,
                 organisation=loge.nom if loge else org,
-                objet="Agapes" if not note else note,
+                objet=note or objet_defaut,
                 nombre_participants=couverts,
                 commentaire=note,
             )
-            messages.success(request, "Réservation salle créée et validée.")
+            messages.success(request, "Réservation créée et validée.")
             log_evenement('creation_reservation_directe',
-                f"Réservation directe salle : {loge.nom if loge else org} — {date_r:%d/%m/%Y} {hd:%H:%M}–{hf:%H:%M} ({salle})",
+                f"Réservation directe {type_resa} : {loge.nom if loge else org} — {date_r:%d/%m/%Y} {hd}–{hf} ({salle})",
                 request=request, objet=resa_salle)
 
         return redirect("administration:tableau_de_bord")
 
-    return render(request, "administration/reservation_directe.html", {"form": form})
+    return render(request, "administration/reservation_directe.html", {
+        "form": form, "conflits": conflits, "alternatives": alternatives,
+        "dispo_verifiee": dispo_verifiee, "creneau": creneau,
+    })
 
 
 # ── Journal de traçabilité ────────────────────────────────────────────────────

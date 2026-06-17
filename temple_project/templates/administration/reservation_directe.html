@@ -39,10 +39,22 @@
                         {% if form.temple.errors %}<div class="text-danger small">{{ form.temple.errors }}</div>{% endif %}
                     </div>
 
-                    <div id="bloc-salle" class="mb-3" style="display:none;">
-                        <label class="form-label fw-semibold">{{ form.salle.label }}</label>
-                        {{ form.salle }}
-                        {% if form.salle.errors %}<div class="text-danger small">{{ form.salle.errors }}</div>{% endif %}
+                    <div id="bloc-reunion" class="mb-3" style="display:none;">
+                        <label class="form-label fw-semibold">{{ form.salle_reunion.label }}</label>
+                        {{ form.salle_reunion }}
+                        {% if form.salle_reunion.errors %}<div class="text-danger small">{{ form.salle_reunion.errors }}</div>{% endif %}
+                    </div>
+
+                    <div id="bloc-cabinet" class="mb-3" style="display:none;">
+                        <label class="form-label fw-semibold">{{ form.nombre_cabinets.label }}</label>
+                        {{ form.nombre_cabinets }}
+                        <div class="form-text">Le système réservera automatiquement ce nombre de cabinets libres sur le créneau.</div>
+                    </div>
+
+                    <div id="bloc-agapes" class="mb-3" style="display:none;">
+                        <label class="form-label fw-semibold">{{ form.salle_agapes.label }}</label>
+                        {{ form.salle_agapes }}
+                        {% if form.salle_agapes.errors %}<div class="text-danger small">{{ form.salle_agapes.errors }}</div>{% endif %}
                     </div>
 
                     <div class="row g-3 mb-3">
@@ -76,6 +88,7 @@
                             <label class="form-label fw-semibold">{{ form.email_demandeur.label }}</label>
                             {{ form.email_demandeur }}
                         </div>
+                        <div class="form-text">Facultatif pour vérifier la disponibilité ; requis pour créer la réservation.</div>
                     </div>
 
                     <div class="mb-4">
@@ -87,8 +100,55 @@
                     <div class="alert alert-danger">{{ form.non_field_errors }}</div>
                     {% endif %}
 
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-success">✅ Créer et valider</button>
+                    {# ── Résultat du contrôle de disponibilité ── #}
+                    {% if dispo_verifiee %}
+                      {% if conflits %}
+                      <div class="alert alert-danger">
+                        <strong>⛔ Créneau indisponible</strong> — {{ creneau.ressource }},
+                        le {{ creneau.date|date:"d/m/Y" }} de {{ creneau.hd }} à {{ creneau.hf }} :
+                        <ul class="mb-0 mt-2">
+                          {% for c in conflits %}<li>{{ c }}</li>{% endfor %}
+                        </ul>
+                      </div>
+
+                      {% if alternatives %}
+                      <div class="alert alert-info">
+                        <strong>💡 Alternatives libres sur ce créneau</strong> — à proposer au demandeur :
+                        <div class="d-flex flex-wrap gap-2 mt-2">
+                          {% for alt in alternatives %}
+                          <button type="button" class="btn btn-sm btn-outline-primary alt-btn"
+                                  data-field="{{ alt.field }}" data-id="{{ alt.id }}">
+                            {{ alt.label }}
+                          </button>
+                          {% endfor %}
+                        </div>
+                        <div class="form-text mt-1">Cliquez sur une alternative pour la sélectionner et revérifier.</div>
+                      </div>
+                      {% else %}
+                      <div class="alert alert-warning">
+                        Aucune autre {{ creneau.ressource|default:"ressource" }} n'est libre sur ce créneau.
+                        Proposez une autre date ou un autre horaire au demandeur.
+                      </div>
+                      {% endif %}
+
+                      <div class="form-check mb-3">
+                        <input type="checkbox" name="forcer" id="id_forcer" class="form-check-input">
+                        <label class="form-check-label text-danger" for="id_forcer">
+                          Forcer la réservation malgré le conflit (passe-droit admin)
+                        </label>
+                      </div>
+                      {% else %}
+                      <div class="alert alert-success">
+                        <strong>✅ Créneau disponible</strong> — {{ creneau.ressource }},
+                        le {{ creneau.date|date:"d/m/Y" }} de {{ creneau.hd }} à {{ creneau.hf }}.
+                        Vous pouvez créer la réservation.
+                      </div>
+                      {% endif %}
+                    {% endif %}
+
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button type="submit" name="action" value="verifier" id="btn-verifier" class="btn btn-outline-primary">🔎 Vérifier la disponibilité</button>
+                        <button type="submit" name="action" value="creer" class="btn btn-success">✅ Créer et valider</button>
                         <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">Annuler</a>
                     </div>
                 </form>
@@ -100,21 +160,28 @@
 
 {% block extra_js %}
 <script>
-(function() {
-    var sel = document.getElementById('id_type_resa');
-    var blocTemple = document.getElementById('bloc-temple');
-    var blocSalle  = document.getElementById('bloc-salle');
+jQuery(function ($) {
+    var $sel = $('#id_type_resa');
+    var blocs = {
+        temple:  '#bloc-temple',
+        reunion: '#bloc-reunion',
+        cabinet: '#bloc-cabinet',
+        agapes:  '#bloc-agapes',
+    };
     function toggle() {
-        if (sel.value === 'temple') {
-            blocTemple.style.display = '';
-            blocSalle.style.display  = 'none';
-        } else {
-            blocTemple.style.display = 'none';
-            blocSalle.style.display  = '';
-        }
+        var v = $sel.val();
+        $.each(blocs, function (type, sel) { $(sel).toggle(type === v); });
     }
-    sel.addEventListener('change', toggle);
+    // .on('change') capte aussi l'événement déclenché par Select2
+    $sel.on('change', toggle);
     toggle();
-})();
+
+    // Sélection d'une alternative proposée → on l'applique et on revérifie
+    $('.alt-btn').on('click', function () {
+        var id = $(this).data('id');
+        $('#' + $(this).data('field')).val(String(id)).trigger('change');
+        $('#btn-verifier').trigger('click');
+    });
+});
 </script>
 {% endblock %}
