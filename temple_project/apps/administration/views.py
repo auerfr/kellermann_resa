@@ -53,6 +53,9 @@ def tarif_reservation(resa, params=None):
     from decimal import Decimal
     if params is None:
         params = Parametres.get_instance()
+    # Les réservations récurrentes (générées par une règle) ne sont jamais facturées
+    if resa.regle_source_id:
+        return Decimal('0')
     if resa.type_reservation == 'congres':
         return params.tarif_congres_jour
     if resa.type_reservation == 'exceptionnelle':
@@ -2899,6 +2902,7 @@ def _facturation_data(date_debut, date_fin, params):
     qs = Reservation.objects.filter(
         type_reservation__in=['exceptionnelle', 'congres'],
         statut='validee',
+        regle_source__isnull=True,   # jamais les réservations récurrentes
         date__gte=date_debut, date__lte=date_fin,
     ).select_related('loge', 'temple').order_by('date')
 
