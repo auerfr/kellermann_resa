@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Supprimer l'annonce{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0">
+      <div class="card-body p-4 text-center">
+        <div style="font-size:42px;" class="mb-2">🗑</div>
+        <h2 class="h4 temple-title">Supprimer cette annonce ?</h2>
+        <p class="text-muted">
+          « <strong>{{ annonce.titre }}</strong> »<br>
+          Cette action est définitive.
+        </p>
+        <form method="post" class="d-flex justify-content-center gap-3 mt-4">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-danger px-4">Oui, supprimer</button>
+          <a href="{% url 'administration:annonces_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

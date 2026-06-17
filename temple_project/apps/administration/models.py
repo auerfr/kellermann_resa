@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class Parametres(models.Model):
@@ -76,3 +77,68 @@ class JournalEvenement(models.Model):
     def __str__(self):
         user = self.utilisateur.username if self.utilisateur else 'système'
         return f"[{self.get_type_evenement_display()}] {user} – {self.date_heure:%d/%m/%Y %H:%M}"
+
+
+class Annonce(models.Model):
+    """Pop-up d'information configurable, affiché aux visiteurs pendant une fenêtre de diffusion."""
+
+    NIVEAU_CHOICES = [
+        ('info',    'Information (bleu)'),
+        ('success', 'Succès (vert)'),
+        ('warning', 'Avertissement (orange)'),
+        ('danger',  'Important (rouge)'),
+    ]
+
+    titre           = models.CharField(max_length=200)
+    message         = models.TextField(
+        help_text="Texte affiché dans le pop-up. Les retours à la ligne sont conservés."
+    )
+    niveau          = models.CharField(max_length=10, choices=NIVEAU_CHOICES, default='info')
+    actif           = models.BooleanField(default=True)
+    date_debut      = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Début de diffusion (laisser vide = immédiat)"
+    )
+    date_fin        = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Fin de diffusion (laisser vide = sans limite)"
+    )
+    duree_affichage = models.PositiveIntegerField(
+        default=0,
+        help_text="Fermeture automatique après X secondes (0 = jusqu'à fermeture manuelle)"
+    )
+    created_at      = models.DateTimeField(auto_now_add=True)
+    updated_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Annonce / Pop-up"
+        verbose_name_plural = "Annonces / Pop-ups"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.titre
+
+    def est_active(self, maintenant=None):
+        if not self.actif:
+            return False
+        maintenant = maintenant or timezone.now()
+        if self.date_debut and maintenant < self.date_debut:
+            return False
+        if self.date_fin and maintenant > self.date_fin:
+            return False
+        return True
+
+    def statut(self):
+        if not self.actif:
+            return 'inactive'
+        now = timezone.now()
+        if self.date_debut and now < self.date_debut:
+            return 'programmee'
+        if self.date_fin and now > self.date_fin:
+            return 'expiree'
+        return 'active'
+
+    @property
+    def version(self):
+        """Identifiant de version pour le sessionStorage (change à chaque modification)."""
+        return int(self.updated_at.timestamp()) if self.updated_at else 0

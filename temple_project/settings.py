@@ -51,6 +51,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "temple_project.apps.auth_custom.views.visiteur_context",
+                "temple_project.apps.administration.context_processors.annonce_active",
             ],
         },
     },

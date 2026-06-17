@@ -474,6 +474,7 @@
                     </a>
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="/admin/">🏠 Tableau de bord</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:annonces_liste' %}">📢 Annonces / Pop-up</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:journal' %}">📋 Journal de traçabilité</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="/exports/reporting/">📊 Reporting</a></li>
@@ -578,5 +579,39 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+
+{# ── Pop-up d'annonce (configurable depuis Administration) ── #}
+{% if annonce_popup %}
+<div class="modal fade" id="annoncePopup" tabindex="-1" aria-labelledby="annoncePopupTitre" aria-hidden="true"
+     data-annonce-id="{{ annonce_popup.pk }}"
+     data-annonce-version="{{ annonce_popup.version }}"
+     data-annonce-duree="{{ annonce_popup.duree_affichage }}">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header alert-{{ annonce_popup.niveau }} border-0">
+        <h5 class="modal-title" id="annoncePopupTitre">{{ annonce_popup.titre }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body" style="white-space:pre-line;">{{ annonce_popup.message }}</div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-temple" data-bs-dismiss="modal">J'ai compris</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var el = document.getElementById('annoncePopup');
+  if (!el || typeof bootstrap === 'undefined') return;
+  var key = 'annonce_vue_' + el.dataset.annonceId + '_' + el.dataset.annonceVersion;
+  if (sessionStorage.getItem(key)) return;      // déjà vue pendant cette session
+  var modal = new bootstrap.Modal(el);
+  modal.show();
+  sessionStorage.setItem(key, '1');
+  var duree = parseInt(el.dataset.annonceDuree, 10);
+  if (duree > 0) { setTimeout(function () { modal.hide(); }, duree * 1000); }
+})();
+</script>
+{% endif %}
 </body>
 </html>

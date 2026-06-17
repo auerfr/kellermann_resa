@@ -14,8 +14,10 @@ from temple_project.apps.reservations.models import (
     DemandeAccesPortail, ValidationSaison, ValidationSaisonLigne,
 )
 from temple_project.apps.loges.models import Loge, Obedience
-from .models import Parametres, JournalEvenement
+from .models import Parametres, JournalEvenement, Annonce
 from .journal import log_evenement
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 
 # ── Tableau de bord ───────────────────────────────────────────────────────────
@@ -2565,3 +2567,85 @@ def portail_acces_admin(request):
         'nb_sans':       nb_sans,
         'nb_sans_email': nb_sans_email,
     })
+
+
+# ── Annonces / Pop-up ─────────────────────────────────────────────────────────
+
+def _parse_dt_local(valeur):
+    """Parse une valeur d'input datetime-local en datetime aware (ou None)."""
+    if not valeur:
+        return None
+    dt = parse_datetime(valeur)
+    if dt and timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    return dt
+
+
+@login_required
+def annonces_liste(request):
+    annonces = Annonce.objects.all()
+    return render(request, 'administration/annonces_liste.html', {
+        'annonces': annonces,
+        'nb_annonces': annonces.count(),
+    })
+
+
+@login_required
+def annonce_form(request, pk=None):
+    annonce = get_object_or_404(Annonce, pk=pk) if pk else None
+    if request.method == 'POST':
+        try:
+            titre = request.POST.get('titre', '').strip()
+            message = request.POST.get('message', '').strip()
+            if not titre or not message:
+                raise ValueError("Le titre et le message sont obligatoires.")
+            data = {
+                'titre': titre,
+                'message': message,
+                'niveau': request.POST.get('niveau', 'info'),
+                'actif': request.POST.get('actif') == 'on',
+                'date_debut': _parse_dt_local(request.POST.get('date_debut')),
+                'date_fin': _parse_dt_local(request.POST.get('date_fin')),
+                'duree_affichage': int(request.POST.get('duree_affichage') or 0),
+            }
+            if (data['date_debut'] and data['date_fin']
+                    and data['date_fin'] < data['date_debut']):
+                raise ValueError("La date de fin doit être postérieure à la date de début.")
+            if annonce:
+                for k, v in data.items():
+                    setattr(annonce, k, v)
+                annonce.save()
+                messages.success(request, "Annonce modifiée.")
+            else:
+                Annonce.objects.create(**data)
+                messages.success(request, "Annonce créée.")
+            return redirect('administration:annonces_liste')
+        except Exception as e:
+            messages.error(request, f"Erreur : {e}")
+
+    return render(request, 'administration/annonce_form.html', {
+        'annonce': annonce,
+        'niveaux': Annonce.NIVEAU_CHOICES,
+    })
+
+
+@login_required
+def annonce_toggle(request, pk):
+    annonce = get_object_or_404(Annonce, pk=pk)
+    annonce.actif = not annonce.actif
+    annonce.save(update_fields=['actif', 'updated_at'])
+    messages.success(
+        request,
+        "Annonce activée." if annonce.actif else "Annonce désactivée."
+    )
+    return redirect('administration:annonces_liste')
+
+
+@login_required
+def annonce_supprimer(request, pk):
+    annonce = get_object_or_404(Annonce, pk=pk)
+    if request.method == 'POST':
+        annonce.delete()
+        messages.success(request, "Annonce supprimée.")
+        return redirect('administration:annonces_liste')
+    return render(request, 'administration/annonce_supprimer.html', {'annonce': annonce})

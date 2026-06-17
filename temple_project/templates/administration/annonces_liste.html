@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Annonces / Pop-up{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 temple-title mb-1">📢 Annonces / Pop-up</h1>
+    <p class="text-muted mb-0">Messages d'information affichés aux visiteurs dans une fenêtre pop-up.</p>
+  </div>
+  <a href="{% url 'administration:annonce_ajouter' %}" class="btn btn-temple">➕ Nouvelle annonce</a>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-body p-0">
+    {% if annonces %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr>
+            <th>Titre</th>
+            <th>Niveau</th>
+            <th>Diffusion</th>
+            <th>Auto-fermeture</th>
+            <th>État</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in annonces %}
+          <tr>
+            <td data-label="Titre">
+              <strong>{{ a.titre }}</strong>
+              <div class="text-muted small text-truncate" style="max-width:340px;">{{ a.message }}</div>
+            </td>
+            <td data-label="Niveau">
+              {% if a.niveau == 'info' %}<span class="badge badge-soft-blue">Information</span>
+              {% elif a.niveau == 'success' %}<span class="badge badge-soft-success">Succès</span>
+              {% elif a.niveau == 'warning' %}<span class="badge badge-soft-warning">Avertissement</span>
+              {% else %}<span class="badge badge-soft-danger">Important</span>{% endif %}
+            </td>
+            <td data-label="Diffusion">
+              <small>
+                {% if a.date_debut %}{{ a.date_debut|date:"d/m/Y H:i" }}{% else %}<em>immédiat</em>{% endif %}
+                &rarr;
+                {% if a.date_fin %}{{ a.date_fin|date:"d/m/Y H:i" }}{% else %}<em>sans limite</em>{% endif %}
+              </small>
+            </td>
+            <td data-label="Auto-fermeture">
+              {% if a.duree_affichage %}{{ a.duree_affichage }} s{% else %}<span class="text-muted">manuelle</span>{% endif %}
+            </td>
+            <td data-label="État">
+              {% with s=a.statut %}
+              {% if s == 'active' %}<span class="badge badge-soft-success">● Active</span>
+              {% elif s == 'programmee' %}<span class="badge badge-soft-blue">⏱ Programmée</span>
+              {% elif s == 'expiree' %}<span class="badge badge-soft-warning">Expirée</span>
+              {% else %}<span class="badge badge-soft-danger">Inactive</span>{% endif %}
+              {% endwith %}
+            </td>
+            <td data-label="Actions" class="text-end">
+              <a href="{% url 'administration:annonce_modifier' a.pk %}" class="btn btn-sm btn-outline-secondary">✏️ Modifier</a>
+              <a href="{% url 'administration:annonce_toggle' a.pk %}" class="btn btn-sm btn-outline-secondary">
+                {% if a.actif %}⏸ Désactiver{% else %}▶ Activer{% endif %}
+              </a>
+              <a href="{% url 'administration:annonce_supprimer' a.pk %}" class="btn btn-sm btn-outline-danger">🗑 Supprimer</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted p-5">
+      Aucune annonce pour le moment.<br>
+      <a href="{% url 'administration:annonce_ajouter' %}" class="btn btn-temple mt-3">➕ Créer la première annonce</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="mt-3">
+  <a href="/admin/" class="btn btn-outline-secondary btn-sm">← Retour au tableau de bord</a>
+</div>
+{% endblock %}
