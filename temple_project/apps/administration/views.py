@@ -760,6 +760,93 @@ def annuler_tenue(request):
     return redirect(nxt)
 
 
+@login_required
+def audit_export_excel(request):
+    """Export Excel d'audit (à transmettre par mail) : tenues orphelines,
+    doublons le même jour, loges sans contact, loges sans récurrence."""
+    from collections import defaultdict
+    from django.db.models import Q, Count
+    from openpyxl.utils import get_column_letter
+
+    JF = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+    hf = Font(bold=True, color="FFFFFF")
+    hfill = PatternFill("solid", fgColor="0F2137")
+    ctr = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    wb = openpyxl.Workbook()
+
+    def remplir(ws, headers, rows, widths):
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(1, c, h)
+            cell.font = hf; cell.fill = hfill; cell.alignment = ctr
+        for r, row in enumerate(rows, 2):
+            for c, v in enumerate(row, 1):
+                ws.cell(r, c, v)
+        ws.freeze_panes = "A2"
+        for i, w in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+    # 1) Tenues orphelines (sans loge)
+    orph = Reservation.objects.filter(loge__isnull=True).select_related('temple').order_by('date', 'heure_debut')
+    rows1 = [[
+        t.date.strftime('%d/%m/%Y'), JF[t.date.weekday()],
+        str(t.temple), t.heure_debut.strftime('%H:%M'), t.heure_fin.strftime('%H:%M'),
+        t.get_type_reservation_display(), t.get_statut_display(),
+        t.nom_demandeur or '', (t.commentaire or '')[:250],
+    ] for t in orph]
+    ws1 = wb.active; ws1.title = "Tenues orphelines"
+    remplir(ws1, ["Date", "Jour", "Temple", "Début", "Fin", "Type", "Statut",
+                  "Demandeur", "Commentaire"], rows1, [12, 11, 18, 8, 8, 16, 12, 22, 40])
+
+    # 2) Doublons le même jour (tenues qui se chevauchent)
+    parjour = defaultdict(list)
+    for t in Reservation.objects.filter(
+        loge__isnull=False, statut__in=['validee', 'attente']
+    ).select_related('loge', 'temple'):
+        parjour[(t.loge_id, t.date)].append(t)
+    rows2 = []
+    for (lid, d), items in parjour.items():
+        if len(items) < 2:
+            continue
+        items.sort(key=lambda x: x.heure_debut)
+        overlap = any(
+            items[i].heure_debut < items[j].heure_fin and items[i].heure_fin > items[j].heure_debut
+            for i in range(len(items)) for j in range(i + 1, len(items))
+        )
+        if overlap:
+            lg = items[0].loge
+            detail = ' ; '.join(f"{x.temple} {x.heure_debut:%H:%M}-{x.heure_fin:%H:%M}" for x in items)
+            rows2.append([lg.abreviation, lg.nom, d.strftime('%d/%m/%Y'), JF[d.weekday()], len(items), detail])
+    rows2.sort(key=lambda r: (r[0], r[2]))
+    ws2 = wb.create_sheet("Doublons meme jour")
+    remplir(ws2, ["Abrév.", "Loge", "Date", "Jour", "Nb tenues", "Détail (temple heure)"],
+            rows2, [10, 34, 12, 11, 10, 55])
+
+    actives = Loge.objects.exclude(statut='inactive')
+
+    # 3) Loges sans contact
+    sans_contact = actives.filter(
+        Q(email='') | Q(email__isnull=True)
+    ).filter(telephone='').filter(nom_contact='').select_related('obedience').order_by('nom')
+    rows3 = [[l.abreviation, l.nom, l.get_statut_display(),
+              l.obedience.nom if l.obedience else ''] for l in sans_contact]
+    ws3 = wb.create_sheet("Loges sans contact")
+    remplir(ws3, ["Abrév.", "Loge", "Statut", "Obédience"], rows3, [10, 34, 16, 16])
+
+    # 4) Loges sans règle de récurrence
+    sans_regle = actives.annotate(
+        nr=Count('regles', filter=Q(regles__actif=True))).filter(nr=0).order_by('nom')
+    rows4 = [[l.abreviation, l.nom, l.get_statut_display()] for l in sans_regle]
+    ws4 = wb.create_sheet("Loges sans recurrence")
+    remplir(ws4, ["Abrév.", "Loge", "Statut"], rows4, [10, 34, 16])
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="Kellermann_Audit_{date.today():%Y%m%d}.xlsx"'
+    wb.save(response)
+    return response
+
+
 # ── Import Excel ──────────────────────────────────────────────────────────────
 
 @login_required

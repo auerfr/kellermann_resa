@@ -2,8 +2,15 @@
 {% block title %}Suivi loges / saison{% endblock %}
 {% block content %}
 <div class="mb-4">
-  <h1 class="h3 temple-title mb-1">🔄 Suivi des loges / saison</h1>
-  <p class="text-muted mb-0">Gérez les loges qui n'ont pas confirmé la nouvelle saison. Rien n'est supprimé : « À reconfirmer » reste visible, « Inactive » est masquée partout.</p>
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+    <div>
+      <h1 class="h3 temple-title mb-1">🔄 Suivi des loges / saison</h1>
+      <p class="text-muted mb-0">Gérez les loges qui n'ont pas confirmé la nouvelle saison. Rien n'est supprimé : « À reconfirmer » reste visible, « Inactive » est masquée partout.</p>
+    </div>
+    <a href="{% url 'administration:audit_export' %}" class="btn btn-outline-primary">
+      📊 Export audit (Excel)
+    </a>
+  </div>
 </div>
 
 {% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
