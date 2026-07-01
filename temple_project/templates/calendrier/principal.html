@@ -162,6 +162,7 @@
       <span class="small"><span class="legend-dot" style="background:#A78BFA;"></span>Salle attente</span>
       <span class="small"><span class="legend-dot" style="background:#FB7185;"></span>Refusée</span>
       <span class="small"><span class="legend-dot" style="background:#CA8A04;border-radius:2px;"></span>Férié</span>
+      <span class="small"><span class="legend-dot" style="background:#EEF2F6;border:2px dashed #475569;border-radius:2px;"></span>⏳ À reconfirmer (sans fiche)</span>
       <span class="small"><span class="legend-dot" style="background:#16A34A;border-radius:2px;"></span>Vacances sco.</span>
     </div>
     <div class="mt-1 d-flex align-items-center gap-3 flex-wrap">
@@ -278,6 +279,7 @@ document.addEventListener("DOMContentLoaded", function() {
       var view = arg.view.type;
       var w    = window.innerWidth;
       var emoji = p.creneau ? (CRENEAU_EMOJI[p.creneau] || '') : '';
+      var pre = p.a_reconfirmer ? '⏳ ' : '';
       // Formate "19h" ou "19h30" (sans zéro si minutes = 0)
       function fmtH(dt) {
         if (!dt) return '';
@@ -302,7 +304,7 @@ document.addEventListener("DOMContentLoaded", function() {
           label = emoji + ' ' + (p.loge_nom || arg.event.title)
                 + (p.heure ? ' ' + p.heure : '');                               // 🌙 Loge Liberté 19h
         }
-        return { html: '<div style="padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + label + '</div>' };
+        return { html: '<div style="padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + pre + label + '</div>' };
       }
 
       // ── Vue semaine ──────────────────────────────────────────────
@@ -317,7 +319,7 @@ document.addEventListener("DOMContentLoaded", function() {
           twLabel = emoji + ' ' + (p.loge_nom || arg.event.title)
                   + ' ' + fmtHM(arg.event.start) + ' – ' + fmtHM(arg.event.end); // 🌙 Loge Liberté 19h00 – 22h30
         }
-        return { html: '<div style="padding:2px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + twLabel + '</div>' };
+        return { html: '<div style="padding:2px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + pre + twLabel + '</div>' };
       }
 
       // ── Autres vues (liste, 3 jours) : rendu par défaut ─────────
@@ -325,6 +327,15 @@ document.addEventListener("DOMContentLoaded", function() {
     },
     eventDidMount: function(info) {
       var p = info.event.extendedProps;
+      // Loge non confirmée : marqueur NON coloré (pointillés + hachures)
+      if (p.a_reconfirmer) {
+        info.el.style.backgroundColor = '#EEF2F6';
+        info.el.style.color = '#334155';
+        info.el.style.border = '2px dashed #475569';
+        info.el.style.backgroundImage = 'repeating-linear-gradient(45deg, rgba(71,85,105,.20) 0, rgba(71,85,105,.20) 5px, transparent 5px, transparent 10px)';
+        info.el.title = info.event.title + ' — À RECONFIRMER (aucune fiche reçue)';
+        return;
+      }
       // Couleurs temple sur toutes les vues
       if (p.type === "temple" && p.statut === "validee") {
         var c = TEMPLE_COLORS[p.temple];
