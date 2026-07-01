@@ -61,9 +61,14 @@ def api_evenements(request):
     if type_filtre not in ("salle", "cabinet", "banquet"):
         for r in qs:
             color = _couleur_reservation(r)
+            a_reconfirmer = bool(r.loge and r.loge.statut == 'a_reconfirmer')
+            titre = f"{(r.loge.abreviation or r.loge.nom) if r.loge else (r.nom_organisation or '?')}"
+            if a_reconfirmer:
+                color = {"bg": "#F1F5F9", "border": "#CBD5E1", "text": "#64748B"}
+                titre += " (à reconfirmer)"
             events.append({
                 "id":    f"t-{r.pk}",
-                "title": f"{(r.loge.abreviation or r.loge.nom) if r.loge else (r.nom_organisation or '?')}",
+                "title": titre,
                 "start": f"{r.date}T{r.heure_debut}",
                 "end":   f"{r.date}T{r.heure_fin}",
                 "backgroundColor": color["bg"],
@@ -71,6 +76,7 @@ def api_evenements(request):
                 "textColor":       color["text"],
                 "extendedProps": {
                     "type":       "temple",
+                    "a_reconfirmer": a_reconfirmer,
                     "creneau":    _creneau(r.heure_debut),
                     "heure":      _heure_court(r.heure_debut),
                     "temple":     str(r.temple),
@@ -106,7 +112,7 @@ def api_evenements(request):
                 "attente": {"bg": "#F5F3FF", "border": "#A78BFA", "text": "#4C1D95"},
             },
         }
-        qs_salles = ReservationSalle.objects.select_related("salle").filter(
+        qs_salles = ReservationSalle.objects.select_related("salle", "loge").filter(
             date__gte=start, date__lte=end, statut__in=("validee", "attente")
         )
         if type_filtre == "cabinet":
@@ -119,14 +125,19 @@ def api_evenements(request):
             ts = rs.salle.type_salle
             couleur = _COULEURS_SALLE.get(ts, _COULEURS_SALLE["reunion"])[rs.statut]
             org = rs.organisation or rs.nom_demandeur
+            a_reconfirmer = bool(rs.loge and rs.loge.statut == 'a_reconfirmer')
             if ts == "cabinet_reflexion":
                 title = f"\U0001f6aa {org} \u2013 Cabinets"
             elif ts == "agapes":
                 title = f"\U0001f37d {org} \u2013 Banquet"
             else:
                 title = f"\U0001fa91 {org} \u2013 {rs.salle.nom}"
+            if a_reconfirmer:
+                couleur = {"bg": "#F1F5F9", "border": "#CBD5E1", "text": "#64748B"}
+                title += " (\u00e0 reconfirmer)"
             props = {
                 "type":         "salle",
+                "a_reconfirmer": a_reconfirmer,
                 "creneau":      _creneau(rs.heure_debut),
                 "type_salle":   ts,
                 "salle":        str(rs.salle),
