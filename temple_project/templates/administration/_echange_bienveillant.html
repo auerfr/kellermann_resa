@@ -1,0 +1,54 @@
+{# Section « échange bienveillant » : loge(s) occupant le temple demandé.       #}
+{# Attend : occupants (liste {resa, loge, libres}), echange_next (url/nom).      #}
+<div class="alert alert-secondary mt-3">
+  <h6 class="mb-2">🤝 Échange bienveillant</h6>
+  <p class="small mb-3">
+    Ce temple est occupé par la tenue d'une autre loge. Vous pouvez lui proposer
+    un échange à l'amiable, puis déplacer exceptionnellement sa tenue vers un
+    temple libre pour libérer le créneau.
+  </p>
+
+  {% for o in occupants %}
+  <div class="border rounded p-2 mb-2 bg-white">
+    <div class="d-flex justify-content-between flex-wrap gap-2">
+      <div>
+        <strong>{{ o.loge.nom }}</strong> ({{ o.loge.abreviation }})
+        — {{ o.resa.date|date:"d/m/Y" }} de {{ o.resa.heure_debut|time:"H:i" }} à {{ o.resa.heure_fin|time:"H:i" }}
+        {% if o.resa.type_reservation == 'reguliere' %}<span class="badge bg-info text-dark">récurrente</span>{% endif %}
+        {% if request.user.is_staff %}
+        <div class="small text-muted mt-1">
+          {% if o.loge.nom_contact %}Contact : {{ o.loge.nom_contact }} · {% endif %}
+          {% if o.loge.email %}<a href="mailto:{{ o.loge.email }}">{{ o.loge.email }}</a>{% else %}<em>pas d'email</em>{% endif %}
+          {% if o.loge.telephone %} · {{ o.loge.telephone }}{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% if o.loge.email %}
+      <a class="btn btn-sm btn-outline-primary"
+         href="mailto:{{ o.loge.email }}?subject={{ 'Demande d’échange de temple'|urlencode }}&body={{ 'Bonjour,%0A%0AUne autre loge souhaiterait utiliser ce temple sur un créneau actuellement réservé par votre loge. Seriez-vous d’accord, en toute bienveillance, pour un échange de temple ou de date ?%0A%0AAvec mes fraternelles salutations.'|safe }}">
+        ✉️ Proposer un échange
+      </a>
+      {% endif %}
+    </div>
+
+    <form method="post" action="{% url 'administration:echanger_tenue' %}"
+          class="d-flex gap-2 align-items-center flex-wrap mt-2">
+      {% csrf_token %}
+      <input type="hidden" name="resa_id" value="{{ o.resa.pk }}">
+      <input type="hidden" name="next" value="{{ echange_next }}">
+      {% if o.libres %}
+      <span class="small">Déplacer leur tenue vers :</span>
+      <select name="temple_id" class="form-select form-select-sm" style="width:auto;">
+        {% for t in o.libres %}<option value="{{ t.pk }}">{{ t }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-warning"
+              onclick="return confirm('Déplacer exceptionnellement cette tenue ? Elle sera détachée de sa règle de récurrence.');">
+        Déplacer &amp; libérer
+      </button>
+      {% else %}
+      <span class="small text-muted">Aucun temple libre pour les accueillir sur ce créneau.</span>
+      {% endif %}
+    </form>
+  </div>
+  {% endfor %}
+</div>

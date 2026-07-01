@@ -115,6 +115,10 @@
     </div>
     {% endif %}
 
+    {% if occupants_recurrents %}
+    {% include "administration/_echange_bienveillant.html" with occupants=occupants_recurrents echange_next=echange_next %}
+    {% endif %}
+
     {# Formulaire de décision #}
     <div class="card shadow-sm border-0">
       <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">

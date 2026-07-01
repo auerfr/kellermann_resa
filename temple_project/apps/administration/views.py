@@ -155,6 +155,10 @@ def valider_reservation(request, pk):
 
         return redirect('administration:tableau_de_bord')
 
+    occupants_rec = _occupants_recurrents(
+        resa.temple, resa.date, resa.heure_debut, resa.heure_fin, exclure_pk=resa.pk
+    ) if conflits.exists() else []
+
     return render(request, 'administration/valider_reservation.html', {
         'reservation':         resa,
         'conflits':            conflits,
@@ -162,6 +166,8 @@ def valider_reservation(request, pk):
         'blocages':            blocages,
         'indisponibilites':    indisponibilites,
         'temples_alternatives': temples_alternatives,
+        'occupants_recurrents': occupants_rec,
+        'echange_next':         request.get_full_path(),
     })
 
 
@@ -503,6 +509,7 @@ def regenerer_intelligent(request):
             regles = regles.filter(temple_id=temple_id)
 
         cree = conflit = 0
+        conflits_details = []
         for regle in regles:
             # Saison maçonnique : sept→déc de annee + jan→juin de annee+1
             dates_saison = [
@@ -529,6 +536,13 @@ def regenerer_intelligent(request):
                     heure_fin__gt=regle.heure_debut
                 ).exclude(regle_source=regle).exists():
                     conflit += 1
+                    conflits_details.append({
+                        'loge_id': regle.loge_id,
+                        'temple_id': regle.temple_id,
+                        'date': d.isoformat(),
+                        'hd': regle.heure_debut.strftime('%H:%M'),
+                        'hf': regle.heure_fin.strftime('%H:%M'),
+                    })
                     continue
                 if not Reservation.objects.filter(regle_source=regle, date=d).exists():
                     Reservation.objects.create(
@@ -541,10 +555,12 @@ def regenerer_intelligent(request):
                     )
                     cree += 1
 
-        if conflit:
-            messages.warning(request, f"{cree} tenues créées, {conflit} conflits ignorés.")
-        else:
-            messages.success(request, f"{cree} tenues créées pour la saison {annee}/{annee + 1}.")
+        if conflits_details:
+            request.session['regen_conflits'] = conflits_details
+            messages.warning(request, f"{cree} tenues créées. {conflit} conflit(s) : "
+                             "voir les suggestions de placement ci-dessous.")
+            return redirect('administration:regenerer_conflits')
+        messages.success(request, f"{cree} tenues créées pour la saison {annee}/{annee + 1}.")
         return redirect('administration:tableau_de_bord')
 
     return render(request, 'administration/regenerer.html', {
@@ -552,6 +568,107 @@ def regenerer_intelligent(request):
         'loges': Loge.objects.filter(actif=True).order_by('nom'),
         'temples': Temple.objects.all(),
     })
+
+
+@login_required
+def regenerer_conflits(request):
+    """Rapport des conflits de régénération : pour chaque tenue récurrente qui
+    n'a pas pu être créée (temple occupé), propose les temples LIBRES du créneau
+    et permet de placer la tenue en 1 clic (ou d'ignorer)."""
+    conflits = request.session.get('regen_conflits', [])
+
+    if request.method == 'POST':
+        idx = int(request.POST.get('index', -1))
+        action = request.POST.get('action')
+        if 0 <= idx < len(conflits):
+            item = conflits[idx]
+            if action == 'placer':
+                loge   = Loge.objects.filter(pk=item['loge_id']).first()
+                temple = Temple.objects.filter(pk=request.POST.get('temple_choisi')).first()
+                d  = date.fromisoformat(item['date'])
+                hd = _to_time(item['hd']); hf = _to_time(item['hf'])
+                if loge and temple and not _temple_occupe(temple, d, hd, hf):
+                    Reservation.objects.create(
+                        loge=loge, temple=temple, date=d,
+                        heure_debut=hd, heure_fin=hf,
+                        type_reservation='reguliere', statut='validee',
+                        nom_demandeur='Placement (conflit régénération)',
+                        email_demandeur=loge.email or settings.DEFAULT_FROM_EMAIL,
+                        commentaire=(f"Placée sur {temple} le {d:%d/%m/%Y} car le temple "
+                                     "d'origine était déjà occupé (retardataire)."),
+                    )
+                    messages.success(request, f"Tenue de {loge} placée sur {temple} le {d:%d/%m/%Y}.")
+                    conflits.pop(idx)
+                else:
+                    messages.error(request, "Placement impossible : ce temple n'est plus libre.")
+            elif action == 'ignorer':
+                conflits.pop(idx)
+        request.session['regen_conflits'] = conflits
+        return redirect('administration:regenerer_conflits')
+
+    lignes = []
+    for i, item in enumerate(conflits):
+        temple = Temple.objects.filter(pk=item['temple_id']).first()
+        d  = date.fromisoformat(item['date'])
+        hd = _to_time(item['hd']); hf = _to_time(item['hf'])
+        occ = []
+        for r in Reservation.objects.filter(
+            temple=temple, date=d, heure_debut__lt=hf, heure_fin__gt=hd,
+            statut__in=['validee', 'attente'],
+        ).select_related('loge'):
+            occ.append(str(r.loge or r.nom_organisation or r.nom_demandeur))
+        libres = [t for t in Temple.objects.exclude(pk=temple.pk).order_by('nom')
+                  if not _temple_occupe(t, d, hd, hf)]
+        lignes.append({
+            'index': i,
+            'loge': Loge.objects.filter(pk=item['loge_id']).first(),
+            'temple': temple, 'date': d, 'hd': item['hd'], 'hf': item['hf'],
+            'occupant': ', '.join(occ), 'libres': libres,
+        })
+    return render(request, 'administration/regenerer_conflits.html', {'lignes': lignes})
+
+
+def _occupants_recurrents(temple, date_r, hd, hf, exclure_pk=None):
+    """Loges dont une tenue occupe déjà ce temple/créneau — pour proposer un
+    échange bienveillant. Renvoie [{resa, loge, libres:[temples libres]}]."""
+    hd_t = _to_time(hd); hf_t = _to_time(hf)
+    qs = Reservation.objects.filter(
+        temple=temple, date=date_r, heure_debut__lt=hf_t, heure_fin__gt=hd_t,
+        statut__in=['validee', 'attente'], loge__isnull=False,
+    ).select_related('loge')
+    if exclure_pk:
+        qs = qs.exclude(pk=exclure_pk)
+    libres = [t for t in Temple.objects.exclude(pk=temple.pk).order_by('nom')
+              if not _temple_occupe(t, date_r, hd_t, hf_t)]
+    return [{'resa': r, 'loge': r.loge, 'libres': libres} for r in qs]
+
+
+@login_required
+def echanger_tenue(request):
+    """Déplace exceptionnellement UNE tenue vers un temple libre (échange
+    bienveillant), libérant ainsi le temple d'origine. La tenue est détachée de
+    sa règle (regle_source=NULL) pour ne pas être écrasée à la régénération."""
+    if request.method != 'POST':
+        return redirect('administration:tableau_de_bord')
+    resa   = get_object_or_404(Reservation, pk=request.POST.get('resa_id'))
+    temple = get_object_or_404(Temple, pk=request.POST.get('temple_id'))
+    nxt    = request.POST.get('next') or 'administration:tableau_de_bord'
+
+    if _temple_occupe(temple, resa.date, resa.heure_debut, resa.heure_fin):
+        messages.error(request, f"{temple} n'est plus libre sur ce créneau.")
+    else:
+        ancien = resa.temple
+        note = (f"Déplacée de {ancien} vers {temple} le {date.today():%d/%m/%Y} "
+                "(échange bienveillant).")
+        resa.temple = temple
+        resa.regle_source = None
+        resa.commentaire = (resa.commentaire + "\n" if resa.commentaire else "") + note
+        resa.save()
+        messages.success(request, f"Tenue de {resa.loge} déplacée sur {temple}. "
+                         f"« {ancien} » est désormais libre le {resa.date:%d/%m/%Y}.")
+        log_evenement('modification_reservation', f"{note} (loge {resa.loge})",
+                      request=request, objet=resa)
+    return redirect(nxt)
 
 
 # ── Import Excel ──────────────────────────────────────────────────────────────
@@ -3056,9 +3173,14 @@ def reservation_directe(request):
         dispo_verifiee = True
         creneau = {'date': date_r, 'hd': hd, 'hf': hf, 'ressource': ressource}
 
+        occupants_rec = (_occupants_recurrents(ressource, date_r, hd, hf)
+                         if type_dispo == 'temple' and conflits else [])
+
         ctx_dispo = {
             "form": form, "conflits": conflits, "alternatives": alternatives,
             "dispo_verifiee": dispo_verifiee, "creneau": creneau,
+            "occupants_recurrents": occupants_rec,
+            "echange_next": "administration:reservation_directe",
         }
 
         # Bouton « Vérifier la disponibilité » : on affiche le résultat sans créer.

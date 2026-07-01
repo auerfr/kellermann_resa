@@ -225,6 +225,10 @@
                         <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">Annuler</a>
                     </div>
                 </form>
+
+                {% if occupants_recurrents %}
+                {% include "administration/_echange_bienveillant.html" with occupants=occupants_recurrents creneau=creneau echange_next=echange_next %}
+                {% endif %}
             </div>
         </div>
     </div>

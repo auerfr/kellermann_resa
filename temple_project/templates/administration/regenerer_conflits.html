@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Conflits de régénération{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+    <div class="mb-4">
+      <h1 class="h3" style="color:#0F2137;">⚠️ Tenues non placées (temple occupé)</h1>
+      <p class="text-muted">
+        Ces tenues récurrentes n'ont pas pu être créées car le temple était déjà
+        occupé ce jour-là. Pour chaque cas, placez la tenue sur un
+        <strong>temple libre</strong> du même créneau, ou ignorez-la.
+      </p>
+    </div>
+
+    {% if not lignes %}
+      <div class="alert alert-success">
+        ✅ Plus aucun conflit à traiter.
+        <a href="{% url 'administration:tableau_de_bord' %}" class="alert-link">Retour au tableau de bord</a>.
+      </div>
+    {% else %}
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle bg-white">
+          <thead style="background:#0F2137;color:#fff;">
+            <tr>
+              <th>Loge (retardataire)</th>
+              <th>Date &amp; créneau</th>
+              <th>Temple demandé</th>
+              <th>Occupé par</th>
+              <th style="min-width:280px;">Placer sur un temple libre</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for l in lignes %}
+            <tr>
+              <td><strong>{{ l.loge.abreviation }}</strong><br><small class="text-muted">{{ l.loge.nom }}</small></td>
+              <td>{{ l.date|date:"D d/m/Y" }}<br><small>{{ l.hd }}–{{ l.hf }}</small></td>
+              <td>{{ l.temple }}</td>
+              <td><small class="text-danger">{{ l.occupant }}</small></td>
+              <td>
+                {% if l.libres %}
+                <form method="post" class="d-flex gap-2 align-items-center flex-wrap">
+                  {% csrf_token %}
+                  <input type="hidden" name="index" value="{{ l.index }}">
+                  <select name="temple_choisi" class="form-select form-select-sm" style="width:auto;">
+                    {% for t in l.libres %}<option value="{{ t.pk }}">{{ t }}</option>{% endfor %}
+                  </select>
+                  <button type="submit" name="action" value="placer" class="btn btn-sm btn-success">Placer</button>
+                  <button type="submit" name="action" value="ignorer" class="btn btn-sm btn-outline-secondary">Ignorer</button>
+                </form>
+                {% else %}
+                <form method="post" class="d-flex gap-2 align-items-center">
+                  {% csrf_token %}
+                  <input type="hidden" name="index" value="{{ l.index }}">
+                  <span class="text-muted small">Aucun temple libre ce jour-là.</span>
+                  <button type="submit" name="action" value="ignorer" class="btn btn-sm btn-outline-secondary">Ignorer</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">Terminer plus tard</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
