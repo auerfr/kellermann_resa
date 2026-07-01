@@ -567,9 +567,14 @@ def import_excel(request):
             if 'confirmer' in request.POST:
                 stats, errors = _importer_donnees(wb)
                 if not errors:
-                    messages.success(request, f"Import réussi : {stats['loges']} nouvelle(s) loge(s), {stats['regles']} règle(s), {stats.get('ponctuelles', 0)} réservation(s) ponctuelle(s).")
+                    messages.success(request, (
+                        f"Import réussi — Loges : {stats['loges']} nouvelle(s), {stats.get('loges_maj', 0)} mise(s) à jour · "
+                        f"Règles : {stats['regles']} nouvelle(s), {stats.get('regles_maj', 0)} mise(s) à jour · "
+                        f"Réservations ponctuelles : {stats.get('ponctuelles', 0)}."))
                     log_evenement('import_excel',
-                        f"Import Excel réussi : {stats['loges']} loge(s), {stats['regles']} règle(s), {stats.get('ponctuelles', 0)} ponctuelle(s)",
+                        f"Import Excel : loges {stats['loges']}+{stats.get('loges_maj', 0)}maj, "
+                        f"règles {stats['regles']}+{stats.get('regles_maj', 0)}maj, "
+                        f"ponctuelles {stats.get('ponctuelles', 0)}",
                         request=request, objet_type='systeme')
                     return redirect('administration:tableau_de_bord')
             else:
@@ -2028,7 +2033,8 @@ def _analyser_import(wb):
 
 def _importer_donnees(wb):
     errors = []
-    stats  = {'loges': 0, 'obediences': 0, 'regles': 0, 'ponctuelles': 0}
+    stats  = {'loges': 0, 'loges_maj': 0, 'obediences': 0,
+              'regles': 0, 'regles_maj': 0, 'ponctuelles': 0}
 
     if 'LOGES' in wb.sheetnames:
         for i, row in _data_rows(wb['LOGES']):
@@ -2082,6 +2088,7 @@ def _importer_donnees(wb):
                     for k, v in vals.items():
                         setattr(loge, k, v)
                     loge.save()
+                    stats['loges_maj'] += 1
                 else:
                     Loge.objects.create(**vals)
                     stats['loges'] += 1
@@ -2116,7 +2123,7 @@ def _importer_donnees(wb):
                               'heure_fin': str(row[8]) if len(row) > 8 and row[8] else '22:30',
                               'mois_actifs': mois_actifs, 'actif': True}
                 )
-                if cr: stats['regles'] += 1
+                stats['regles' if cr else 'regles_maj'] += 1
             except Exception as e:
                 errors.append(f"REGLES ligne {i} : {e}")
 
