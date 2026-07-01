@@ -1875,10 +1875,14 @@ def _importer_donnees(wb):
                 except Temple.DoesNotExist: errors.append(f"REGLES ligne {i} : temple absent"); continue
                 jn = JOURS.get(str(row[5]).strip())
                 if jn is None: errors.append(f"REGLES ligne {i} : jour '{row[5]}' inconnu"); continue
-                _, cr = RegleRecurrence.objects.get_or_create(
+                mois_raw = str(row[9]) if len(row) > 9 and row[9] is not None else ''
+                mois_actifs = [int(m) for m in mois_raw.replace(' ', '').split(',')
+                               if m.strip().isdigit() and 1 <= int(m) <= 12]
+                _, cr = RegleRecurrence.objects.update_or_create(
                     loge=loge, temple=temple, jour_semaine=jn, numero_semaine=int(row[6]),
-                    defaults={'heure_debut': str(row[7]) if len(row)>7 and row[7] else '19:30',
-                              'heure_fin': str(row[8]) if len(row)>8 and row[8] else '22:30', 'actif': True}
+                    defaults={'heure_debut': str(row[7]) if len(row) > 7 and row[7] else '19:30',
+                              'heure_fin': str(row[8]) if len(row) > 8 and row[8] else '22:30',
+                              'mois_actifs': mois_actifs, 'actif': True}
                 )
                 if cr: stats['regles'] += 1
             except Exception as e:
