@@ -167,7 +167,9 @@ def modifier_loge(request, pk):
     if request.method == 'POST':
         loge.nom                    = request.POST.get('nom', loge.nom)
         loge.abreviation            = request.POST.get('abreviation', loge.abreviation)
+        loge.nom_contact            = request.POST.get('nom_contact', loge.nom_contact).strip()
         loge.email                  = request.POST.get('email', loge.email)
+        loge.telephone              = request.POST.get('telephone', loge.telephone).strip()
         loge.effectif_total         = int(request.POST.get('effectif_total', 0) or 0)
         loge.effectif_moyen_agapes  = int(request.POST.get('effectif_moyen_agapes', 0) or 0)
         obd_nom = request.POST.get('obedience')

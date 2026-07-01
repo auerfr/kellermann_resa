@@ -31,7 +31,7 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
       <span>{{ loge.obedience }}</span>
       <span>·</span>
       <span>{% if loge.type_loge == 'haut_grade' %}Haut grade{% else %}Loge bleue{% endif %}</span>
-      {% if loge.email %}<span>·</span><a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>{% endif %}
+      {% if user.is_staff and loge.email %}<span>·</span><a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>{% endif %}
     </div>
   </div>
   <div class="d-flex gap-2 no-print flex-wrap">
@@ -70,7 +70,13 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
           <tr><td class="text-muted small ps-3">Rite</td><td class="fw-semibold">{{ loge.get_rite_display|default:"—" }}</td></tr>
           <tr><td class="text-muted small ps-3">Effectif total</td><td class="fw-semibold">{{ loge.effectif_total|default:"—" }}</td></tr>
           <tr><td class="text-muted small ps-3">Moy. agapes</td><td class="fw-semibold">{{ loge.effectif_moyen_agapes|default:"—" }}</td></tr>
+          {% if user.is_staff %}
+          <tr><td class="text-muted small ps-3">Contact</td><td class="small">{{ loge.nom_contact|default:"—" }}</td></tr>
           <tr><td class="text-muted small ps-3">Email</td><td class="small">{{ loge.email|default:"—" }}</td></tr>
+          <tr><td class="text-muted small ps-3">Téléphone</td><td class="small">{{ loge.telephone|default:"—" }}</td></tr>
+          {% else %}
+          <tr><td class="text-muted small ps-3">Contact</td><td class="small text-muted fst-italic">Réservé à l'administration</td></tr>
+          {% endif %}
         </table>
       </div>
     </div>

@@ -60,9 +60,20 @@
                      class="form-control" placeholder="Précisez le rite…">
             </div>
           </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Email de contact</label>
-            <input type="email" name="email" value="{{ loge.email }}" class="form-control" placeholder="contact@loge.fr">
+          <div class="alert alert-light border small mb-3">🔒 Coordonnées confidentielles — visibles uniquement par l'administration et la loge sur son portail.</div>
+          <div class="row g-3 mb-3">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Nom du contact</label>
+              <input type="text" name="nom_contact" value="{{ loge.nom_contact }}" class="form-control" placeholder="Nom du vénérable / interlocuteur">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Email de contact</label>
+              <input type="email" name="email" value="{{ loge.email }}" class="form-control" placeholder="contact@loge.fr">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Téléphone</label>
+              <input type="text" name="telephone" value="{{ loge.telephone }}" class="form-control" placeholder="06 12 34 56 78">
+            </div>
           </div>
           <div class="row g-3 mb-4">
             <div class="col-md-6">
