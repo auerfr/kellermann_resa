@@ -1001,7 +1001,7 @@ def audit_export_excel(request):
     cap = _audit_capacite(annee)
     h = cap['homes']; cal = cap['calendrier']
     rows5 = [
-        [f"Saison {annee}/{annee+1}", "", "", ""],
+        [f"Saison {annee}/{annee+1} — 1er sept. au 30 juin (hors juillet & août)", "", "", ""],
         ["HOMES RÉCURRENTS DU SOIR (temple x jour lun-sam x position 1-4)", "", "", ""],
         ["", "Total", "Occupés", "Libres"],
         ["Lun-Sam", h['total'], h['occ'], h['libres']],

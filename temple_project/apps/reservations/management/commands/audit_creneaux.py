@@ -23,6 +23,7 @@ class Command(BaseCommand):
             self.stdout.write("\n" + "=" * 3 + " " + s + " " + "=" * max(3, 60 - len(s)))
 
         titre(f"AUDIT CAPACITE - saison {annee}/{annee+1} ({c['nb_temples']} temples)")
+        self.stdout.write("Perimetre : 1er septembre -> 30 juin (hors juillet & aout).")
 
         titre("HOMES RECURRENTS DU SOIR (temple x jour lun-sam x position 1-4)")
         self.stdout.write(f"Lun-Sam : {h['total']} creneaux, {h['occ']} occupes, "
