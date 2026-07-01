@@ -60,7 +60,11 @@ def liste_loges(request):
 
 @membre_required
 def detail_loge(request, pk):
-    loge = get_object_or_404(Loge, pk=pk, actif=True)
+    # L'admin peut consulter une loge désactivée ; les autres non
+    if request.user.is_staff:
+        loge = get_object_or_404(Loge, pk=pk)
+    else:
+        loge = get_object_or_404(Loge, pk=pk, actif=True)
 
     annee = date.today().year
     saison_defaut = annee if date.today().month >= 9 else annee - 1
