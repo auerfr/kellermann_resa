@@ -508,16 +508,18 @@ def regenerer_intelligent(request):
         if temple_id:
             regles = regles.filter(temple_id=temple_id)
 
+        # Saison maçonnique : 1er sept. (annee) → 30 juin (annee+1), hors juil/août
+        d1, d2 = date(annee, 9, 1), date(annee + 1, 6, 30)
+
         cree = conflit = 0
         conflits_details = []
         for regle in regles:
-            # Saison maçonnique : sept→déc de annee + jan→juin de annee+1
             dates_saison = [
                 d for d in (
                     _calculer_dates_regle(regle, annee) +
                     _calculer_dates_regle(regle, annee + 1)
                 )
-                if d.month not in [7, 8]
+                if d1 <= d <= d2 and d.month not in [7, 8]
                 and not (regle.date_fin and d > regle.date_fin)
                 and not (regle.date_debut and d < regle.date_debut)
             ]
@@ -525,7 +527,7 @@ def regenerer_intelligent(request):
             if mode == 'remplacer':
                 Reservation.objects.filter(
                     regle_source=regle,
-                    date__year__in=[annee, annee + 1]
+                    date__gte=d1, date__lte=d2,
                 ).delete()
 
             exclues = set(regle.dates_exclues or [])
