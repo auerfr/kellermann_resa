@@ -1920,6 +1920,8 @@ def _importer_donnees(wb):
                     'type_loge': str(row[3]).strip() if row[3] in ('loge', 'haut_grade') else 'loge',
                     'rite': rite, 'email': email,
                     'effectif_total': effectif, 'effectif_moyen_agapes': agapes,
+                    # Présente dans le fichier = a renvoyé sa fiche → réactivée
+                    'statut': 'active', 'actif': True,
                 }
                 # Ne pas écraser le contact si les colonnes ne sont pas renseignées
                 if nom_contact:
@@ -3379,6 +3381,11 @@ def loges_saison(request):
     from django.db.models import Count, Q as _Q
 
     if request.method == 'POST':
+        if request.POST.get('action') == 'reset_all':
+            n = Loge.objects.filter(statut='active').update(statut='a_reconfirmer')
+            messages.warning(request, f"{n} loge(s) actives repassées en « À reconfirmer ». "
+                                      "Importez les fiches reçues pour les réactiver.")
+            return redirect(f"{request.path}?{request.GET.urlencode()}")
         loge = get_object_or_404(Loge, pk=request.POST.get('loge_id'))
         nouveau = request.POST.get('statut')
         if nouveau in ('active', 'a_reconfirmer', 'inactive'):

@@ -8,6 +8,17 @@
 
 {% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
 
+{# Bascule de saison #}
+<div class="alert alert-light border d-flex flex-wrap gap-2 align-items-center">
+  <span class="small"><strong>Début de saison :</strong> réinitialisez toutes les loges en « À reconfirmer », puis importez les fiches reçues (elles repasseront automatiquement en « Active »).</span>
+  <form method="post" class="ms-auto"
+        onsubmit="return confirm('Repasser TOUTES les loges actives en « À reconfirmer » ? Les fiches importées ensuite les réactiveront.');">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="reset_all">
+    <button class="btn btn-sm btn-outline-warning">🔄 Tout marquer « À reconfirmer »</button>
+  </form>
+</div>
+
 {# Filtres #}
 <div class="mb-3 d-flex flex-wrap gap-2">
   <a href="?filtre=tous" class="btn btn-sm {% if filtre == 'tous' %}btn-temple{% else %}btn-outline-secondary{% endif %}">Toutes les actives</a>
