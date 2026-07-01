@@ -567,9 +567,9 @@ def import_excel(request):
             if 'confirmer' in request.POST:
                 stats, errors = _importer_donnees(wb)
                 if not errors:
-                    messages.success(request, f"Import réussi : {stats['loges']} nouvelle(s) loge(s), {stats['regles']} règle(s).")
+                    messages.success(request, f"Import réussi : {stats['loges']} nouvelle(s) loge(s), {stats['regles']} règle(s), {stats.get('ponctuelles', 0)} réservation(s) ponctuelle(s).")
                     log_evenement('import_excel',
-                        f"Import Excel réussi : {stats['loges']} loge(s), {stats['regles']} règle(s) importée(s)",
+                        f"Import Excel réussi : {stats['loges']} loge(s), {stats['regles']} règle(s), {stats.get('ponctuelles', 0)} ponctuelle(s)",
                         request=request, objet_type='systeme')
                     return redirect('administration:tableau_de_bord')
             else:
@@ -670,6 +670,19 @@ def telecharger_template_excel(request):
         ws_r.column_dimensions[get_column_letter(col)].width = w
     ws_r.freeze_panes = "A2"
     ws_r.row_dimensions[1].height = 30
+
+    # ── Onglet DATES PONCTUELLES ───────────────────────────────────────────────
+    ws_p = wb.create_sheet("DATES PONCTUELLES")
+    headers_p = ["Abréviation *","Nom complet *","Date * (AAAA-MM-JJ)","Heure début","Heure fin",
+                 "Temple / Salle *","Type (temple/salle_reunion/cabinet_reflexion/banquet)","Objet / Remarque"]
+    _style_header(ws_p, 1, headers_p, hf, hfill, ctr, thin)
+    _style_row(ws_p, 2, ["3P","Les 3 Piliers","2026-11-14","09:00","17:00","Lafayette","temple","Tenue exceptionnelle"], thin, ctr, ex)
+    _style_row(ws_p, 3, ["3P","Les 3 Piliers","2026-12-06","19:00","22:30","Oie et le Grill","banquet","Banquet d'ordre"], thin, ctr, ex)
+    _style_row(ws_p, 4, ["14GO","14/Consistoire","2026-10-18","14:00","17:00","Salle James Anderson","salle_reunion","Réunion de bureau"], thin, ctr, ex)
+    for col, w in zip(range(1, 9), [12,34,20,12,12,26,44,34]):
+        ws_p.column_dimensions[get_column_letter(col)].width = w
+    ws_p.freeze_panes = "A2"
+    ws_p.row_dimensions[1].height = 30
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = 'attachment; filename="Kellermann_Import_Template.xlsx"'
@@ -1816,10 +1829,91 @@ def _match_loge(abrev, nom):
     return loge
 
 
+_TEMPLES_ALIAS = {
+    'lafayette': 'lafayette', 'liberte': 'liberte', 'liberté': 'liberte',
+    'egalite': 'egalite', 'égalité': 'egalite', 'fraternite': 'fraternite',
+    'fraternité': 'fraternite',
+}
+
+
+def _parse_date_cell(v):
+    from datetime import datetime, date as _date
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, _date):
+        return v
+    if v is None:
+        return None
+    s = str(v).strip()
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y'):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    return None
+
+
+def _parse_heure_cell(v, defaut=None):
+    from datetime import datetime, time as _time
+    if isinstance(v, _time):
+        return v.strftime('%H:%M')
+    if isinstance(v, datetime):
+        return v.strftime('%H:%M')
+    if v is None or str(v).strip() == '':
+        return defaut
+    s = str(v).strip().replace('h', ':').replace('H', ':')
+    for fmt in ('%H:%M', '%H:%M:%S'):
+        try:
+            return datetime.strptime(s, fmt).strftime('%H:%M')
+        except ValueError:
+            pass
+    return defaut
+
+
+def _match_temple(lieu):
+    key = lieu.lower().replace('temple', '').strip()
+    tk = _TEMPLES_ALIAS.get(key)
+    return Temple.objects.filter(nom=tk).first() if tk else None
+
+
+def _match_salle(lieu):
+    if not lieu:
+        return None
+    l = lieu.strip()
+    s = SalleReunion.objects.filter(nom__iexact=l).first()
+    if s:
+        return s
+    if 'humide' in l.lower():
+        s = SalleReunion.objects.filter(type_salle='agapes').exclude(nom__icontains='oie').first()
+        if s:
+            return s
+    core = l.lower().replace('salle', '').strip()
+    if core:
+        s = SalleReunion.objects.filter(nom__icontains=core).first()
+        if s:
+            return s
+    return SalleReunion.objects.filter(nom__icontains=l).first()
+
+
+def _resoudre_lieu(lieu, type_r):
+    """Renvoie ('temple', Temple) ou ('salle', SalleReunion) ou (None, None)."""
+    type_r = (type_r or '').strip().lower()
+    if type_r == 'temple':
+        return ('temple', _match_temple(lieu))
+    if type_r in ('salle_reunion', 'cabinet_reflexion', 'banquet', 'agapes', 'salle'):
+        return ('salle', _match_salle(lieu))
+    # Type absent : on infère depuis le lieu
+    t = _match_temple(lieu)
+    if t:
+        return ('temple', t)
+    return ('salle', _match_salle(lieu))
+
+
 def _analyser_import(wb):
     """Analyse (lecture seule) pour la prévisualisation : indique pour chaque loge
     si elle est nouvelle ou mise à jour (rapprochement), et le statut des règles."""
-    analyse = {'loges': [], 'regles': [], 'has_loges': False, 'has_regles': False}
+    analyse = {'loges': [], 'regles': [], 'ponctuelles': [],
+               'has_loges': False, 'has_regles': False, 'has_ponctuelles': False}
     abrevs_sheet = set()
 
     if 'LOGES' in wb.sheetnames:
@@ -1871,6 +1965,44 @@ def _analyser_import(wb):
                 'detail': '' if loge_ok else f"loge « {abrev} » introuvable",
             })
 
+    ponct_sheet = next((n for n in wb.sheetnames if 'PONCTUEL' in n.upper()), None)
+    if ponct_sheet:
+        analyse['has_ponctuelles'] = True
+        for row in wb[ponct_sheet].iter_rows(min_row=2, values_only=True):
+            if not row or not row[0] or (len(row) > 2 and not row[2]):
+                continue
+            abrev = str(row[0]).strip()
+            nom = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+            loge = _match_loge(abrev, nom)
+            d = _parse_date_cell(row[2] if len(row) > 2 else None)
+            hd = _parse_heure_cell(row[3] if len(row) > 3 else None, '19:00')
+            lieu = str(row[5]).strip() if len(row) > 5 and row[5] else ''
+            type_r = str(row[6]).strip().lower() if len(row) > 6 and row[6] else ''
+            kind, ressource = _resoudre_lieu(lieu, type_r)
+            statut, detail = 'nouvelle', ''
+            if not loge:
+                statut, detail = 'erreur', f"loge « {abrev} » introuvable"
+            elif not d:
+                statut, detail = 'erreur', "date invalide"
+            elif not ressource:
+                statut, detail = 'erreur', f"lieu « {lieu} » introuvable"
+            else:
+                if kind == 'temple':
+                    exists = Reservation.objects.filter(loge=loge, temple=ressource, date=d, heure_debut=hd).exists()
+                else:
+                    exists = ReservationSalle.objects.filter(loge=loge, salle=ressource, date=d, heure_debut=hd).exists()
+                if exists:
+                    statut, detail = 'existante', 'déjà en base'
+            analyse['ponctuelles'].append({
+                'abrev': abrev, 'date': d.strftime('%d/%m/%Y') if d else str(row[2] if len(row) > 2 else ''),
+                'lieu': lieu, 'type': type_r or (kind or ''),
+                'objet': str(row[7]).strip() if len(row) > 7 and row[7] else '',
+                'statut': statut, 'detail': detail,
+            })
+        analyse['nb_ponct_new'] = sum(1 for p in analyse['ponctuelles'] if p['statut'] == 'nouvelle')
+        analyse['nb_ponct_exist'] = sum(1 for p in analyse['ponctuelles'] if p['statut'] == 'existante')
+        analyse['nb_ponct_err'] = sum(1 for p in analyse['ponctuelles'] if p['statut'] == 'erreur')
+
     analyse['nb_loges_new'] = sum(1 for l in analyse['loges'] if l['statut'] == 'nouvelle')
     analyse['nb_loges_maj'] = sum(1 for l in analyse['loges'] if l['statut'] == 'maj')
     analyse['nb_regles'] = len(analyse['regles'])
@@ -1880,7 +2012,7 @@ def _analyser_import(wb):
 
 def _importer_donnees(wb):
     errors = []
-    stats  = {'loges': 0, 'obediences': 0, 'regles': 0}
+    stats  = {'loges': 0, 'obediences': 0, 'regles': 0, 'ponctuelles': 0}
 
     if 'LOGES' in wb.sheetnames:
         for i, row in enumerate(wb['LOGES'].iter_rows(min_row=2, values_only=True), 2):
@@ -1971,6 +2103,56 @@ def _importer_donnees(wb):
                 if cr: stats['regles'] += 1
             except Exception as e:
                 errors.append(f"REGLES ligne {i} : {e}")
+
+    # ── Dates ponctuelles (banquets, salles, cabinets, temples exceptionnels) ──
+    ponct_sheet = next((n for n in wb.sheetnames if 'PONCTUEL' in n.upper()), None)
+    if ponct_sheet:
+        OBJET_DEFAUT = {'temple': "Tenue exceptionnelle", 'banquet': "Banquet d'ordre",
+                        'cabinet_reflexion': "Cabinet de réflexion", 'salle_reunion': "Réunion"}
+        for i, row in enumerate(wb[ponct_sheet].iter_rows(min_row=2, values_only=True), 2):
+            try:
+                if not row or not row[0] or (len(row) > 2 and not row[2]):
+                    continue
+                abrev = str(row[0]).strip()
+                nom_r = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                loge = _match_loge(abrev, nom_r)
+                if not loge:
+                    errors.append(f"PONCTUELLES ligne {i} : loge '{abrev}' introuvable"); continue
+                d = _parse_date_cell(row[2] if len(row) > 2 else None)
+                if not d:
+                    errors.append(f"PONCTUELLES ligne {i} : date invalide"); continue
+                hd = _parse_heure_cell(row[3] if len(row) > 3 else None, '19:00')
+                hf = _parse_heure_cell(row[4] if len(row) > 4 else None, '22:00')
+                lieu = str(row[5]).strip() if len(row) > 5 and row[5] else ''
+                type_r = str(row[6]).strip().lower() if len(row) > 6 and row[6] else ''
+                objet = str(row[7]).strip() if len(row) > 7 and row[7] else ''
+                kind, ressource = _resoudre_lieu(lieu, type_r)
+                if not ressource:
+                    errors.append(f"PONCTUELLES ligne {i} : lieu '{lieu}' introuvable"); continue
+
+                if kind == 'temple':
+                    if Reservation.objects.filter(loge=loge, temple=ressource, date=d, heure_debut=hd).exists():
+                        continue  # doublon
+                    Reservation.objects.create(
+                        loge=loge, temple=ressource, type_reservation='exceptionnelle',
+                        sous_type='standard', statut='validee', date=d,
+                        heure_debut=hd, heure_fin=hf,
+                        nom_demandeur=loge.nom_contact or loge.nom,
+                        email_demandeur=loge.email or '', commentaire=objet,
+                    )
+                else:
+                    if ReservationSalle.objects.filter(loge=loge, salle=ressource, date=d, heure_debut=hd).exists():
+                        continue  # doublon
+                    ReservationSalle.objects.create(
+                        loge=loge, salle=ressource, date=d, heure_debut=hd, heure_fin=hf,
+                        statut='validee', nom_demandeur=loge.nom_contact or loge.nom,
+                        email_demandeur=loge.email or '', organisation=loge.nom,
+                        objet=objet or OBJET_DEFAUT.get(type_r, "Réservation"),
+                        nombre_participants=loge.effectif_moyen_agapes or 1, commentaire=objet,
+                    )
+                stats['ponctuelles'] += 1
+            except Exception as e:
+                errors.append(f"PONCTUELLES ligne {i} : {e}")
 
     return stats, errors
 

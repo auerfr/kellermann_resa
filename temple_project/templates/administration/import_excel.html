@@ -41,6 +41,9 @@
   <span class="badge badge-soft-blue">{{ analyse.nb_loges_maj }} mise(s) à jour</span>{% endif %}
   {% if analyse.has_regles %}<span class="badge badge-soft-purple">{{ analyse.nb_regles }} règle(s)</span>
   {% if analyse.nb_regles_err %}<span class="badge badge-soft-danger">{{ analyse.nb_regles_err }} règle(s) en erreur</span>{% endif %}{% endif %}
+  {% if analyse.has_ponctuelles %}<span class="badge badge-soft-blue">{{ analyse.nb_ponct_new }} ponctuelle(s)</span>
+  {% if analyse.nb_ponct_exist %}<span class="badge badge-soft-warning">{{ analyse.nb_ponct_exist }} déjà en base</span>{% endif %}
+  {% if analyse.nb_ponct_err %}<span class="badge badge-soft-danger">{{ analyse.nb_ponct_err }} en erreur</span>{% endif %}{% endif %}
 </div>
 
 {% if analyse.has_loges %}
@@ -96,6 +99,38 @@
 
 {% if analyse.nb_regles_err %}
 <div class="alert alert-warning">⚠️ {{ analyse.nb_regles_err }} règle(s) référencent une loge introuvable et seront ignorées. Vérifiez les abréviations.</div>
+{% endif %}
+
+{% if analyse.has_ponctuelles %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header"><h5 class="mb-0">Dates ponctuelles ({{ analyse.ponctuelles|length }})</h5></div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead><tr><th>Statut</th><th>Loge</th><th>Date</th><th>Lieu</th><th>Type</th><th>Objet</th></tr></thead>
+        <tbody>
+          {% for p in analyse.ponctuelles %}
+          <tr {% if p.statut == 'erreur' %}class="table-danger"{% elif p.statut == 'existante' %}class="table-warning"{% endif %}>
+            <td>
+              {% if p.statut == 'nouvelle' %}<span class="badge badge-soft-success">Nouvelle</span>
+              {% elif p.statut == 'existante' %}<span class="badge badge-soft-warning">Déjà en base</span>
+              {% else %}<span class="badge badge-soft-danger" title="{{ p.detail }}">Erreur</span>{% endif %}
+            </td>
+            <td class="fw-semibold">{{ p.abrev }}</td>
+            <td>{{ p.date }}</td>
+            <td>{{ p.lieu }}</td>
+            <td class="small text-muted">{{ p.type }}</td>
+            <td class="small">{{ p.objet }}{% if p.statut == 'erreur' %} <span class="text-danger">— {{ p.detail }}</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% if analyse.nb_ponct_err %}
+<div class="alert alert-warning">⚠️ {{ analyse.nb_ponct_err }} date(s) ponctuelle(s) en erreur (loge ou lieu introuvable) seront ignorées.</div>
+{% endif %}
 {% endif %}
 
 <div class="card border-success shadow-sm">
