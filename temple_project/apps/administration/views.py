@@ -560,23 +560,23 @@ def regenerer_intelligent(request):
 def import_excel(request):
     errors = []
     stats  = None
-    preview = None
+    analyse = None
     if request.method == 'POST' and request.FILES.get('fichier'):
         try:
             wb = openpyxl.load_workbook(request.FILES['fichier'], data_only=True)
             if 'confirmer' in request.POST:
                 stats, errors = _importer_donnees(wb)
                 if not errors:
-                    messages.success(request, f"Import réussi : {stats['loges']} loges, {stats['regles']} règles.")
+                    messages.success(request, f"Import réussi : {stats['loges']} nouvelle(s) loge(s), {stats['regles']} règle(s).")
                     log_evenement('import_excel',
                         f"Import Excel réussi : {stats['loges']} loge(s), {stats['regles']} règle(s) importée(s)",
                         request=request, objet_type='systeme')
                     return redirect('administration:tableau_de_bord')
             else:
-                preview = _preview_excel(wb)
+                analyse = _analyser_import(wb)
         except Exception as e:
             errors.append(f"Erreur : {e}")
-    return render(request, 'administration/import_excel.html', {'errors': errors, 'stats': stats, 'preview': preview})
+    return render(request, 'administration/import_excel.html', {'errors': errors, 'stats': stats, 'analyse': analyse})
 
 
 # ── Template Excel ────────────────────────────────────────────────────────────
@@ -1805,6 +1805,79 @@ def _preview_excel(wb):
     return preview
 
 
+def _match_loge(abrev, nom):
+    """Retrouve une loge existante par abréviation, sinon par nom (insensible à la
+    casse). Évite les doublons quand l'abréviation OU le nom a changé."""
+    loge = None
+    if abrev:
+        loge = Loge.objects.filter(abreviation__iexact=abrev).first()
+    if not loge and nom:
+        loge = Loge.objects.filter(nom__iexact=nom).first()
+    return loge
+
+
+def _analyser_import(wb):
+    """Analyse (lecture seule) pour la prévisualisation : indique pour chaque loge
+    si elle est nouvelle ou mise à jour (rapprochement), et le statut des règles."""
+    analyse = {'loges': [], 'regles': [], 'has_loges': False, 'has_regles': False}
+    abrevs_sheet = set()
+
+    if 'LOGES' in wb.sheetnames:
+        analyse['has_loges'] = True
+        for row in wb['LOGES'].iter_rows(min_row=2, values_only=True):
+            if not row or not row[0]:
+                continue
+            abrev = str(row[0]).strip()
+            nom   = str(row[1]).strip() if len(row) > 1 and row[1] else abrev
+            abrevs_sheet.add(abrev.lower())
+            existing = _match_loge(abrev, nom)
+            if existing:
+                if existing.abreviation.lower() != abrev.lower():
+                    match = f"↔ {existing.abreviation} → {abrev} (abréviation modifiée)"
+                elif existing.nom.lower() != nom.lower():
+                    match = f"↔ nom modifié (« {existing.nom} »)"
+                else:
+                    match = "déjà en base"
+            else:
+                match = ""
+            analyse['loges'].append({
+                'abrev': abrev, 'nom': nom,
+                'obedience': str(row[2]).strip() if len(row) > 2 and row[2] else '',
+                'contact': str(row[8]).strip() if len(row) > 8 and row[8] else '',
+                'statut': 'maj' if existing else 'nouvelle',
+                'match': match,
+            })
+
+    regles_sheet = next((n for n in wb.sheetnames if 'GLES' in n and 'CURRENCE' in n), None)
+    if regles_sheet:
+        analyse['has_regles'] = True
+        existing_abrevs = {a.lower() for a in Loge.objects.values_list('abreviation', flat=True) if a}
+        existing_noms = {n.lower() for n in Loge.objects.values_list('nom', flat=True) if n}
+        for row in wb[regles_sheet].iter_rows(min_row=2, values_only=True):
+            if not row or not row[0]:
+                continue
+            abrev = str(row[0]).strip()
+            nom   = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+            loge_ok = (abrev.lower() in existing_abrevs or abrev.lower() in abrevs_sheet
+                       or (nom and nom.lower() in existing_noms))
+            analyse['regles'].append({
+                'abrev': abrev,
+                'temple': str(row[4]).strip() if len(row) > 4 and row[4] else '',
+                'jour': str(row[5]).strip() if len(row) > 5 and row[5] else '',
+                'sem': row[6] if len(row) > 6 else '',
+                'heures': (f"{row[7]}–{row[8]}" if len(row) > 8 and row[7] else ''),
+                'mois': str(row[9]) if len(row) > 9 and row[9] else '',
+                'statut': 'ok' if loge_ok else 'erreur',
+                'detail': '' if loge_ok else f"loge « {abrev} » introuvable",
+            })
+
+    analyse['nb_loges_new'] = sum(1 for l in analyse['loges'] if l['statut'] == 'nouvelle')
+    analyse['nb_loges_maj'] = sum(1 for l in analyse['loges'] if l['statut'] == 'maj')
+    analyse['nb_regles'] = len(analyse['regles'])
+    analyse['nb_regles_err'] = sum(1 for r in analyse['regles'] if r['statut'] == 'erreur')
+    return analyse
+
+
 def _importer_donnees(wb):
     errors = []
     stats  = {'loges': 0, 'obediences': 0, 'regles': 0}
@@ -1840,21 +1913,28 @@ def _importer_donnees(wb):
                     effectif = int(row[5]) if len(row) > 5 and row[5] and str(row[5]).isdigit() else 0
                     agapes   = int(row[6]) if len(row) > 6 and row[6] and str(row[6]).isdigit() else 0
                     rite     = _normalise_rite(str(row[7]) if len(row) > 7 and row[7] else '')
-                loge_defaults = {
-                    'nom': str(row[1]).strip() if row[1] else str(row[0]).strip(), 'obedience': ob,
+                abrev = str(row[0]).strip()
+                nom   = str(row[1]).strip() if row[1] else abrev
+                vals = {
+                    'nom': nom, 'abreviation': abrev, 'obedience': ob,
                     'type_loge': str(row[3]).strip() if row[3] in ('loge', 'haut_grade') else 'loge',
                     'rite': rite, 'email': email,
                     'effectif_total': effectif, 'effectif_moyen_agapes': agapes,
                 }
                 # Ne pas écraser le contact si les colonnes ne sont pas renseignées
                 if nom_contact:
-                    loge_defaults['nom_contact'] = nom_contact
+                    vals['nom_contact'] = nom_contact
                 if telephone:
-                    loge_defaults['telephone'] = telephone
-                _, cl = Loge.objects.update_or_create(
-                    abreviation=str(row[0]).strip(), defaults=loge_defaults,
-                )
-                if cl: stats['loges'] += 1
+                    vals['telephone'] = telephone
+                # Rapprochement : abréviation OU nom (évite les doublons)
+                loge = _match_loge(abrev, nom)
+                if loge:
+                    for k, v in vals.items():
+                        setattr(loge, k, v)
+                    loge.save()
+                else:
+                    Loge.objects.create(**vals)
+                    stats['loges'] += 1
             except Exception as e:
                 errors.append(f"LOGES ligne {i} : {e}")
 
@@ -1867,8 +1947,10 @@ def _importer_donnees(wb):
         for i, row in enumerate(wb[regles_sheet].iter_rows(min_row=2, values_only=True), 2):
             try:
                 if not row[0] or not row[4] or not row[5] or row[6] is None: continue
-                try: loge = Loge.objects.get(abreviation=str(row[0]).strip())
-                except Loge.DoesNotExist: errors.append(f"REGLES ligne {i} : loge '{row[0]}' introuvable"); continue
+                nom_r = str(row[1]).strip() if len(row) > 1 and row[1] else ''
+                loge = _match_loge(str(row[0]).strip(), nom_r)
+                if not loge:
+                    errors.append(f"REGLES ligne {i} : loge '{row[0]}' introuvable"); continue
                 tk = TEMPLES.get(str(row[4]).strip())
                 if not tk: errors.append(f"REGLES ligne {i} : temple '{row[4]}' inconnu"); continue
                 try: temple = Temple.objects.get(nom=tk)

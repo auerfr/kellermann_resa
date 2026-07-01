@@ -1,64 +1,115 @@
-@'
 {% extends "base.html" %}
 {% block title %}Import Excel{% endblock %}
 {% block content %}
 <div class="row mb-4">
   <div class="col-12">
-    <h1 class="h3">Import des donnees Excel</h1>
-    <p class="text-muted">Importez les loges et regles depuis le fichier Excel.</p>
+    <h1 class="h3">Import des données Excel</h1>
+    <p class="text-muted">Importez les loges et les règles de récurrence depuis le fichier Excel.</p>
   </div>
 </div>
+
 {% if errors %}
 <div class="alert alert-danger">
   <strong>Erreurs :</strong>
   <ul class="mb-0 mt-2">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
-{% if not preview %}
+
+{% if not analyse %}
+{# ── Étape 1 : choix du fichier ── #}
 <div class="card shadow-sm">
-  <div class="card-header"><h5 class="mb-0">Etape 1 - Choisir le fichier</h5></div>
+  <div class="card-header"><h5 class="mb-0">Étape 1 — Choisir le fichier</h5></div>
   <div class="card-body">
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
       <div class="mb-3">
         <label class="form-label fw-bold">Fichier Excel (.xlsx)</label>
         <input type="file" name="fichier" accept=".xlsx" class="form-control" required>
-        <div class="form-text">Utilisez le fichier Import_Kellermann_Resa_2025_2026.xlsx</div>
+        <div class="form-text">Utilisez le template d'import (feuilles LOGES et RÈGLES RÉCURRENCE).</div>
       </div>
-      <button type="submit" class="btn btn-primary">Previsualiser</button>
+      <button type="submit" class="btn btn-primary">Prévisualiser</button>
       <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary ms-2">Annuler</a>
     </form>
   </div>
 </div>
+
 {% else %}
-<div class="alert alert-info"><strong>Etape 2 - Verifiez les donnees avant de confirmer.</strong></div>
-{% for sheet_name, rows in preview.items %}
+{# ── Étape 2 : prévisualisation + rapprochements ── #}
+<div class="alert alert-info d-flex flex-wrap gap-3 align-items-center">
+  <strong>Étape 2 — Vérifiez avant de confirmer.</strong>
+  {% if analyse.has_loges %}<span class="badge badge-soft-success">{{ analyse.nb_loges_new }} nouvelle(s) loge(s)</span>
+  <span class="badge badge-soft-blue">{{ analyse.nb_loges_maj }} mise(s) à jour</span>{% endif %}
+  {% if analyse.has_regles %}<span class="badge badge-soft-purple">{{ analyse.nb_regles }} règle(s)</span>
+  {% if analyse.nb_regles_err %}<span class="badge badge-soft-danger">{{ analyse.nb_regles_err }} règle(s) en erreur</span>{% endif %}{% endif %}
+</div>
+
+{% if analyse.has_loges %}
 <div class="card shadow-sm mb-4">
-  <div class="card-header"><h5 class="mb-0">Feuille : {{ sheet_name }}</h5></div>
+  <div class="card-header"><h5 class="mb-0">Loges ({{ analyse.loges|length }})</h5></div>
   <div class="card-body p-0">
     <div class="table-responsive">
-      <table class="table table-sm table-striped mb-0">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead><tr><th>Statut</th><th>Abrév.</th><th>Nom</th><th>Obédience</th><th>Contact</th><th>Rapprochement</th></tr></thead>
         <tbody>
-          {% for row in rows %}<tr>{% for cell in row %}<td class="small py-1 px-2">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+          {% for l in analyse.loges %}
+          <tr>
+            <td>{% if l.statut == 'nouvelle' %}<span class="badge badge-soft-success">Nouvelle</span>{% else %}<span class="badge badge-soft-blue">Mise à jour</span>{% endif %}</td>
+            <td class="fw-semibold">{{ l.abrev }}</td>
+            <td>{{ l.nom }}</td>
+            <td class="small text-muted">{{ l.obedience }}</td>
+            <td class="small">{{ l.contact }}</td>
+            <td class="small text-muted">{{ l.match }}</td>
+          </tr>
+          {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
 </div>
-{% endfor %}
+{% endif %}
+
+{% if analyse.has_regles %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header"><h5 class="mb-0">Règles de récurrence ({{ analyse.regles|length }})</h5></div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead><tr><th>Statut</th><th>Loge</th><th>Temple</th><th>Jour</th><th>Sem.</th><th>Horaires</th><th>Mois actifs</th></tr></thead>
+        <tbody>
+          {% for r in analyse.regles %}
+          <tr {% if r.statut == 'erreur' %}class="table-danger"{% endif %}>
+            <td>{% if r.statut == 'erreur' %}<span class="badge badge-soft-danger" title="{{ r.detail }}">Erreur</span>{% else %}<span class="badge badge-soft-success">OK</span>{% endif %}</td>
+            <td class="fw-semibold">{{ r.abrev }}</td>
+            <td>{{ r.temple }}</td>
+            <td>{{ r.jour }}</td>
+            <td>{{ r.sem }}</td>
+            <td class="small">{{ r.heures }}</td>
+            <td class="small text-muted">{{ r.mois }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if analyse.nb_regles_err %}
+<div class="alert alert-warning">⚠️ {{ analyse.nb_regles_err }} règle(s) référencent une loge introuvable et seront ignorées. Vérifiez les abréviations.</div>
+{% endif %}
+
 <div class="card border-success shadow-sm">
   <div class="card-body">
     <h5 class="text-success">Confirmer l'import</h5>
+    <p class="text-muted small mb-3">Les loges existantes seront mises à jour (rapprochement par abréviation ou par nom — pas de doublon). Ré-sélectionnez le même fichier pour confirmer.</p>
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
       <input type="hidden" name="confirmer" value="1">
       <input type="file" name="fichier" accept=".xlsx" class="form-control mb-3" required>
-      <div class="form-text mb-3">Reselectionnez le meme fichier pour confirmer.</div>
-      <button type="submit" class="btn btn-success btn-lg">Confirmer et importer</button>
+      <button type="submit" class="btn btn-success btn-lg">✅ Confirmer et importer</button>
       <a href="{% url 'administration:import_excel' %}" class="btn btn-outline-secondary ms-2">Recommencer</a>
     </form>
   </div>
 </div>
 {% endif %}
 {% endblock %}
-'@ | Set-Content "temple_project\templates\administration\import_excel.html" -Encoding UTF8
