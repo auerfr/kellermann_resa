@@ -830,6 +830,77 @@ def _audit_capacite(annee):
         cal.append({'temple': str(t), 'dates': n, 'occ': occ, 'libres': n - occ,
                     'taux': round(100 * occ / n, 1) if n else 0})
 
+    # ── Capacité WEEK-END matin & après-midi (samedi + dimanche) ─────────────
+    BANDES = [('Matin', time(8, 0), time(13, 0)),
+              ('Après-midi', time(13, 0), time(18, 0))]
+    JOURS_WE = [5, 6]                 # samedi, dimanche
+    JN = {5: 'Samedi', 6: 'Dimanche'}
+
+    def _positions(num):
+        if num == -1:
+            return [4]
+        if num == 0:
+            return [1, 2, 3, 4]
+        return [num] if num in POS else []
+
+    def bande_of(h):
+        if h < time(13, 0):
+            return 'Matin'
+        if h < time(18, 0):
+            return 'Après-midi'
+        return 'Soir'
+
+    # homes week-end : (temple × jour_we × bande × position)
+    we_taken = defaultdict(set)       # temple_id → {(jour, bande, pos)}
+    for r in RegleRecurrence.objects.filter(actif=True, jour_semaine__in=JOURS_WE):
+        b = bande_of(r.heure_debut)
+        if b == 'Soir':
+            continue
+        for p in _positions(r.numero_semaine):
+            we_taken[r.temple_id].add((r.jour_semaine, b, p))
+
+    we_par_temple, we_occ = [], 0
+    for t in temples:
+        occ = len(we_taken[t.id])
+        we_par_temple.append({'temple': str(t), 'total': len(JOURS_WE) * len(BANDES) * len(POS),
+                              'occ': occ, 'libres': len(JOURS_WE) * len(BANDES) * len(POS) - occ})
+        we_occ += occ
+    we_par_case = []
+    for wd in JOURS_WE:
+        for bname, _, _ in BANDES:
+            occ = sum(1 for t in temples for (j, b, p) in we_taken[t.id] if j == wd and b == bname)
+            tot = len(temples) * len(POS)
+            we_par_case.append({'jour': JN[wd], 'partie': bname, 'total': tot,
+                                'occ': occ, 'libres': tot - occ})
+    we_total = len(temples) * len(JOURS_WE) * len(BANDES) * len(POS)
+
+    # occupation calendaire week-end matin/après-midi
+    we_dates = {wd: [] for wd in JOURS_WE}
+    dd = d1
+    while dd <= d2:
+        if dd.weekday() in JOURS_WE and dd.month not in (7, 8):
+            we_dates[dd.weekday()].append(dd)
+        dd += timedelta(days=1)
+    occ_we = defaultdict(set)          # (temple_id, jour, bande) → {dates}
+    for tid, ddate, hd_, hf_ in Reservation.objects.filter(
+        date__gte=d1, date__lte=d2, statut__in=['validee', 'attente'],
+    ).values_list('temple_id', 'date', 'heure_debut', 'heure_fin'):
+        wd = ddate.weekday()
+        if wd not in JOURS_WE or ddate.month in (7, 8):
+            continue
+        for bname, bs, be in BANDES:
+            if hd_ < be and hf_ > bs:
+                occ_we[(tid, wd, bname)].add(ddate)
+    we_cal = []
+    for wd in JOURS_WE:
+        nd = len(we_dates[wd])
+        for bname, _, _ in BANDES:
+            occ = sum(len(occ_we[(t.id, wd, bname)]) for t in temples)
+            slots = nd * len(temples)
+            we_cal.append({'jour': JN[wd], 'partie': bname, 'dates': slots, 'occ': occ,
+                           'libres': slots - occ,
+                           'taux': round(100 * occ / slots, 1) if slots else 0})
+
     return {
         'annee': annee, 'nb_temples': len(temples),
         'homes': {'total': total_homes, 'occ': occ_total, 'libres': total_homes - occ_total,
@@ -839,6 +910,9 @@ def _audit_capacite(annee):
                        'total_dates': n * len(temples), 'total_occ': tot_occ,
                        'total_libres': n * len(temples) - tot_occ,
                        'taux': round(100 * tot_occ / (n * len(temples)), 1) if n and temples else 0},
+        'weekend': {'homes': {'total': we_total, 'occ': we_occ, 'libres': we_total - we_occ,
+                              'par_case': we_par_case, 'par_temple': we_par_temple},
+                    'calendrier': {'par_case': we_cal}},
     }
 
 
@@ -947,6 +1021,18 @@ def audit_export_excel(request):
     for c in cal['par_temple']:
         rows5.append([c['temple'], c['dates'], c['occ'], f"{c['libres']} ({100-c['taux']:.0f}% libre)"])
     rows5.append(["GLOBAL", cal['total_dates'], cal['total_occ'], f"{cal['total_libres']} ({100-cal['taux']:.0f}% libre)"])
+    we = cap['weekend']
+    rows5.append(["", "", "", ""])
+    rows5.append(["WEEK-END MATIN & APRÈS-MIDI (samedi + dimanche)", "", "", ""])
+    rows5.append([f"Homes récurrents (temple x jour x partie x pos 1-4)", we['homes']['total'],
+                  we['homes']['occ'], we['homes']['libres']])
+    rows5.append(["Par case", "Total", "Occupés", "Libres"])
+    for cs in we['homes']['par_case']:
+        rows5.append([f"{cs['jour']} {cs['partie']}", cs['total'], cs['occ'], cs['libres']])
+    rows5.append(["Occupation calendaire week-end", "Créneaux", "Occupés", "Libres"])
+    for cs in we['calendrier']['par_case']:
+        rows5.append([f"{cs['jour']} {cs['partie']}", cs['dates'], cs['occ'],
+                      f"{cs['libres']} ({100-cs['taux']:.0f}% libre)"])
     ws5 = wb.create_sheet("Capacite creneaux")
     remplir(ws5, ["Indicateur", "Total", "Occupés", "Libres"], rows5, [52, 12, 12, 20])
 

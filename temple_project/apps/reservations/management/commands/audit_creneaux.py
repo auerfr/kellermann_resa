@@ -45,4 +45,21 @@ class Command(BaseCommand):
                               f"{x['libres']:>3}  ({100 - x['taux']:.0f}% libre)")
         self.stdout.write(f"GLOBAL : {cal['total_dates']} soirees, {cal['total_occ']} occupees, "
                           f"{cal['total_libres']} libres ({100 - cal['taux']:.0f}% libre).")
+
+        we = c['weekend']
+        titre("WEEK-END MATIN & APRES-MIDI (samedi + dimanche)")
+        wh = we['homes']
+        self.stdout.write(f"Homes recurrents : {wh['total']} creneaux, {wh['occ']} occupes, "
+                          f"{wh['libres']} LIBRES")
+        self.stdout.write(self.style.SUCCESS(
+            f"=> ~{wh['libres']} creneaux week-end matin/apres-midi disponibles."))
+        self.stdout.write("Par case (jour / partie) : total / occ / libres")
+        for cs in wh['par_case']:
+            self.stdout.write(f"   {cs['jour']:<9} {cs['partie']:<11} "
+                              f"{cs['total']:>3} / {cs['occ']:>3} / {cs['libres']:>3}")
+        self.stdout.write("Occupation calendaire (soirees=creneaux temple x date) :")
+        for cs in we['calendrier']['par_case']:
+            self.stdout.write(f"   {cs['jour']:<9} {cs['partie']:<11} "
+                              f"{cs['dates']:>4} slots, {cs['occ']:>3} occ, {cs['libres']:>4} libres "
+                              f"({100 - cs['taux']:.0f}% libre)")
         self.stdout.write("")
