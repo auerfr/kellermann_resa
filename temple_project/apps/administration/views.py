@@ -705,26 +705,38 @@ def deplacer_tenue(request):
         messages.error(request, "Date invalide.")
         return redirect(nxt)
 
+    # Temple cible : celui choisi (si fourni) sinon le temple actuel
+    cible = Temple.objects.filter(pk=request.POST.get('nouveau_temple')).first() or resa.temple
+
     conflit = Reservation.objects.filter(
-        temple=resa.temple, date=nd,
+        temple=cible, date=nd,
         heure_debut__lt=resa.heure_fin, heure_fin__gt=resa.heure_debut,
         statut__in=['validee', 'attente'],
     ).exclude(pk=resa.pk).select_related('loge').first()
 
     if conflit and request.POST.get('forcer') != 'on':
         qui = conflit.loge or conflit.nom_organisation or conflit.nom_demandeur
-        messages.warning(request, f"{resa.temple} est déjà occupé le {nd:%d/%m/%Y} "
-                         f"par {qui}. Déplacez d'abord cette tenue-là, ou cochez « Forcer ».")
+        libres = [t for t in Temple.objects.exclude(pk=cible.pk).order_by('nom')
+                  if not _temple_occupe(t, nd, resa.heure_debut, resa.heure_fin)]
+        suff = (" Temples libres ce jour-là : " + ", ".join(str(t) for t in libres) + "."
+                if libres else " Aucun autre temple n'est libre ce jour-là.")
+        messages.warning(request, f"{cible} est déjà occupé le {nd:%d/%m/%Y} par {qui}."
+                         + suff + " Choisissez un temple libre, ou cochez « Forcer ».")
         return redirect(nxt)
 
     ancienne = resa.date
-    note = f"Déplacée du {ancienne:%d/%m/%Y} au {nd:%d/%m/%Y} (échange de dates)."
+    ancien_temple = resa.temple
+    note = f"Déplacée du {ancienne:%d/%m/%Y} au {nd:%d/%m/%Y}"
+    if cible.pk != ancien_temple.pk:
+        note += f", et de « {ancien_temple} » vers « {cible} »"
+    note += " (échange)."
     _exclure_date_regle(resa)
     resa.date = nd
+    resa.temple = cible
     resa.regle_source = None
     resa.commentaire = (resa.commentaire + "\n" if resa.commentaire else "") + note
     resa.save()
-    messages.success(request, f"Tenue de {resa.loge} déplacée au {nd:%d/%m/%Y} ({resa.temple}).")
+    messages.success(request, f"Tenue de {resa.loge} déplacée au {nd:%d/%m/%Y} ({cible}).")
     log_evenement('modification_reservation', f"{note} (loge {resa.loge})",
                   request=request, objet=resa)
     return redirect(nxt)

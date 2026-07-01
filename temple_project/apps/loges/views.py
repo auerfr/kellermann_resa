@@ -100,7 +100,7 @@ def detail_loge(request, pk):
             'statut': r.statut, 'get_statut_display': r.get_statut_display(),
             'type_code': 'temple', 'type_label': 'Temple',
             'lieu': str(r.temple) if r.temple else '—',
-            'detail': '', 'resa_pk': r.pk,
+            'detail': '', 'resa_pk': r.pk, 'temple_pk': r.temple_id,
         }
 
     def _s(r):
@@ -156,6 +156,7 @@ def detail_loge(request, pk):
         'saison_label':    f"{annee_param}/{annee_param+1}",
         'nb_tenues':       tenues.count(),
         'portail_token':   portail_token,
+        'temples':         Temple.objects.all().order_by('nom'),
     }
     return render(request, "loges/detail.html", context)
 

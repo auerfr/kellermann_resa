@@ -186,6 +186,12 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
                     <input type="date" name="nouvelle_date" class="form-control form-control-sm"
                            required style="width:auto;">
+                    <select name="nouveau_temple" class="form-select form-select-sm" style="width:auto;"
+                            title="Temple (changez-le si le temple d'origine est occupé)">
+                      {% for t in temples %}
+                      <option value="{{ t.pk }}" {% if t.pk == e.temple_pk %}selected{% endif %}>{{ t }}</option>
+                      {% endfor %}
+                    </select>
                     <label class="small text-muted">
                       <input type="checkbox" name="forcer"> forcer
                     </label>
