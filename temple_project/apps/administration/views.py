@@ -1385,10 +1385,12 @@ def _dates_saison(regle, annee):
     for d in _calculer_dates_regle(regle, annee + 1):
         if d <= fin_saison:
             dates.append(d)
-    # Filtre dates_debut/fin de la règle
+    # Filtre dates_debut/fin de la règle + dates exclues (déplacées/annulées)
+    exclues = set(regle.dates_exclues or [])
     return [
         d for d in dates
-        if not (regle.date_fin and d > regle.date_fin)
+        if d.isoformat() not in exclues
+        and not (regle.date_fin and d > regle.date_fin)
         and not (regle.date_debut and d < regle.date_debut)
     ]
 
