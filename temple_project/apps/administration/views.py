@@ -1818,6 +1818,20 @@ def _preview_excel(wb):
     return preview
 
 
+def _data_rows(ws):
+    """Itère (numéro_ligne, ligne) en sautant une éventuelle ligne de titre :
+    l'en-tête est la 1re ligne (parmi les 6 premières) dont la 1re cellule
+    contient « abr » (Abréviation). Les données commencent juste après."""
+    header = 1
+    for idx, row in enumerate(ws.iter_rows(min_row=1, max_row=6, values_only=True), 1):
+        first = str(row[0]).strip().lower() if row and row[0] else ''
+        if 'abr' in first:
+            header = idx
+            break
+    for idx, row in enumerate(ws.iter_rows(min_row=header + 1, values_only=True), header + 1):
+        yield idx, row
+
+
 def _match_loge(abrev, nom):
     """Retrouve une loge existante par abréviation, sinon par nom (insensible à la
     casse). Évite les doublons quand l'abréviation OU le nom a changé."""
@@ -1918,7 +1932,7 @@ def _analyser_import(wb):
 
     if 'LOGES' in wb.sheetnames:
         analyse['has_loges'] = True
-        for row in wb['LOGES'].iter_rows(min_row=2, values_only=True):
+        for _i, row in _data_rows(wb['LOGES']):
             if not row or not row[0]:
                 continue
             abrev = str(row[0]).strip()
@@ -1947,7 +1961,7 @@ def _analyser_import(wb):
         analyse['has_regles'] = True
         existing_abrevs = {a.lower() for a in Loge.objects.values_list('abreviation', flat=True) if a}
         existing_noms = {n.lower() for n in Loge.objects.values_list('nom', flat=True) if n}
-        for row in wb[regles_sheet].iter_rows(min_row=2, values_only=True):
+        for _i, row in _data_rows(wb[regles_sheet]):
             if not row or not row[0]:
                 continue
             abrev = str(row[0]).strip()
@@ -1968,7 +1982,7 @@ def _analyser_import(wb):
     ponct_sheet = next((n for n in wb.sheetnames if 'PONCTUEL' in n.upper()), None)
     if ponct_sheet:
         analyse['has_ponctuelles'] = True
-        for row in wb[ponct_sheet].iter_rows(min_row=2, values_only=True):
+        for _i, row in _data_rows(wb[ponct_sheet]):
             if not row or not row[0] or (len(row) > 2 and not row[2]):
                 continue
             abrev = str(row[0]).strip()
@@ -1979,14 +1993,16 @@ def _analyser_import(wb):
             lieu = str(row[5]).strip() if len(row) > 5 and row[5] else ''
             type_r = str(row[6]).strip().lower() if len(row) > 6 and row[6] else ''
             kind, ressource = _resoudre_lieu(lieu, type_r)
+            in_sheet = abrev.lower() in abrevs_sheet
             statut, detail = 'nouvelle', ''
-            if not loge:
+            if not loge and not in_sheet:
                 statut, detail = 'erreur', f"loge « {abrev} » introuvable"
             elif not d:
                 statut, detail = 'erreur', "date invalide"
             elif not ressource:
                 statut, detail = 'erreur', f"lieu « {lieu} » introuvable"
-            else:
+            elif loge:
+                # Loge déjà en base : on peut vérifier le doublon
                 if kind == 'temple':
                     exists = Reservation.objects.filter(loge=loge, temple=ressource, date=d, heure_debut=hd).exists()
                 else:
@@ -2015,7 +2031,7 @@ def _importer_donnees(wb):
     stats  = {'loges': 0, 'obediences': 0, 'regles': 0, 'ponctuelles': 0}
 
     if 'LOGES' in wb.sheetnames:
-        for i, row in enumerate(wb['LOGES'].iter_rows(min_row=2, values_only=True), 2):
+        for i, row in _data_rows(wb['LOGES']):
             try:
                 if not row[0]: continue
                 ob, co = Obedience.objects.get_or_create(nom=str(row[2]).strip() if row[2] else 'Non définie')
@@ -2078,7 +2094,7 @@ def _importer_donnees(wb):
         JOURS  = {'Lundi':0,'Mardi':1,'Mercredi':2,'Jeudi':3,'Vendredi':4,'Samedi':5,'Dimanche':6}
         TEMPLES = {'Lafayette':'lafayette','Liberte':'liberte','Egalite':'egalite','Fraternite':'fraternite',
                    'Égalité':'egalite','Fraternité':'fraternite','Liberté':'liberte'}
-        for i, row in enumerate(wb[regles_sheet].iter_rows(min_row=2, values_only=True), 2):
+        for i, row in _data_rows(wb[regles_sheet]):
             try:
                 if not row[0] or not row[4] or not row[5] or row[6] is None: continue
                 nom_r = str(row[1]).strip() if len(row) > 1 and row[1] else ''
@@ -2109,7 +2125,7 @@ def _importer_donnees(wb):
     if ponct_sheet:
         OBJET_DEFAUT = {'temple': "Tenue exceptionnelle", 'banquet': "Banquet d'ordre",
                         'cabinet_reflexion': "Cabinet de réflexion", 'salle_reunion': "Réunion"}
-        for i, row in enumerate(wb[ponct_sheet].iter_rows(min_row=2, values_only=True), 2):
+        for i, row in _data_rows(wb[ponct_sheet]):
             try:
                 if not row or not row[0] or (len(row) > 2 and not row[2]):
                     continue
