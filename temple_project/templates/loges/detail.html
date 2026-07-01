@@ -31,6 +31,7 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
       <span>{{ loge.obedience }}</span>
       <span>·</span>
       <span>{% if loge.type_loge == 'haut_grade' %}Haut grade{% else %}Loge bleue{% endif %}</span>
+      {% if user.is_staff and loge.statut == 'a_reconfirmer' %}<span>·</span><span class="badge badge-soft-warning">À reconfirmer</span>{% endif %}
       {% if user.is_staff and loge.email %}<span>·</span><a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>{% endif %}
     </div>
   </div>

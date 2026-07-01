@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Suivi loges / saison{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <h1 class="h3 temple-title mb-1">🔄 Suivi des loges / saison</h1>
+  <p class="text-muted mb-0">Gérez les loges qui n'ont pas confirmé la nouvelle saison. Rien n'est supprimé : « À reconfirmer » reste visible, « Inactive » est masquée partout.</p>
+</div>
+
+{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+{# Filtres #}
+<div class="mb-3 d-flex flex-wrap gap-2">
+  <a href="?filtre=tous" class="btn btn-sm {% if filtre == 'tous' %}btn-temple{% else %}btn-outline-secondary{% endif %}">Toutes les actives</a>
+  <a href="?filtre=sans_recurrence" class="btn btn-sm {% if filtre == 'sans_recurrence' %}btn-temple{% else %}btn-outline-secondary{% endif %}">Sans récurrence <span class="badge bg-light text-dark">{{ nb_sans }}</span></a>
+  <a href="?filtre=a_reconfirmer" class="btn btn-sm {% if filtre == 'a_reconfirmer' %}btn-temple{% else %}btn-outline-secondary{% endif %}">À reconfirmer <span class="badge bg-light text-dark">{{ nb_a_reconfirmer }}</span></a>
+  <a href="?filtre=active" class="btn btn-sm {% if filtre == 'active' %}btn-temple{% else %}btn-outline-secondary{% endif %}">Actives confirmées</a>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead>
+          <tr><th>Loge</th><th>Obédience</th><th class="text-center">Règles actives</th><th>Statut</th><th class="text-end">Changer le statut</th></tr>
+        </thead>
+        <tbody>
+          {% for loge in loges %}
+          <tr {% if loge.nb_regles == 0 %}class="table-warning"{% endif %}>
+            <td><a href="{% url 'loges:detail' loge.pk %}" class="fw-semibold text-decoration-none">{{ loge.nom }}</a>
+                {% if loge.abreviation %}<span class="text-muted small">({{ loge.abreviation }})</span>{% endif %}</td>
+            <td class="small text-muted">{{ loge.obedience }}</td>
+            <td class="text-center">{% if loge.nb_regles %}{{ loge.nb_regles }}{% else %}<span class="badge badge-soft-danger">0</span>{% endif %}</td>
+            <td>
+              {% if loge.statut == 'active' %}<span class="badge badge-soft-success">Active</span>
+              {% elif loge.statut == 'a_reconfirmer' %}<span class="badge badge-soft-warning">À reconfirmer</span>
+              {% else %}<span class="badge badge-soft-danger">Inactive</span>{% endif %}
+            </td>
+            <td class="text-end">
+              <form method="post" class="d-inline-flex gap-1 justify-content-end flex-wrap">
+                {% csrf_token %}
+                <input type="hidden" name="loge_id" value="{{ loge.pk }}">
+                {% if loge.statut != 'active' %}<button name="statut" value="active" class="btn btn-sm btn-outline-success">Active</button>{% endif %}
+                {% if loge.statut != 'a_reconfirmer' %}<button name="statut" value="a_reconfirmer" class="btn btn-sm btn-outline-warning">À reconfirmer</button>{% endif %}
+                <button name="statut" value="inactive" class="btn btn-sm btn-outline-danger">Désactiver</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted p-4">Aucune loge dans ce filtre.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# Loges inactives (réactivables) #}
+{% if inactives %}
+<div class="card shadow-sm border-0">
+  <div class="card-header temple-header">Loges inactives ({{ nb_inactives }})</div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0 align-middle">
+        <tbody>
+          {% for loge in inactives %}
+          <tr>
+            <td class="ps-3">{{ loge.nom }} <span class="text-muted small">({{ loge.abreviation }})</span></td>
+            <td class="small text-muted">{{ loge.obedience }}</td>
+            <td class="text-end pe-3">
+              <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="loge_id" value="{{ loge.pk }}">
+                <button name="statut" value="active" class="btn btn-sm btn-outline-success">Réactiver</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="mt-3"><a href="/admin/" class="btn btn-outline-secondary btn-sm">← Tableau de bord</a></div>
+{% endblock %}

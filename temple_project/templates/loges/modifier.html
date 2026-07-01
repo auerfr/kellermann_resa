@@ -75,6 +75,15 @@
               <input type="text" name="telephone" value="{{ loge.telephone }}" class="form-control" placeholder="06 12 34 56 78">
             </div>
           </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Statut de saison</label>
+            <select name="statut" class="form-select no-select2" style="max-width:280px;">
+              {% for val, lib in statuts %}
+              <option value="{{ val }}" {% if loge.statut == val %}selected{% endif %}>{{ lib }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">« À reconfirmer » reste visible ; « Inactive » masque la loge partout.</div>
+          </div>
           <div class="row g-3 mb-4">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Effectif total</label>

@@ -179,6 +179,10 @@ def modifier_loge(request, pk):
         loge.type_loge = request.POST.get('type_loge', loge.type_loge)
         loge.rite           = request.POST.get('rite', loge.rite)
         loge.rite_precision = request.POST.get('rite_precision', '').strip()
+        statut = request.POST.get('statut')
+        if statut in ('active', 'a_reconfirmer', 'inactive'):
+            loge.statut = statut
+            loge.actif = (statut != 'inactive')
         loge.save()
         messages.success(request, f"Loge {loge.nom} modifiée avec succès.")
         return redirect('loges:detail', pk=loge.pk)
@@ -187,6 +191,7 @@ def modifier_loge(request, pk):
     return render(request, "loges/modifier.html", {
         'loge':       loge,
         'obediences': obediences,
+        'statuts':    Loge.STATUT_CHOICES,
     })
 
 

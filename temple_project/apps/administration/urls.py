@@ -33,6 +33,7 @@ urlpatterns = [
     path("saison/validation/", views.validation_saison_admin, name="validation_saison_admin"),
     path("journal/", views.journal, name="journal"),
     path("portail-acces/", views.portail_acces_admin, name="portail_acces_admin"),
+    path("loges-saison/", views.loges_saison, name="loges_saison"),
     path("annonces/", views.annonces_liste, name="annonces_liste"),
     path("annonces/ajouter/", views.annonce_form, name="annonce_ajouter"),
     path("annonces/<int:pk>/modifier/", views.annonce_form, name="annonce_modifier"),

@@ -19,6 +19,12 @@ class Loge(models.Model):
         ("haut_grade", "Haut Grade"),
     ]
 
+    STATUT_CHOICES = [
+        ("active",        "Active"),
+        ("a_reconfirmer", "À reconfirmer"),
+        ("inactive",      "Inactive"),
+    ]
+
     RITE_CHOICES = [
         ("reaa",      "REAA — Rite Écossais Ancien et Accepté"),
         ("rer",       "RER — Rite Écossais Rectifié"),
@@ -46,6 +52,10 @@ class Loge(models.Model):
     effectif_total        = models.PositiveIntegerField(default=0)
     effectif_moyen_agapes = models.PositiveIntegerField(default=0)
     actif                 = models.BooleanField(default=True)
+    statut                = models.CharField(
+        max_length=15, choices=STATUT_CHOICES, default="active",
+        help_text="Active = confirmée ; À reconfirmer = pas de retour pour la nouvelle saison ; Inactive = dissoute/partie",
+    )
     created_at            = models.DateTimeField(auto_now_add=True)
 
     class Meta:

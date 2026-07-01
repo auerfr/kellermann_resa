@@ -3369,3 +3369,47 @@ def facturation_export_excel(request):
         f'attachment; filename="facturation_{date_debut}_{date_fin}.xlsx"')
     wb.save(response)
     return response
+
+
+# ── Suivi des loges par saison (statut Active / À reconfirmer / Inactive) ──────
+
+@login_required
+def loges_saison(request):
+    """Écran de suivi : loges sans récurrence / à reconfirmer, avec gestion du statut."""
+    from django.db.models import Count, Q as _Q
+
+    if request.method == 'POST':
+        loge = get_object_or_404(Loge, pk=request.POST.get('loge_id'))
+        nouveau = request.POST.get('statut')
+        if nouveau in ('active', 'a_reconfirmer', 'inactive'):
+            loge.statut = nouveau
+            loge.actif = (nouveau != 'inactive')
+            loge.save(update_fields=['statut', 'actif'])
+            messages.success(request, f"{loge.nom} → « {loge.get_statut_display()} ».")
+        return redirect(f"{request.path}?{request.GET.urlencode()}")
+
+    filtre = request.GET.get('filtre', 'tous')
+    loges = (Loge.objects.exclude(statut='inactive')
+             .select_related('obedience')
+             .annotate(nb_regles=Count('regles', filter=_Q(regles__actif=True)))
+             .order_by('nom'))
+    if filtre == 'sans_recurrence':
+        loges = loges.filter(nb_regles=0)
+    elif filtre == 'a_reconfirmer':
+        loges = loges.filter(statut='a_reconfirmer')
+    elif filtre == 'active':
+        loges = loges.filter(statut='active')
+
+    inactives = Loge.objects.filter(statut='inactive').order_by('nom')
+
+    # Compteurs (sur l'ensemble, hors filtre courant)
+    base = Loge.objects.exclude(statut='inactive').annotate(
+        nb_regles=Count('regles', filter=_Q(regles__actif=True)))
+    nb_sans = base.filter(nb_regles=0).count()
+    nb_a_reconfirmer = Loge.objects.filter(statut='a_reconfirmer').count()
+
+    return render(request, 'administration/loges_saison.html', {
+        'loges': loges, 'inactives': inactives, 'filtre': filtre,
+        'nb_sans': nb_sans, 'nb_a_reconfirmer': nb_a_reconfirmer,
+        'nb_inactives': inactives.count(),
+    })
