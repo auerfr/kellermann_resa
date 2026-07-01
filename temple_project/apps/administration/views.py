@@ -760,6 +760,88 @@ def annuler_tenue(request):
     return redirect(nxt)
 
 
+def _audit_capacite(annee):
+    """Analyse de capacité. Deux vues :
+    - HOMES récurrents du soir : (temple × jour lun-sam × position 1-4) → combien
+      de créneaux récurrents restent libres ≈ combien de loges en plus.
+    - OCCUPATION calendaire du soir sur la saison → taux d'occupation par temple
+      et nombre de soirées libres (location ponctuelle « vendable »)."""
+    from collections import defaultdict
+    from datetime import time, timedelta
+
+    JF = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+    JOURS = [0, 1, 2, 3, 4, 5]        # lundi → samedi (soirs)
+    JOURS_LV = [0, 1, 2, 3, 4]        # lundi → vendredi
+    POS = [1, 2, 3, 4]
+    temples = list(Temple.objects.all().order_by('nom'))
+
+    # ── Homes récurrents du soir ──────────────────────────────────────────────
+    taken = defaultdict(set)          # temple_id → {(jour, position)}
+    for r in RegleRecurrence.objects.filter(actif=True):
+        if r.heure_debut.hour < 17 or r.jour_semaine not in JOURS:
+            continue
+        if r.numero_semaine == -1:
+            positions = [4]
+        elif r.numero_semaine == 0:   # règle "toutes les semaines"
+            positions = [1, 2, 3, 4]
+        elif r.numero_semaine in POS:
+            positions = [r.numero_semaine]
+        else:
+            positions = []
+        for p in positions:
+            taken[r.temple_id].add((r.jour_semaine, p))
+
+    par_temple = []
+    occ_total = occ_lv = 0
+    libres_par_jour = {JF[j]: 0 for j in JOURS}
+    for t in temples:
+        occ = len(taken[t.id])
+        par_temple.append({'temple': str(t), 'total': len(JOURS) * len(POS),
+                           'occ': occ, 'libres': len(JOURS) * len(POS) - occ})
+        occ_total += occ
+        occ_lv += len([1 for (j, p) in taken[t.id] if j in JOURS_LV])
+        for j in JOURS:
+            for p in POS:
+                if (j, p) not in taken[t.id]:
+                    libres_par_jour[JF[j]] += 1
+    total_homes = len(temples) * len(JOURS) * len(POS)
+    total_lv = len(temples) * len(JOURS_LV) * len(POS)
+
+    # ── Occupation calendaire du soir sur la saison ──────────────────────────
+    d1, d2 = date(annee, 9, 1), date(annee + 1, 6, 30)
+    dates_elig = []
+    d = d1
+    while d <= d2:
+        if d.weekday() in JOURS and d.month not in (7, 8):
+            dates_elig.append(d)
+        d += timedelta(days=1)
+    occ_map = defaultdict(set)
+    for tid, dd in Reservation.objects.filter(
+        date__gte=d1, date__lte=d2, statut__in=['validee', 'attente'],
+        heure_fin__gt=time(18, 0), heure_debut__lt=time(23, 0),
+    ).values_list('temple_id', 'date'):
+        occ_map[tid].add(dd)
+    cal = []
+    n = len(dates_elig)
+    tot_occ = 0
+    for t in temples:
+        occ = sum(1 for dd in dates_elig if dd in occ_map[t.id])
+        tot_occ += occ
+        cal.append({'temple': str(t), 'dates': n, 'occ': occ, 'libres': n - occ,
+                    'taux': round(100 * occ / n, 1) if n else 0})
+
+    return {
+        'annee': annee, 'nb_temples': len(temples),
+        'homes': {'total': total_homes, 'occ': occ_total, 'libres': total_homes - occ_total,
+                  'total_lv': total_lv, 'occ_lv': occ_lv, 'libres_lv': total_lv - occ_lv,
+                  'par_temple': par_temple, 'libres_par_jour': libres_par_jour},
+        'calendrier': {'par_temple': cal, 'dates_par_temple': n,
+                       'total_dates': n * len(temples), 'total_occ': tot_occ,
+                       'total_libres': n * len(temples) - tot_occ,
+                       'taux': round(100 * tot_occ / (n * len(temples)), 1) if n and temples else 0},
+    }
+
+
 @login_required
 def audit_export_excel(request):
     """Export Excel d'audit (à transmettre par mail) : tenues orphelines,
@@ -839,6 +921,34 @@ def audit_export_excel(request):
     rows4 = [[l.abreviation, l.nom, l.get_statut_display()] for l in sans_regle]
     ws4 = wb.create_sheet("Loges sans recurrence")
     remplir(ws4, ["Abrév.", "Loge", "Statut"], rows4, [10, 34, 16])
+
+    # 5) Capacité / créneaux disponibles
+    annee = date.today().year if date.today().month >= 9 else date.today().year - 1
+    cap = _audit_capacite(annee)
+    h = cap['homes']; cal = cap['calendrier']
+    rows5 = [
+        [f"Saison {annee}/{annee+1}", "", "", ""],
+        ["HOMES RÉCURRENTS DU SOIR (temple x jour lun-sam x position 1-4)", "", "", ""],
+        ["", "Total", "Occupés", "Libres"],
+        ["Lun-Sam", h['total'], h['occ'], h['libres']],
+        ["Lun-Ven (cœur)", h['total_lv'], h['occ_lv'], h['libres_lv']],
+        ["", "", "", ""],
+        ["Par temple (lun-sam)", "Total", "Occupés", "Libres"],
+    ]
+    for pt in h['par_temple']:
+        rows5.append([pt['temple'], pt['total'], pt['occ'], pt['libres']])
+    rows5.append(["", "", "", ""])
+    rows5.append(["Créneaux-soir LIBRES par jour", "", "", ""])
+    for j, v in h['libres_par_jour'].items():
+        rows5.append([j, v, "", ""])
+    rows5.append(["", "", "", ""])
+    rows5.append([f"OCCUPATION CALENDAIRE DU SOIR ({cal['dates_par_temple']} soirées éligibles/temple)", "", "", ""])
+    rows5.append(["Temple", "Soirées", "Occupées", "Libres"])
+    for c in cal['par_temple']:
+        rows5.append([c['temple'], c['dates'], c['occ'], f"{c['libres']} ({100-c['taux']:.0f}% libre)"])
+    rows5.append(["GLOBAL", cal['total_dates'], cal['total_occ'], f"{cal['total_libres']} ({100-cal['taux']:.0f}% libre)"])
+    ws5 = wb.create_sheet("Capacite creneaux")
+    remplir(ws5, ["Indicateur", "Total", "Occupés", "Libres"], rows5, [52, 12, 12, 20])
 
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
