@@ -79,6 +79,17 @@ class Command(BaseCommand):
             if opts['appliquer']:
                 garder.save()
                 suppr.delete()
+                # Dédoublonnage des règles de la loge conservée (après réaffectation)
+                from temple_project.apps.reservations.models import RegleRecurrence
+                vues, doublons = set(), 0
+                for r in RegleRecurrence.objects.filter(loge=garder).order_by('pk'):
+                    key = (r.temple_id, r.jour_semaine, r.numero_semaine)
+                    if key in vues:
+                        r.delete(); doublons += 1
+                    else:
+                        vues.add(key)
+                if doublons:
+                    report['Règles en double supprimées'] = doublons
 
         self.stdout.write("\nObjets réaffectés :")
         if report:
