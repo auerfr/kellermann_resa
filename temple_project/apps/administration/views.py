@@ -528,7 +528,10 @@ def regenerer_intelligent(request):
                     date__year__in=[annee, annee + 1]
                 ).delete()
 
+            exclues = set(regle.dates_exclues or [])
             for d in dates_saison:
+                if d.isoformat() in exclues:
+                    continue
                 if Reservation.objects.filter(
                     temple=regle.temple, date=d,
                     statut__in=['validee', 'attente'],
@@ -643,6 +646,20 @@ def _occupants_recurrents(temple, date_r, hd, hf, exclure_pk=None):
     return [{'resa': r, 'loge': r.loge, 'libres': libres} for r in qs]
 
 
+def _exclure_date_regle(resa):
+    """Avant de déplacer une tenue issue d'une règle, on marque sa date d'origine
+    comme exclue sur la règle, pour que la régénération ne la recrée pas."""
+    regle = resa.regle_source
+    if not regle:
+        return
+    iso = resa.date.isoformat()
+    exclues = list(regle.dates_exclues or [])
+    if iso not in exclues:
+        exclues.append(iso)
+        regle.dates_exclues = exclues
+        regle.save(update_fields=['dates_exclues'])
+
+
 @login_required
 def echanger_tenue(request):
     """Déplace exceptionnellement UNE tenue vers un temple libre (échange
@@ -660,6 +677,7 @@ def echanger_tenue(request):
         ancien = resa.temple
         note = (f"Déplacée de {ancien} vers {temple} le {date.today():%d/%m/%Y} "
                 "(échange bienveillant).")
+        _exclure_date_regle(resa)
         resa.temple = temple
         resa.regle_source = None
         resa.commentaire = (resa.commentaire + "\n" if resa.commentaire else "") + note
@@ -701,6 +719,7 @@ def deplacer_tenue(request):
 
     ancienne = resa.date
     note = f"Déplacée du {ancienne:%d/%m/%Y} au {nd:%d/%m/%Y} (échange de dates)."
+    _exclure_date_regle(resa)
     resa.date = nd
     resa.regle_source = None
     resa.commentaire = (resa.commentaire + "\n" if resa.commentaire else "") + note

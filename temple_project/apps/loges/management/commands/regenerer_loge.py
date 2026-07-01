@@ -49,8 +49,11 @@ class Command(BaseCommand):
                 cree = conf = 0
                 for regle in RegleRecurrence.objects.filter(loge=loge, actif=True).select_related('temple'):
                     dates = set(_calculer_dates_regle(regle, annee) + _calculer_dates_regle(regle, annee + 1))
+                    exclues = set(regle.dates_exclues or [])
                     for d in sorted(dates):
                         if not (d1 <= d <= d2) or d.month in (7, 8):
+                            continue
+                        if d.isoformat() in exclues:
                             continue
                         if regle.date_debut and d < regle.date_debut:
                             continue

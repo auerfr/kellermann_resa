@@ -104,6 +104,11 @@ class RegleRecurrence(models.Model):
         null=True, blank=True,
         help_text="Fin de validité (laisser vide = fin de saison juin)"
     )
+    dates_exclues  = models.JSONField(
+        default=list, blank=True,
+        help_text="Dates (ISO) déplacées/annulées exceptionnellement : la "
+                  "régénération ne recrée pas la tenue à ces dates."
+    )
 
     class Meta:
         verbose_name = "Règle de récurrence"
