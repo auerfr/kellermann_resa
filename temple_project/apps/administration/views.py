@@ -742,6 +742,24 @@ def deplacer_tenue(request):
     return redirect(nxt)
 
 
+@login_required
+def annuler_tenue(request):
+    """Supprime UNE tenue (occurrence), en marquant sa date comme exclue sur sa
+    règle pour qu'elle ne soit pas recréée à la régénération. Utile pour retirer
+    un doublon ou une occurrence annulée exceptionnellement."""
+    if request.method != 'POST':
+        return redirect('administration:tableau_de_bord')
+    resa = get_object_or_404(Reservation, pk=request.POST.get('resa_id'))
+    nxt  = request.POST.get('next') or 'administration:tableau_de_bord'
+    info = f"{resa.loge} — {resa.date:%d/%m/%Y} {resa.heure_debut:%H:%M} ({resa.temple})"
+    _exclure_date_regle(resa)
+    log_evenement('modification_reservation', f"Tenue annulée : {info}",
+                  request=request, objet=resa)
+    resa.delete()
+    messages.success(request, f"Tenue annulée : {info}.")
+    return redirect(nxt)
+
+
 # ── Import Excel ──────────────────────────────────────────────────────────────
 
 @login_required

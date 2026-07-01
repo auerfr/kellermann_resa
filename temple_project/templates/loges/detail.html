@@ -198,6 +198,15 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
                     <button class="btn btn-sm btn-warning py-0">OK</button>
                   </form>
                 </details>
+                <form method="post" action="{% url 'administration:annuler_tenue' %}" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="resa_id" value="{{ e.resa_pk }}">
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn btn-sm btn-outline-danger py-0"
+                          onclick="return confirm('Annuler définitivement cette tenue du {{ e.date|date:'d/m/Y' }} ?');">
+                    Annuler
+                  </button>
+                </form>
                 {% endif %}
               </td>
               {% endif %}
