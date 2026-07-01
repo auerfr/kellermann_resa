@@ -100,7 +100,7 @@ def detail_loge(request, pk):
             'statut': r.statut, 'get_statut_display': r.get_statut_display(),
             'type_code': 'temple', 'type_label': 'Temple',
             'lieu': str(r.temple) if r.temple else '—',
-            'detail': '',
+            'detail': '', 'resa_pk': r.pk,
         }
 
     def _s(r):

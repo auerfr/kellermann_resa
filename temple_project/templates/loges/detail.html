@@ -146,6 +146,7 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
               <th>LIEU</th>
               <th>HORAIRES</th>
               <th>STATUT</th>
+              {% if user.is_staff %}<th>ACTIONS</th>{% endif %}
             </tr>
           </thead>
           <tbody>
@@ -173,9 +174,30 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
                   <span class="badge bg-warning text-dark">Attente</span>
                 {% endif %}
               </td>
+              {% if user.is_staff %}
+              <td>
+                {% if e.type_code == 'temple' and e.resa_pk %}
+                <details>
+                  <summary class="btn btn-sm btn-outline-secondary py-0">Déplacer</summary>
+                  <form method="post" action="{% url 'administration:deplacer_tenue' %}"
+                        class="mt-1 d-flex flex-wrap gap-1 align-items-center">
+                    {% csrf_token %}
+                    <input type="hidden" name="resa_id" value="{{ e.resa_pk }}">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <input type="date" name="nouvelle_date" class="form-control form-control-sm"
+                           required style="width:auto;">
+                    <label class="small text-muted">
+                      <input type="checkbox" name="forcer"> forcer
+                    </label>
+                    <button class="btn btn-sm btn-warning py-0">OK</button>
+                  </form>
+                </details>
+                {% endif %}
+              </td>
+              {% endif %}
             </tr>
             {% empty %}
-            <tr><td colspan="6" class="text-center text-muted py-4">Aucune réservation en {{ annee }}/{{ annee|add:1 }}</td></tr>
+            <tr><td colspan="{% if user.is_staff %}7{% else %}6{% endif %}" class="text-center text-muted py-4">Aucune réservation en {{ annee }}/{{ annee|add:1 }}</td></tr>
             {% endfor %}
           </tbody>
         </table>

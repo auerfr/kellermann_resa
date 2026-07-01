@@ -15,6 +15,7 @@ urlpatterns = [
     path("regenerer/", views.regenerer_intelligent, name="regenerer"),
     path("regenerer/conflits/", views.regenerer_conflits, name="regenerer_conflits"),
     path("echanger-tenue/", views.echanger_tenue, name="echanger_tenue"),
+    path("deplacer-tenue/", views.deplacer_tenue, name="deplacer_tenue"),
     path("reset/", views.reset_calendrier, name="reset_calendrier"),
     path("salles/", views.salles_liste, name="salles_liste"),
     path("salles/ajouter/", views.salle_form, name="salle_ajouter"),

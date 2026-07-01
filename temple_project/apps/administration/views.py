@@ -671,6 +671,46 @@ def echanger_tenue(request):
     return redirect(nxt)
 
 
+@login_required
+def deplacer_tenue(request):
+    """Déplace exceptionnellement UNE tenue vers une autre DATE (échange de dates
+    entre loges), avec contrôle du créneau. La tenue est détachée de sa règle
+    (regle_source=NULL) pour ne pas être recréée à sa date d'origine lors d'une
+    régénération."""
+    if request.method != 'POST':
+        return redirect('administration:tableau_de_bord')
+    resa = get_object_or_404(Reservation, pk=request.POST.get('resa_id'))
+    nxt  = request.POST.get('next') or 'administration:tableau_de_bord'
+    try:
+        nd = date.fromisoformat(request.POST.get('nouvelle_date', ''))
+    except ValueError:
+        messages.error(request, "Date invalide.")
+        return redirect(nxt)
+
+    conflit = Reservation.objects.filter(
+        temple=resa.temple, date=nd,
+        heure_debut__lt=resa.heure_fin, heure_fin__gt=resa.heure_debut,
+        statut__in=['validee', 'attente'],
+    ).exclude(pk=resa.pk).select_related('loge').first()
+
+    if conflit and request.POST.get('forcer') != 'on':
+        qui = conflit.loge or conflit.nom_organisation or conflit.nom_demandeur
+        messages.warning(request, f"{resa.temple} est déjà occupé le {nd:%d/%m/%Y} "
+                         f"par {qui}. Déplacez d'abord cette tenue-là, ou cochez « Forcer ».")
+        return redirect(nxt)
+
+    ancienne = resa.date
+    note = f"Déplacée du {ancienne:%d/%m/%Y} au {nd:%d/%m/%Y} (échange de dates)."
+    resa.date = nd
+    resa.regle_source = None
+    resa.commentaire = (resa.commentaire + "\n" if resa.commentaire else "") + note
+    resa.save()
+    messages.success(request, f"Tenue de {resa.loge} déplacée au {nd:%d/%m/%Y} ({resa.temple}).")
+    log_evenement('modification_reservation', f"{note} (loge {resa.loge})",
+                  request=request, objet=resa)
+    return redirect(nxt)
+
+
 # ── Import Excel ──────────────────────────────────────────────────────────────
 
 @login_required
