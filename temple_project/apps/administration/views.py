@@ -1101,11 +1101,16 @@ def occupation(request):
         temple_id = int(request.GET.get('temple') or 0) or None
     except (TypeError, ValueError):
         temple_id = None
+    moment = request.GET.get('moment') or ''
+    creneaux = _creneaux_libres(annee, temple_id)
+    if moment in ('soir', 'après-midi', 'matin'):
+        creneaux = [c for c in creneaux if c['creneau'] == moment]
     ctx = _occupation_temples(annee)
-    ctx['creneaux_libres'] = _creneaux_libres(annee, temple_id)
+    ctx['creneaux_libres'] = creneaux
     ctx['annees'] = [defaut - 1, defaut, defaut + 1]
     ctx['tous_temples'] = Temple.objects.all().order_by('nom')
     ctx['temple_sel'] = temple_id
+    ctx['moment_sel'] = moment
     return render(request, 'administration/occupation.html', ctx)
 
 
