@@ -153,7 +153,7 @@ def detail_loge(request, pk):
         'demandes':        demandes,
         'prochaine':       prochaine,
         'annee':           annee_param,
-        'annees':          [annee - 2, annee - 1, annee],
+        'annees':          [annee - 1, annee, annee + 1],
         'saison_label':    f"{annee_param}/{annee_param+1}",
         'nb_tenues':       tenues.count(),
         'portail_token':   portail_token,
