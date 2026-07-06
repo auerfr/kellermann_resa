@@ -1106,6 +1106,18 @@ def occupation(request):
     if moment in ('soir', 'après-midi', 'matin'):
         creneaux = [c for c in creneaux if c['creneau'] == moment]
     ctx = _occupation_temples(annee)
+    # Potentiel financier : loge 85 €/membre, haut grade 22,80 €/membre, 15-20 membres
+    MB_MIN, MB_MAX, T_LOGE, T_HG = 15, 20, 85, 22.80
+    ctx['fin'] = {
+        't_loge': T_LOGE, 't_hg': T_HG, 'mb_min': MB_MIN, 'mb_max': MB_MAX,
+        'loge_min': MB_MIN * T_LOGE, 'loge_max': MB_MAX * T_LOGE,
+        'hg_min': round(MB_MIN * T_HG, 2), 'hg_max': round(MB_MAX * T_HG, 2),
+        'cap_loges': ctx['cap_soir_bleues'], 'cap_hg': ctx['cap_soir_hg'],
+        'pot_loges_min': round(ctx['cap_soir_bleues'] * MB_MIN * T_LOGE),
+        'pot_loges_max': round(ctx['cap_soir_bleues'] * MB_MAX * T_LOGE),
+        'pot_hg_min': round(ctx['cap_soir_hg'] * MB_MIN * T_HG),
+        'pot_hg_max': round(ctx['cap_soir_hg'] * MB_MAX * T_HG),
+    }
     ctx['creneaux_libres'] = creneaux
     ctx['annees'] = [defaut - 1, defaut, defaut + 1]
     ctx['tous_temples'] = Temple.objects.all().order_by('nom')

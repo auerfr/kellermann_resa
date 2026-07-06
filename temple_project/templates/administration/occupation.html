@@ -81,6 +81,30 @@
   </div>
 </div>
 
+<h2 class="h5 mt-4" style="color:#0F2137;">💶 Potentiel financier annuel</h2>
+<p class="text-muted small">Loge : {{ fin.t_loge }} €/membre · Haut grade : {{ fin.t_hg }} €/membre · {{ fin.mb_min }} à {{ fin.mb_max }} membres. Basé sur la capacité <strong>du soir</strong> (créneau réellement demandé) — les créneaux étant partagés, on remplit soit en loges, soit en hauts grades, soit un mix.</p>
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small">Si on remplit en loges bleues</h6>
+        <div class="h3 mb-1" style="color:#0F2137;">{{ fin.pot_loges_min }} – {{ fin.pot_loges_max }} €<span class="text-muted h6">/an</span></div>
+        <div class="small text-muted">~{{ fin.cap_loges }} loges × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_loge }} €) = {{ fin.loge_min }}–{{ fin.loge_max }} €/loge</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small">Si on remplit en hauts grades</h6>
+        <div class="h3 mb-1" style="color:#0F2137;">{{ fin.pot_hg_min }} – {{ fin.pot_hg_max }} €<span class="text-muted h6">/an</span></div>
+        <div class="small text-muted">~{{ fin.cap_hg }} hauts grades × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_hg }} €) = {{ fin.hg_min }}–{{ fin.hg_max }} €/atelier</div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="text-muted small mt-2">💡 Une loge bleue rapporte ~2× plus par créneau qu'un haut grade — à privilégier là où il y a de la place le soir (Lafayette, Égalité). Les hauts grades peuvent en plus occuper les journées/week-ends, capacité quasi illimitée en sus.</p>
+
 <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mt-4">
   <div>
     <h2 class="h5 mb-1" style="color:#0F2137;">Créneaux disponibles à proposer</h2>
