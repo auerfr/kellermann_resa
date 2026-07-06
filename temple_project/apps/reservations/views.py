@@ -758,7 +758,10 @@ def portail_loge(request, token):
         return redirect('reservations:portail_loge', token=token)
 
     # ── Saison courante (par défaut) ─────────────────────────────────────────
-    annee_courante = today.year if today.month >= 9 else today.year - 1
+    # De juillet à décembre on pointe sur la saison à venir (sept→juin) pour que
+    # les loges voient leurs réservations de la prochaine saison sans changer de
+    # sélecteur ; de janvier à juin, sur la saison en cours.
+    annee_courante = today.year if today.month >= 7 else today.year - 1
 
     # ── Saison sélectionnée (GET ?saison=, sinon courante) ───────────────────
     try:

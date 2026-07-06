@@ -67,7 +67,8 @@ def detail_loge(request, pk):
         loge = get_object_or_404(Loge, pk=pk, actif=True)
 
     annee = date.today().year
-    saison_defaut = annee if date.today().month >= 9 else annee - 1
+    # Juillet→décembre : saison à venir par défaut ; janvier→juin : saison en cours
+    saison_defaut = annee if date.today().month >= 7 else annee - 1
     annee_param = int(request.GET.get('annee', saison_defaut))
     debut_saison = date(annee_param, 9, 1)
     fin_saison   = date(annee_param + 1, 6, 30)
