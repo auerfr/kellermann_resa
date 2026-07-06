@@ -1041,6 +1041,74 @@ def _occupation_temples(annee):
     }
 
 
+def _propositions_creneaux(annee):
+    """Créneaux récurrents LIBRES à proposer : 2/mois pour une loge (une paire de
+    semaines le même soir), 1/mois pour un haut grade (une semaine, soir ou
+    week-end après-midi)."""
+    import calendar
+    from datetime import time
+    d1, d2 = date(annee, 9, 1), date(annee + 1, 6, 30)
+    DP = {'soir': (time(18, 0), time(23, 59)), 'apres': (time(13, 0), time(18, 0))}
+    JF = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+    POS = {1: '1re', 2: '2e', 3: '3e', 4: '4e'}
+    MOIS = [(annee, m) for m in (9, 10, 11, 12)] + [(annee + 1, m) for m in (1, 2, 3, 4, 5, 6)]
+
+    occ = set()
+    for tid, dd, hd, hf in Reservation.objects.filter(
+        date__gte=d1, date__lte=d2, statut__in=['validee', 'attente']
+    ).values_list('temple_id', 'date', 'heure_debut', 'heure_fin'):
+        for nm, (ds, de) in DP.items():
+            if hd < de and hf > ds:
+                occ.add((tid, dd, nm))
+
+    def dates_motif(wd, pos):
+        out = []
+        for an, mois in MOIS:
+            jours = [d for d in range(1, calendar.monthrange(an, mois)[1] + 1)
+                     if date(an, mois, d).weekday() == wd]
+            if pos <= len(jours):
+                out.append(date(an, mois, jours[pos - 1]))
+        return out
+
+    def est_libre(tid, wd, pos, dp):
+        ds = dates_motif(wd, pos)
+        if len(ds) < 6:
+            return False
+        return all((tid, d, dp) not in occ for d in ds)
+
+    # Temples triés du moins occupé au plus occupé (proposer d'abord les plus libres)
+    temples = list(Temple.objects.all())
+    charge = {t.id: sum(1 for (tid, d, nm) in occ if tid == t.id) for t in temples}
+    temples.sort(key=lambda t: charge[t.id])
+
+    loges, hg = [], []
+    for t in temples:
+        nom = str(t).replace('Temple ', '')
+        for wd in range(0, 5):            # lun-ven, le soir
+            libres = [p for p in (1, 2, 3, 4) if est_libre(t.id, wd, p, 'soir')]
+            paires = []
+            if 1 in libres and 3 in libres:
+                paires.append((1, 3))
+            if 2 in libres and 4 in libres:
+                paires.append((2, 4))
+            if not paires and len(libres) >= 2:
+                paires.append((libres[0], libres[1]))
+            for a, b in paires:
+                loges.append({'temple': nom, 'jour': JF[wd],
+                              'creneau': 'soir', 'semaines': POS[a] + ' & ' + POS[b]})
+        for wd in (5, 6):                 # week-end après-midi (typique hauts grades)
+            for p in (1, 2, 3, 4):
+                if est_libre(t.id, wd, p, 'apres'):
+                    hg.append({'temple': nom, 'jour': JF[wd], 'creneau': 'après-midi',
+                               'semaine': POS[p]})
+        for wd in range(0, 5):            # soir aussi pour hauts grades
+            for p in (1, 2, 3, 4):
+                if est_libre(t.id, wd, p, 'soir'):
+                    hg.append({'temple': nom, 'jour': JF[wd], 'creneau': 'soir',
+                               'semaine': POS[p]})
+    return {'prop_loges': loges, 'prop_hg': hg}
+
+
 @login_required
 def occupation(request):
     defaut = date.today().year if date.today().month >= 7 else date.today().year - 1
@@ -1049,6 +1117,7 @@ def occupation(request):
     except (TypeError, ValueError):
         annee = defaut
     ctx = _occupation_temples(annee)
+    ctx.update(_propositions_creneaux(annee))
     ctx['annees'] = [defaut - 1, defaut, defaut + 1]
     return render(request, 'administration/occupation.html', ctx)
 

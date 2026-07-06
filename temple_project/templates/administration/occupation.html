@@ -80,4 +80,41 @@
     </div>
   </div>
 </div>
+
+<h2 class="h5 mt-4" style="color:#0F2137;">Créneaux disponibles à proposer</h2>
+<p class="text-muted small">Créneaux récurrents entièrement libres sur la saison, des temples les moins chargés en premier.</p>
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>🏛 Loges bleues</strong> <span class="text-muted small">— 2 tenues/mois ({{ prop_loges|length }} créneaux libres)</span></div>
+      <ul class="list-group list-group-flush">
+        {% for p in prop_loges|slice:":25" %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span><strong>{{ p.temple }}</strong> — {{ p.jour|capfirst }} {{ p.creneau }}</span>
+          <span class="badge bg-light text-dark">{{ p.semaines }} semaine</span>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted">Aucun créneau soir entièrement libre (tout est déjà pris 2×/mois).</li>
+        {% endfor %}
+      </ul>
+      {% if prop_loges|length > 25 %}<div class="card-footer bg-white small text-muted">… et {{ prop_loges|length|add:"-25" }} autres.</div>{% endif %}
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-header bg-white"><strong>⚜️ Hauts grades</strong> <span class="text-muted small">— 1 tenue/mois ({{ prop_hg|length }} créneaux libres)</span></div>
+      <ul class="list-group list-group-flush">
+        {% for p in prop_hg|slice:":25" %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <span><strong>{{ p.temple }}</strong> — {{ p.jour|capfirst }} {{ p.creneau }}</span>
+          <span class="badge bg-light text-dark">{{ p.semaine }} semaine</span>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted">Aucun créneau entièrement libre.</li>
+        {% endfor %}
+      </ul>
+      {% if prop_hg|length > 25 %}<div class="card-footer bg-white small text-muted">… et {{ prop_hg|length|add:"-25" }} autres (surtout journée/week-end).</div>{% endif %}
+    </div>
+  </div>
+</div>
 {% endblock %}
