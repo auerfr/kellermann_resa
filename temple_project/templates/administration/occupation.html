@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Occupation / capacité{% endblock %}
+{% block content %}
+<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+  <div>
+    <h1 class="h3" style="color:#0F2137;">📊 Occupation des temples & capacité</h1>
+    <p class="text-muted mb-0">
+      Saison {{ annee }}-{{ annee|add:1 }} (1<sup>er</sup> sept. → 30 juin, hors juillet-août) ·
+      {{ nb_jours }} jours × 3 créneaux (matin / après-midi / soir).
+    </p>
+  </div>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <label class="small text-muted">Saison</label>
+    <select name="annee" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+      {% for a in annees %}<option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}-{{ a|add:1 }}</option>{% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="table-responsive mb-4">
+  <table class="table table-bordered align-middle bg-white">
+    <thead style="background:#0F2137;color:#fff;">
+      <tr><th>Temple</th><th>Occupation globale</th><th>Matin</th><th>Après-midi</th><th>Soir</th><th>Créneaux libres</th></tr>
+    </thead>
+    <tbody>
+      {% for t in temples %}
+      <tr>
+        <td class="fw-semibold" style="color:#0F2137;">{{ t.nom }}</td>
+        <td>
+          <div class="d-flex align-items-center gap-2">
+            <div class="flex-grow-1" style="background:#eee;height:8px;border-radius:4px;min-width:80px;">
+              <div style="width:{{ t.occ_pct }}%;background:{% if t.occ_pct < 20 %}#16a34a{% elif t.occ_pct < 50 %}#ca8a04{% else %}#dc2626{% endif %};height:8px;border-radius:4px;"></div>
+            </div>
+            <span class="small fw-semibold">{{ t.occ_pct }} %</span>
+          </div>
+        </td>
+        <td class="text-muted">{{ t.matin_pct }} %</td>
+        <td class="text-muted">{{ t.aprem_pct }} %</td>
+        <td class="{% if t.soir_pct >= 60 %}text-danger fw-semibold{% endif %}">{{ t.soir_pct }} %</td>
+        <td class="fw-semibold text-success">{{ t.libres }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr class="table-light">
+        <td class="fw-semibold">GLOBAL</td>
+        <td class="fw-semibold">{{ occ_global }} % occupé</td>
+        <td colspan="3" class="text-muted">Soir : {{ soir_occ_pct }} % occupé</td>
+        <td class="fw-semibold text-success">{{ libres }} libres ({{ libres_pct }} %)</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<h2 class="h5" style="color:#0F2137;">Capacité d'accueil supplémentaire</h2>
+<p class="text-muted small">Loge bleue = 2 tenues/mois × 10 mois = 20 créneaux/an · Haut grade = 1/mois × 10 = 10/an.</p>
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small">Le soir (créneau réellement demandé)</h6>
+        <div class="d-flex gap-4">
+          <div><div class="h3 mb-0" style="color:#0F2137;">~{{ cap_soir_bleues }}</div><div class="small text-muted">loges bleues</div></div>
+          <div><div class="h3 mb-0" style="color:#0F2137;">~{{ cap_soir_hg }}</div><div class="small text-muted">hauts grades</div></div>
+        </div>
+        <p class="small text-muted mt-2 mb-0">{{ soir_libres }} créneaux du soir libres. À orienter surtout vers les temples les moins chargés.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body">
+        <h6 class="text-muted text-uppercase small">Tous créneaux (matin + après-midi + soir)</h6>
+        <div class="d-flex gap-4">
+          <div><div class="h3 mb-0 text-muted">~{{ cap_tous_bleues }}</div><div class="small text-muted">loges bleues</div></div>
+          <div><div class="h3 mb-0 text-muted">~{{ cap_tous_hg }}</div><div class="small text-muted">hauts grades</div></div>
+        </div>
+        <p class="small text-muted mt-2 mb-0">Maximum théorique ({{ libres }} créneaux libres). Inclut les matins/après-midis de semaine, peu demandés — utile surtout pour les hauts grades en journée/week-end.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

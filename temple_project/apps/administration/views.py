@@ -988,6 +988,71 @@ def conflits(request):
     return render(request, 'administration/conflits.html', {'conflits': _scan_conflits()})
 
 
+def _occupation_temples(annee):
+    """Occupation des temples par créneau (matin/après-midi/soir) sur la saison
+    sept→juin, et capacité d'accueil (loge = 2 tenues/mois×10 = 20/an ;
+    haut grade = 1/mois×10 = 10/an ; un créneau = 1 daypart × 1 temple × 1 jour)."""
+    from datetime import time, timedelta
+    from collections import defaultdict
+    d1, d2 = date(annee, 9, 1), date(annee + 1, 6, 30)
+    DAYPARTS = [('matin', time(8, 0), time(13, 0)),
+                ('apres', time(13, 0), time(18, 0)),
+                ('soir', time(18, 0), time(23, 59))]
+    temples = list(Temple.objects.all().order_by('nom'))
+    dates, d = [], d1
+    while d <= d2:
+        if d.month not in (7, 8):
+            dates.append(d)
+        d += timedelta(days=1)
+    n = len(dates) or 1
+    occ = defaultdict(set)
+    for tid, dd, hd, hf in Reservation.objects.filter(
+        date__gte=d1, date__lte=d2, statut__in=['validee', 'attente']
+    ).values_list('temple_id', 'date', 'heure_debut', 'heure_fin'):
+        if dd.month in (7, 8):
+            continue
+        for name, ds, de in DAYPARTS:
+            if hd < de and hf > ds:
+                occ[tid].add((dd, name))
+    lignes, tot = [], 0
+    for t in temples:
+        o = len(occ[t.id]); tot += o
+        p = {nm: sum(1 for (x, y) in occ[t.id] if y == nm) for nm, _, _ in DAYPARTS}
+        lignes.append({
+            'nom': str(t).replace('Temple ', ''),
+            'occ_pct': round(100 * o / (n * 3)), 'libres': n * 3 - o,
+            'matin_pct': round(100 * p['matin'] / n),
+            'aprem_pct': round(100 * p['apres'] / n),
+            'soir_pct': round(100 * p['soir'] / n),
+        })
+    grand = (len(temples) or 1) * n * 3
+    libre = grand - tot
+    soir_occ = sum(1 for tid in occ for (x, y) in occ[tid] if y == 'soir')
+    soir_tot = (len(temples) or 1) * n
+    soir_libre = soir_tot - soir_occ
+    return {
+        'annee': annee, 'nb_jours': len(dates), 'par_temple_max': n * 3,
+        'temples': lignes,
+        'occ_global': round(100 * tot / grand), 'libres': libre,
+        'libres_pct': round(100 * libre / grand),
+        'soir_occ_pct': round(100 * soir_occ / soir_tot), 'soir_libres': soir_libre,
+        'cap_tous_bleues': libre // 20, 'cap_tous_hg': libre // 10,
+        'cap_soir_bleues': soir_libre // 20, 'cap_soir_hg': soir_libre // 10,
+    }
+
+
+@login_required
+def occupation(request):
+    defaut = date.today().year if date.today().month >= 7 else date.today().year - 1
+    try:
+        annee = int(request.GET.get('annee', defaut))
+    except (TypeError, ValueError):
+        annee = defaut
+    ctx = _occupation_temples(annee)
+    ctx['annees'] = [defaut - 1, defaut, defaut + 1]
+    return render(request, 'administration/occupation.html', ctx)
+
+
 @login_required
 def audit_export_excel(request):
     """Export Excel d'audit (à transmettre par mail) : tenues orphelines,
