@@ -81,40 +81,39 @@
   </div>
 </div>
 
-<h2 class="h5 mt-4" style="color:#0F2137;">Créneaux disponibles à proposer</h2>
-<p class="text-muted small">Créneaux récurrents entièrement libres sur la saison, des temples les moins chargés en premier.</p>
-<div class="row g-3">
-  <div class="col-lg-6">
-    <div class="card h-100 border-0 shadow-sm">
-      <div class="card-header bg-white"><strong>🏛 Loges bleues</strong> <span class="text-muted small">— 2 tenues/mois ({{ prop_loges|length }} créneaux libres)</span></div>
-      <ul class="list-group list-group-flush">
-        {% for p in prop_loges|slice:":25" %}
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-          <span><strong>{{ p.temple }}</strong> — {{ p.jour|capfirst }} {{ p.creneau }}</span>
-          <span class="badge bg-light text-dark">{{ p.semaines }} semaine</span>
-        </li>
-        {% empty %}
-        <li class="list-group-item text-muted">Aucun créneau soir entièrement libre (tout est déjà pris 2×/mois).</li>
-        {% endfor %}
-      </ul>
-      {% if prop_loges|length > 25 %}<div class="card-footer bg-white small text-muted">… et {{ prop_loges|length|add:"-25" }} autres.</div>{% endif %}
-    </div>
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mt-4">
+  <div>
+    <h2 class="h5 mb-1" style="color:#0F2137;">Créneaux disponibles à proposer</h2>
+    <p class="text-muted small mb-0">Créneaux récurrents <strong>100 % libres</strong> sur la saison. Une <strong>loge bleue</strong> = 2 créneaux (mêmes ou <strong>différents temples/semaines</strong>) · un <strong>haut grade</strong> = 1 créneau.</p>
   </div>
-  <div class="col-lg-6">
-    <div class="card h-100 border-0 shadow-sm">
-      <div class="card-header bg-white"><strong>⚜️ Hauts grades</strong> <span class="text-muted small">— 1 tenue/mois ({{ prop_hg|length }} créneaux libres)</span></div>
-      <ul class="list-group list-group-flush">
-        {% for p in prop_hg|slice:":25" %}
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-          <span><strong>{{ p.temple }}</strong> — {{ p.jour|capfirst }} {{ p.creneau }}</span>
-          <span class="badge bg-light text-dark">{{ p.semaine }} semaine</span>
-        </li>
-        {% empty %}
-        <li class="list-group-item text-muted">Aucun créneau entièrement libre.</li>
-        {% endfor %}
-      </ul>
-      {% if prop_hg|length > 25 %}<div class="card-footer bg-white small text-muted">… et {{ prop_hg|length|add:"-25" }} autres (surtout journée/week-end).</div>{% endif %}
-    </div>
-  </div>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <input type="hidden" name="annee" value="{{ annee }}">
+    <label class="small text-muted">Temple</label>
+    <select name="temple" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
+      <option value="">Tous</option>
+      {% for t in tous_temples %}<option value="{{ t.pk }}" {% if t.pk == temple_sel %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+  </form>
 </div>
+
+<div class="table-responsive">
+  <table class="table table-sm table-hover bg-white align-middle">
+    <thead style="background:#0F2137;color:#fff;">
+      <tr><th>Temple</th><th>Jour</th><th>Semaine du mois</th><th>Moment</th></tr>
+    </thead>
+    <tbody>
+      {% for c in creneaux_libres %}
+      <tr>
+        <td class="fw-semibold" style="color:#0F2137;">{{ c.temple }}</td>
+        <td>{{ c.jour|capfirst }}</td>
+        <td><span class="badge bg-light text-dark">{{ c.semaine }} semaine</span></td>
+        <td>{% if c.creneau == 'soir' %}🌙 soir{% elif c.creneau == 'après-midi' %}☀️ après-midi{% else %}🌅 matin{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="text-center text-muted py-3">Aucun créneau entièrement libre pour ce filtre.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-muted small">{{ creneaux_libres|length }} créneau(x) libre(s){% if temple_sel %} sur ce temple{% endif %}. Exemple de loge bleue : « {{ creneaux_libres.0.temple }} {{ creneaux_libres.0.jour }} {{ creneaux_libres.0.semaine }} sem. » + un autre créneau de la liste (même ou autre temple).</p>
 {% endblock %}
