@@ -18,6 +18,7 @@ urlpatterns = [
     path("deplacer-tenue/", views.deplacer_tenue, name="deplacer_tenue"),
     path("annuler-tenue/", views.annuler_tenue, name="annuler_tenue"),
     path("audit/export/", views.audit_export_excel, name="audit_export"),
+    path("conflits/", views.conflits, name="conflits"),
     path("reset/", views.reset_calendrier, name="reset_calendrier"),
     path("salles/", views.salles_liste, name="salles_liste"),
     path("salles/ajouter/", views.salle_form, name="salle_ajouter"),

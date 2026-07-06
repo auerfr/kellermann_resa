@@ -918,6 +918,76 @@ def _audit_capacite(annee):
     }
 
 
+def _info_resa(r, kind):
+    if kind == 'temple':
+        who = r.loge.abreviation if r.loge else (r.nom_organisation or r.nom_demandeur or '?')
+        nom = r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur or '')
+        typ = r.get_type_reservation_display()
+    else:
+        who = r.loge.abreviation if r.loge else (r.organisation or r.nom_demandeur or '?')
+        nom = r.loge.nom if r.loge else (r.organisation or '')
+        typ = r.objet or 'Réservation'
+    return {'pk': r.pk, 'who': who, 'nom': nom, 'hd': r.heure_debut, 'hf': r.heure_fin,
+            'typ': typ, 'loge_id': r.loge_id}
+
+
+def _scan_conflits():
+    """Catapultages : deux structures DIFFÉRENTES sur le même lieu/créneau
+    (temples et salles), à partir d'aujourd'hui."""
+    from collections import defaultdict
+    today = date.today()
+
+    def sig(r, orgf):
+        if r.loge_id:
+            return ('L', r.loge_id)
+        return ('O', (getattr(r, orgf, '') or r.nom_demandeur or '').strip().lower())
+
+    confs = []
+
+    def scan(qs, fkid, orgf, kind, lieu_attr):
+        par = defaultdict(list)
+        for r in qs:
+            par[(getattr(r, fkid), r.date)].append(r)
+        for (_, dd), items in par.items():
+            items.sort(key=lambda x: x.heure_debut)
+            for i in range(len(items)):
+                for j in range(i + 1, len(items)):
+                    a, b = items[i], items[j]
+                    if (a.heure_debut < b.heure_fin and a.heure_fin > b.heure_debut
+                            and sig(a, orgf) != sig(b, orgf)):
+                        confs.append({'kind': kind, 'lieu': str(getattr(a, lieu_attr)),
+                                      'date': dd, 'a': _info_resa(a, kind), 'b': _info_resa(b, kind)})
+
+    scan(Reservation.objects.filter(statut__in=['validee', 'attente'], date__gte=today)
+         .select_related('loge', 'temple'), 'temple_id', 'nom_organisation', 'temple', 'temple')
+    scan(ReservationSalle.objects.filter(statut__in=['validee', 'attente'], date__gte=today)
+         .select_related('loge', 'salle'), 'salle_id', 'organisation', 'salle', 'salle')
+    confs.sort(key=lambda c: (c['date'], c['lieu']))
+    return confs
+
+
+@login_required
+def conflits(request):
+    """Page de gestion des conflits / catapultages (lecture + annulation)."""
+    if request.method == 'POST' and request.POST.get('action') == 'annuler':
+        kind, pk = request.POST.get('kind'), request.POST.get('pk')
+        if kind == 'temple':
+            r = Reservation.objects.filter(pk=pk).first()
+            if r:
+                info = f"{r.temple} — {r.date:%d/%m/%Y}"
+                _exclure_date_regle(r)
+                r.delete()
+                messages.success(request, f"Réservation temple annulée ({info}).")
+        elif kind == 'salle':
+            r = ReservationSalle.objects.filter(pk=pk).first()
+            if r:
+                info = f"{r.salle} — {r.date:%d/%m/%Y}"
+                r.delete()
+                messages.success(request, f"Réservation salle annulée ({info}).")
+        return redirect('administration:conflits')
+    return render(request, 'administration/conflits.html', {'conflits': _scan_conflits()})
+
+
 @login_required
 def audit_export_excel(request):
     """Export Excel d'audit (à transmettre par mail) : tenues orphelines,

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Conflits / catapultages{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <h1 class="h3" style="color:#0F2137;">⚠️ Conflits / catapultages</h1>
+  <p class="text-muted mb-0">
+    Deux structures <strong>différentes</strong> réservées sur le <strong>même lieu</strong>
+    au <strong>même créneau</strong> (temples et salles), à partir d'aujourd'hui.
+    Pour résoudre : annulez l'une, ou déplacez-la depuis la fiche loge.
+  </p>
+</div>
+
+{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+{% if not conflits %}
+  <div class="alert alert-success">✅ Aucun conflit détecté. Tout est clair.</div>
+{% else %}
+  <div class="alert alert-warning">{{ conflits|length }} conflit(s) détecté(s).</div>
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle bg-white">
+      <thead style="background:#0F2137;color:#fff;">
+        <tr><th>Date</th><th>Lieu</th><th style="width:38%;">Structure A</th><th style="width:38%;">Structure B</th></tr>
+      </thead>
+      <tbody>
+        {% for c in conflits %}
+        <tr>
+          <td class="fw-semibold" style="color:#0F2137;">{{ c.date|date:"D d/m/Y" }}</td>
+          <td>{% if c.kind == 'temple' %}🏛{% else %}🪑{% endif %} {{ c.lieu }}</td>
+          {% with s=c.a %}
+          <td>
+            <strong>{{ s.who }}</strong> <span class="text-muted small">{{ s.nom }}</span><br>
+            <span class="small">{{ s.hd|time:"H:i" }}–{{ s.hf|time:"H:i" }} · {{ s.typ }}</span>
+            <div class="d-flex gap-1 mt-1">
+              <form method="post" onsubmit="return confirm('Annuler cette réservation ?');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="annuler">
+                <input type="hidden" name="kind" value="{{ c.kind }}">
+                <input type="hidden" name="pk" value="{{ s.pk }}">
+                <button class="btn btn-sm btn-outline-danger py-0">Annuler</button>
+              </form>
+              {% if c.kind == 'temple' and s.loge_id %}
+              <a class="btn btn-sm btn-outline-secondary py-0" href="{% url 'loges:detail' s.loge_id %}">Déplacer (fiche)</a>
+              {% endif %}
+            </div>
+          </td>
+          {% endwith %}
+          {% with s=c.b %}
+          <td>
+            <strong>{{ s.who }}</strong> <span class="text-muted small">{{ s.nom }}</span><br>
+            <span class="small">{{ s.hd|time:"H:i" }}–{{ s.hf|time:"H:i" }} · {{ s.typ }}</span>
+            <div class="d-flex gap-1 mt-1">
+              <form method="post" onsubmit="return confirm('Annuler cette réservation ?');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="annuler">
+                <input type="hidden" name="kind" value="{{ c.kind }}">
+                <input type="hidden" name="pk" value="{{ s.pk }}">
+                <button class="btn btn-sm btn-outline-danger py-0">Annuler</button>
+              </form>
+              {% if c.kind == 'temple' and s.loge_id %}
+              <a class="btn btn-sm btn-outline-secondary py-0" href="{% url 'loges:detail' s.loge_id %}">Déplacer (fiche)</a>
+              {% endif %}
+            </div>
+          </td>
+          {% endwith %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-muted small">Salles : l'annulation supprime la réservation de salle. Temples : l'annulation retire la tenue (et empêche sa recréation à la régénération).</p>
+{% endif %}
+</div>
+{% endblock %}
