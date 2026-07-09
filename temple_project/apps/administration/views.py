@@ -1144,6 +1144,44 @@ def occupation(request):
 
 
 @staff_required
+def statistiques(request):
+    """Synthèse : loges par type/statut/obédience, effectifs, tenues de la saison."""
+    from django.db.models import Count, Sum, Avg, Q
+    actives = Loge.objects.exclude(statut='inactive')
+    today = date.today()
+    annee = today.year if today.month >= 7 else today.year - 1
+    d1, d2 = date(annee, 9, 1), date(annee + 1, 6, 30)
+
+    par_obd = list(actives.values('obedience__nom').annotate(
+        n=Count('id'),
+        loges=Count('id', filter=Q(type_loge='loge')),
+        hg=Count('id', filter=Q(type_loge='haut_grade')),
+        eff=Sum('effectif_total'),
+    ).order_by('-n'))
+
+    ctx = {
+        'annee': annee,
+        'nb_total': actives.count(),
+        'nb_loges': actives.filter(type_loge='loge').count(),
+        'nb_hg': actives.filter(type_loge='haut_grade').count(),
+        'nb_active': actives.filter(statut='active').count(),
+        'nb_reconf': actives.filter(statut='a_reconfirmer').count(),
+        'nb_inactive': Loge.objects.filter(statut='inactive').count(),
+        'effectif_total': actives.aggregate(s=Sum('effectif_total'))['s'] or 0,
+        'agapes_moy': round(actives.filter(effectif_moyen_agapes__gt=0)
+                            .aggregate(a=Avg('effectif_moyen_agapes'))['a'] or 0),
+        'nb_avec_effectif': actives.filter(effectif_total__gt=0).count(),
+        'par_obedience': par_obd,
+        'nb_tenues': Reservation.objects.filter(date__gte=d1, date__lte=d2,
+                                                statut='validee').count(),
+        'nb_exc': Reservation.objects.filter(date__gte=d1, date__lte=d2, statut='validee',
+                                             type_reservation='exceptionnelle').count(),
+        'nb_regles': RegleRecurrence.objects.filter(actif=True).count(),
+    }
+    return render(request, 'administration/statistiques.html', ctx)
+
+
+@staff_required
 def relance_contacts(request):
     """Relance des loges qui n'ont pas confirmé la saison : envoi d'un rappel
     par email à celles qui en ont un, liste de celles à joindre autrement."""

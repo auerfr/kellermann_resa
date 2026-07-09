@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Statistiques{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h1 class="h3" style="color:#0F2137;">📈 Statistiques</h1>
+  <p class="text-muted mb-0">Saison {{ annee }}-{{ annee|add:1 }}.</p>
+</div>
+
+<div class="row g-3 mb-4">
+  {% include "administration/_stat_tile.html" with val=nb_total lbl="Structures actives" %}
+  {% include "administration/_stat_tile.html" with val=nb_loges lbl="Loges bleues" %}
+  {% include "administration/_stat_tile.html" with val=nb_hg lbl="Hauts grades" %}
+  {% include "administration/_stat_tile.html" with val=nb_tenues lbl="Tenues validées (saison)" %}
+</div>
+<div class="row g-3 mb-4">
+  {% include "administration/_stat_tile.html" with val=nb_active lbl="Actives confirmées" %}
+  {% include "administration/_stat_tile.html" with val=nb_reconf lbl="À reconfirmer" %}
+  {% include "administration/_stat_tile.html" with val=nb_exc lbl="Tenues exceptionnelles" %}
+  {% include "administration/_stat_tile.html" with val=nb_regles lbl="Règles de récurrence" %}
+</div>
+<div class="row g-3 mb-4">
+  {% include "administration/_stat_tile.html" with val=effectif_total lbl="Effectif total (renseigné)" %}
+  {% include "administration/_stat_tile.html" with val=nb_avec_effectif lbl="Loges avec effectif" %}
+  {% include "administration/_stat_tile.html" with val=agapes_moy lbl="Moy. agapes / loge" %}
+  {% include "administration/_stat_tile.html" with val=nb_inactive lbl="Inactives" %}
+</div>
+
+<h2 class="h5" style="color:#0F2137;">Par obédience</h2>
+<div class="table-responsive">
+  <table class="table table-sm bg-white">
+    <thead style="background:#0F2137;color:#fff;"><tr><th>Obédience</th><th>Total</th><th>Loges bleues</th><th>Hauts grades</th><th>Effectif</th></tr></thead>
+    <tbody>
+      {% for o in par_obedience %}
+      <tr><td>{{ o.obedience__nom|default:"—" }}</td><td class="fw-semibold">{{ o.n }}</td><td>{{ o.loges }}</td><td>{{ o.hg }}</td><td>{{ o.eff|default:"—" }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-muted small">💡 Les effectifs se renseignent via la fiche loge ou la colonne « Effectif total » de l'import — quand ils seront remplis, les totaux membres et le potentiel financier s'affineront.</p>
+{% endblock %}
