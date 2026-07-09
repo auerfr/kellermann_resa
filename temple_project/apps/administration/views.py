@@ -1223,6 +1223,46 @@ def relance_contacts(request):
 
 
 @staff_required
+def accueil(request):
+    """Hub d'accueil : avancement de la saison, alertes, raccourcis."""
+    from django.db.models import Q
+    today = date.today()
+    annee = today.year if today.month >= 7 else today.year - 1
+    d1, d2 = date(annee, 9, 1), date(annee + 1, 6, 30)
+    actives = Loge.objects.exclude(statut='inactive')
+    nb_loges = actives.count()
+    nb_tenues = Reservation.objects.filter(
+        date__gte=d1, date__lte=d2, statut='validee', type_reservation='reguliere').count()
+    vs_total = ValidationSaison.objects.filter(annee=annee).count()
+    vs_soumises = ValidationSaison.objects.filter(
+        annee=annee, statut__in=['soumise', 'traitee']).count()
+    params = Parametres.get_instance()
+
+    def etape(nom, ok, detail, encours=False):
+        return {'nom': nom, 'ok': ok, 'encours': encours and not ok, 'detail': detail}
+
+    etapes = [
+        etape('Import', nb_loges > 0, f"{nb_loges} loges"),
+        etape('Régénérer', nb_tenues > 0, f"{nb_tenues} tenues"),
+        etape('Validation', vs_total > 0 and vs_soumises == vs_total,
+              (f"{vs_soumises}/{vs_total}" if vs_total else "non ouverte"),
+              encours=vs_total > 0),
+        etape('Facturation', False,
+              "active" if params.facturation_active else "désactivée"),
+    ]
+    occ = _occupation_temples(annee)
+    alerts = {
+        'conflits': len(_scan_conflits()),
+        'a_reconfirmer': Loge.objects.filter(statut='a_reconfirmer').count(),
+        'sans_email': actives.filter(Q(email='') | Q(email__isnull=True)).count(),
+        'occ_soir_libre': 100 - occ['soir_occ_pct'],
+    }
+    return render(request, 'administration/accueil.html', {
+        'annee': annee, 'nb_loges': nb_loges, 'etapes': etapes, 'alerts': alerts,
+    })
+
+
+@staff_required
 def sante_donnees(request):
     """Tableau de bord de la qualité des données : conflits, tenues orphelines,
     doublons, loges sans contact/récurrence, à reconfirmer."""

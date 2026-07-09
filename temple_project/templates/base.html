@@ -473,7 +473,8 @@
                         ⚙️ Administration
                     </a>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="/admin/">🏠 Tableau de bord</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:accueil' %}">🏠 Accueil (pilotage)</a></li>
+                        <li><a class="dropdown-item" href="/admin/">📊 Tableau de bord</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:annuaire' %}">📇 Annuaire des loges</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:relance_contacts' %}">📣 Relance des contacts</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:loges_saison' %}">🔄 Suivi loges / saison</a></li>
