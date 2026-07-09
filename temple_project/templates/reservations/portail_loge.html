@@ -244,7 +244,7 @@
             <tr>
               <th class="text-muted small ps-3">Date</th>
               <th class="text-muted small">Type</th>
-              <th class="text-muted small col-mobile-hide">Lieu</th>
+              <th class="text-muted small">Lieu</th>
               <th class="text-muted small">Horaires</th>
               <th class="text-muted small">Statut</th>
             </tr>
@@ -253,8 +253,8 @@
             {# Passées #}
             {% for e in evenements_passes %}
             <tr class="row-passee">
-              <td class="ps-3" style="color:#0F2137;">{{ e.date|date:"D d/m/Y" }}</td>
-              <td>
+              <td class="ps-3" style="color:#0F2137;" data-label="Date">{{ e.date|date:"D d/m/Y" }}</td>
+              <td data-label="Type">
                 {% if e.type_code == 'temple' %}
                   <span class="badge" style="background:#0F2137;color:#C8A84B;">Temple</span>
                   {% if e.type_resa_code == 'exceptionnelle' %}<span class="badge" style="background:#ca8a04;color:#fff;">{{ e.type_resa }}</span>
@@ -268,9 +268,9 @@
                   <span class="badge bg-secondary">{{ e.type_label }}</span>
                 {% endif %}
               </td>
-              <td class="small text-muted col-mobile-hide">{{ e.lieu }}</td>
-              <td class="small text-muted">{{ e.heure_debut|time:"H:i" }} – {{ e.heure_fin|time:"H:i" }}</td>
-              <td>
+              <td class="small text-muted" data-label="Lieu">{{ e.lieu }}</td>
+              <td class="small text-muted" data-label="Horaires">{{ e.heure_debut|time:"H:i" }} – {{ e.heure_fin|time:"H:i" }}</td>
+              <td data-label="Statut">
                 {% if e.statut == 'validee' %}
                   <span class="badge bg-success">Validée</span>
                 {% elif e.statut == 'attente' %}
@@ -290,8 +290,8 @@
             {# À venir #}
             {% for e in evenements_futurs %}
             <tr>
-              <td class="fw-semibold ps-3" style="color:#0F2137;">{{ e.date|date:"l d F Y" }}</td>
-              <td>
+              <td class="fw-semibold ps-3" style="color:#0F2137;" data-label="Date">{{ e.date|date:"l d F Y" }}</td>
+              <td data-label="Type">
                 {% if e.type_code == 'temple' %}
                   <span class="badge" style="background:#0F2137;color:#C8A84B;">Temple</span>
                   {% if e.type_resa_code == 'exceptionnelle' %}<span class="badge" style="background:#ca8a04;color:#fff;">{{ e.type_resa }}</span>
@@ -305,9 +305,9 @@
                   <span class="badge bg-secondary">{{ e.type_label }}</span>
                 {% endif %}
               </td>
-              <td class="small col-mobile-hide">{{ e.lieu }}</td>
-              <td class="small">{{ e.heure_debut|time:"H:i" }} – {{ e.heure_fin|time:"H:i" }}</td>
-              <td>
+              <td class="small" data-label="Lieu">{{ e.lieu }}</td>
+              <td class="small" data-label="Horaires">{{ e.heure_debut|time:"H:i" }} – {{ e.heure_fin|time:"H:i" }}</td>
+              <td data-label="Statut">
                 {% if e.statut == 'validee' %}
                   <span class="badge bg-success">Validée</span>
                 {% elif e.statut == 'attente' %}
