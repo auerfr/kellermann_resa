@@ -1338,11 +1338,11 @@ def telecharger_template_excel(request):
 
     # ── Onglet LOGES ─────────────────────────────────────────────────────────
     ws_l = wb.create_sheet("LOGES")
-    headers_l = ["Abréviation *","Nom complet *","Obédience *","Type *","Rite","Email","Effectif total","Moy. agapes","Nom du contact","Téléphone"]
+    headers_l = ["Abréviation *","Nom complet *","Obédience *","Type *","Rite","Email","Effectif total","Moy. agapes","Nom du contact","Téléphone","Association"]
     _style_header(ws_l, 1, headers_l, hf, hfill, ctr, thin)
     # Lignes exemple
-    _style_row(ws_l, 2, ["3P","Les 3 Piliers","GODF","loge","reaa","contact@loge.fr",45,30,"Jean Dupont","06 12 34 56 78"], thin, ctr, ex)
-    _style_row(ws_l, 3, ["14GO","14/Consistoire GODF","GODF","haut_grade","rf","",20,0,"",""], thin, ctr, ex)
+    _style_row(ws_l, 2, ["3P","Les 3 Piliers","GODF","loge","reaa","contact@loge.fr",45,30,"Jean Dupont","06 12 34 56 78","Les Amis des 3 Piliers"], thin, ctr, ex)
+    _style_row(ws_l, 3, ["14GO","14/Consistoire GODF","GODF","haut_grade","rf","",20,0,"","","P12 - Consistoire"], thin, ctr, ex)
     # Validations
     dv_obe  = DataValidation(type="list", formula1="RÉFÉRENCE!$B$2:$B$6", allow_blank=True,  showDropDown=False)
     dv_type = DataValidation(type="list", formula1='"loge,haut_grade"',   allow_blank=False, showDropDown=False)
@@ -1350,7 +1350,7 @@ def telecharger_template_excel(request):
     ws_l.add_data_validation(dv_obe);  dv_obe.sqref  = "C2:C500"
     ws_l.add_data_validation(dv_type); dv_type.sqref = "D2:D500"
     ws_l.add_data_validation(dv_rite); dv_rite.sqref = "E2:E500"
-    for col, w in zip(['A','B','C','D','E','F','G','H','I','J'], [12,38,12,12,8,28,14,12,22,16]):
+    for col, w in zip(['A','B','C','D','E','F','G','H','I','J','K'], [12,38,12,12,8,28,14,12,22,16,26]):
         ws_l.column_dimensions[col].width = w
     ws_l.freeze_panes = "A2"
     ws_l.row_dimensions[1].height = 30
@@ -1410,7 +1410,7 @@ def telecharger_export_excel(request):
     # ── Loges ────────────────────────────────────────────────────────────────
     ws_l = wb.active
     ws_l.title = "LOGES"
-    headers_l = ["Abréviation","Nom complet","Obédience","Type","Rite","Email","Effectif total","Moy. agapes","Nom du contact","Téléphone"]
+    headers_l = ["Abréviation","Nom complet","Obédience","Type","Rite","Email","Effectif total","Moy. agapes","Nom du contact","Téléphone","Association"]
     _style_header(ws_l, 1, headers_l, hf, hfill, ctr, thin)
     for ri, loge in enumerate(Loge.objects.select_related('obedience').order_by('nom'), 2):
         fill = None if ri % 2 == 0 else alt
@@ -1420,9 +1420,9 @@ def telecharger_export_excel(request):
             loge.type_loge, loge.rite or "",
             loge.email or "",
             loge.effectif_total or "", loge.effectif_moyen_agapes or "",
-            loge.nom_contact or "", loge.telephone or "",
+            loge.nom_contact or "", loge.telephone or "", loge.association or "",
         ], thin, ctr, fill)
-    for col, w in zip(['A','B','C','D','E','F','G','H','I','J'], [12,38,12,12,8,28,14,12,22,16]):
+    for col, w in zip(['A','B','C','D','E','F','G','H','I','J','K'], [12,38,12,12,8,28,14,12,22,16,26]):
         ws_l.column_dimensions[col].width = w
     ws_l.freeze_panes = "A2"
 
@@ -2756,6 +2756,7 @@ def _importer_donnees(wb):
                 nouveau_format = col4_norm in RITES_VALIDES or col4_val == ''
                 nom_contact = ''
                 telephone   = ''
+                association = ''
                 if nouveau_format:
                     rite     = _normalise_rite(str(row[4]) if len(row) > 4 and row[4] else '')
                     email    = str(row[5]).strip() if len(row) > 5 and row[5] else ''
@@ -2763,6 +2764,7 @@ def _importer_donnees(wb):
                     agapes   = int(row[7]) if len(row) > 7 and row[7] and str(row[7]).isdigit() else 0
                     nom_contact = str(row[8]).strip() if len(row) > 8 and row[8] else ''
                     telephone   = str(row[9]).strip() if len(row) > 9 and row[9] else ''
+                    association = str(row[10]).strip() if len(row) > 10 and row[10] else ''
                 else:
                     email    = col4_val
                     effectif = int(row[5]) if len(row) > 5 and row[5] and str(row[5]).isdigit() else 0
@@ -2783,6 +2785,8 @@ def _importer_donnees(wb):
                     vals['nom_contact'] = nom_contact
                 if telephone:
                     vals['telephone'] = telephone
+                if association:
+                    vals['association'] = association
                 # Rapprochement : abréviation OU nom (évite les doublons)
                 loge = _match_loge(abrev, nom)
                 if loge:
