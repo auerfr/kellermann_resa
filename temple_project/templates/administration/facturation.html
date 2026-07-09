@@ -9,6 +9,14 @@
   <a href="/admin/" class="btn btn-sm btn-outline-secondary">← Tableau de bord</a>
 </div>
 
+{% if not params.facturation_active %}
+<div class="alert alert-warning">
+  <strong>⚠️ Facturation désactivée</strong> — le modèle de facturation est <strong>en cours de cadrage avec le trésorier</strong>.
+  Les montants ci-dessous sont <strong>provisoires / indicatifs</strong> et ne doivent pas être utilisés tels quels.
+  <div class="small mt-1">Attention : certaines dates saisies en « exceptionnelle » sont en réalité des tenues qui reviennent chaque année (à basculer en récurrence). Le récurrent pourrait être facturé autrement (ex. nb de membres × nb de tenues).</div>
+</div>
+{% endif %}
+
 {# ── Tarifs en vigueur (modifiables) ── #}
 <div class="card shadow-sm border-0 mb-4">
   <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;cursor:pointer;"
@@ -79,7 +87,13 @@
             <div class="form-text">Les occupations <strong>antérieures</strong> à cette date ne sont pas facturées.</div>
           </div>
         </div>
-        <button type="submit" class="btn btn-temple mt-3">💾 Enregistrer les tarifs</button>
+        <div class="form-check mt-3">
+          <input type="checkbox" class="form-check-input" id="facturation_active" name="facturation_active" {% if params.facturation_active %}checked{% endif %}>
+          <label class="form-check-label" for="facturation_active">
+            <strong>Facturation active</strong> — décochez tant que le modèle n'est pas validé avec le trésorier (affiche un bandeau « provisoire »).
+          </label>
+        </div>
+        <button type="submit" class="btn btn-temple mt-3">💾 Enregistrer</button>
       </form>
     </div>
   </div>

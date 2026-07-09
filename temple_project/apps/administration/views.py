@@ -4405,8 +4405,10 @@ def facturation(request):
             params.tarif_funebre         = Decimal(request.POST.get('tarif_funebre') or '0')
             de = (request.POST.get('tarif_date_effet') or '').strip()
             params.tarif_date_effet = date.fromisoformat(de) if de else None
+            params.facturation_active = 'facturation_active' in request.POST
             params.save(update_fields=['tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
-                                       'tarif_congres_jour', 'tarif_funebre', 'tarif_date_effet'])
+                                       'tarif_congres_jour', 'tarif_funebre', 'tarif_date_effet',
+                                       'facturation_active'])
             messages.success(request, "Tarifs mis à jour. Ils ne s'appliquent pas aux dates antérieures à leur entrée en vigueur.")
         except (InvalidOperation, ValueError):
             messages.error(request, "Valeurs invalides : vérifiez les montants et la date.")

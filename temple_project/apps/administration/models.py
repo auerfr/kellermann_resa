@@ -15,6 +15,11 @@ class Parametres(models.Model):
     smtp_password = models.CharField(max_length=255, blank=True)
     smtp_tls = models.BooleanField(default=True)
 
+    # ── Facturation ───────────────────────────────────────────────────────────
+    facturation_active = models.BooleanField(
+        default=True,
+        help_text="Active la facturation des occupations. À désactiver tant que "
+                  "le modèle n'est pas validé avec le trésorier.")
     # ── Tarifs de facturation des réservations exceptionnelles ────────────────
     tarif_exc_sans_agapes = models.DecimalField(
         max_digits=8, decimal_places=2, default=100,
