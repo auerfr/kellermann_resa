@@ -543,15 +543,38 @@
                       placeholder="Informations complémentaires pour l'équipe Kellermann…"></textarea>
           </div>
 
-          {# Bouton bas #}
+          {# Bouton bas — ouvre le récapitulatif avant envoi #}
           <div class="d-grid d-sm-block">
-            <button type="submit" class="btn px-4 fw-semibold"
-                    style="background:#0F2137;color:white;"
-                    onclick="return confirm('Confirmer la soumission de votre validation de saison ?')">
-              📤 Soumettre ma validation
+            <button type="button" class="btn px-4 fw-semibold"
+                    style="background:#0F2137;color:white;" onclick="preparerEnvoi()">
+              📤 Vérifier et envoyer
             </button>
           </div>
         </form>
+
+        {# ── Récapitulatif avant envoi définitif ─────────────────────────── #}
+        <div class="modal fade" id="modal-recap" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" style="border:none;border-radius:14px;">
+              <div class="modal-header" style="background:#0F2137;color:#fff;border-radius:14px 14px 0 0;">
+                <h5 class="modal-title" style="font-size:1rem;">Récapitulatif de votre validation</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+              </div>
+              <div class="modal-body" id="recap-body">
+                {# rempli par JS #}
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                  Revenir et modifier
+                </button>
+                <button type="button" class="btn btn-sm fw-semibold px-3"
+                        style="background:#0F2137;color:#fff;" onclick="envoyerValidation()">
+                  ✓ Confirmer et envoyer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       {% endif %}{# statut #}
     </div>
@@ -682,29 +705,96 @@ document.querySelectorAll('.val-card').forEach(c => {
 });
 majTotaux();
 
-document.getElementById('form-validation-saison').addEventListener('submit', function (e) {
+// Valide + assemble tous les commentaires. Renvoie true si tout est correct.
+function validerEtAssembler() {
   let premier = null;
   document.querySelectorAll('.val-card').forEach(c => {
     const pk   = c.id.replace('card-', '');
     const avis = avisOf(pk);
     const dw   = document.getElementById('datewish-' + pk).value;
     const mo   = document.getElementById('motif-' + pk).value.trim();
-    if (avis === 'deplacer' && !dw && !mo) {
-      premier = premier || document.getElementById('motif-' + pk);
-      c.style.borderLeftColor = '#DC2626';
-    } else if (avis === 'annuler' && !mo) {
+    if ((avis === 'deplacer' && !dw && !mo) || (avis === 'annuler' && !mo)) {
       premier = premier || document.getElementById('motif-' + pk);
       c.style.borderLeftColor = '#DC2626';
     }
     assemble(pk);
   });
   if (premier) {
-    e.preventDefault();
     premier.focus();
     premier.classList.add('is-invalid');
     alert('Merci d\'indiquer une date souhaitée ou un motif pour chaque déplacement, et un motif pour chaque annulation.');
     premier.addEventListener('input', () => premier.classList.remove('is-invalid'), { once: true });
+    return false;
   }
+  return true;
+}
+
+// Construit le récapitulatif et ouvre la fenêtre de confirmation.
+function preparerEnvoi() {
+  if (!validerEtAssembler()) return;
+
+  const groupes = { ok: [], deplacer: [], annuler: [] };
+  document.querySelectorAll('.val-card').forEach(c => {
+    const pk    = c.id.replace('card-', '');
+    const avis  = avisOf(pk);
+    const titre = c.querySelector('.fw-semibold').textContent.trim();
+    const sous  = c.querySelector('.text-muted').textContent.trim();
+    const dw    = fmtDate(document.getElementById('datewish-' + pk).value);
+    const mo    = document.getElementById('motif-' + pk).value.trim();
+    groupes[avis].push({ titre, sous, dw, mo });
+  });
+
+  const esc = s => String(s).replace(/[&<>"']/g,
+    c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  let html = '';
+
+  html += '<div class="d-flex gap-3 flex-wrap small mb-3">'
+        + '<span style="color:#16A34A;">✓ <b>' + groupes.ok.length + '</b> confirmée(s)</span>'
+        + '<span style="color:#B45309;">↻ <b>' + groupes.deplacer.length + '</b> à déplacer</span>'
+        + '<span style="color:#DC2626;">✕ <b>' + groupes.annuler.length + '</b> à annuler</span>'
+        + '</div>';
+
+  if (groupes.deplacer.length) {
+    html += '<div class="fw-semibold small mb-1" style="color:#B45309;">Tenues à déplacer</div>';
+    groupes.deplacer.forEach(g => {
+      html += '<div class="small mb-2" style="border-left:3px solid #F59E0B;padding-left:8px;">'
+           + '<div class="fw-semibold">' + esc(g.titre) + '</div>'
+           + '<div class="text-muted">' + esc(g.sous) + '</div>'
+           + (g.dw ? '<div>→ nouvelle date souhaitée : <b>' + esc(g.dw) + '</b></div>' : '')
+           + (g.mo ? '<div class="text-muted">« ' + esc(g.mo) + ' »</div>' : '')
+           + '</div>';
+    });
+  }
+  if (groupes.annuler.length) {
+    html += '<div class="fw-semibold small mb-1 mt-2" style="color:#DC2626;">Tenues à annuler</div>';
+    groupes.annuler.forEach(g => {
+      html += '<div class="small mb-2" style="border-left:3px solid #DC2626;padding-left:8px;">'
+           + '<div class="fw-semibold">' + esc(g.titre) + '</div>'
+           + '<div class="text-muted">' + esc(g.sous) + '</div>'
+           + (g.mo ? '<div class="text-muted">« ' + esc(g.mo) + ' »</div>' : '')
+           + '</div>';
+    });
+  }
+  if (!groupes.deplacer.length && !groupes.annuler.length) {
+    html += '<div class="alert alert-success small mb-0">'
+         + 'Toutes vos tenues sont confirmées, aucun changement demandé.</div>';
+  } else {
+    html += '<div class="text-muted mt-2" style="font-size:12px;">'
+         + 'Après envoi, l\'administration traitera vos demandes de modification.</div>';
+  }
+
+  document.getElementById('recap-body').innerHTML = html;
+  new bootstrap.Modal(document.getElementById('modal-recap')).show();
+}
+
+function envoyerValidation() {
+  document.getElementById('form-validation-saison').submit();
+}
+
+// Sécurité : la touche Entrée passe aussi par le récapitulatif.
+document.getElementById('form-validation-saison').addEventListener('submit', function (e) {
+  e.preventDefault();
+  preparerEnvoi();
 });
 </script>
 {% endif %}
