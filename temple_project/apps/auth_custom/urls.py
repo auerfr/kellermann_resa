@@ -6,6 +6,7 @@ app_name = "acces"
 urlpatterns = [
     path("",          views.bienvenue,       name="bienvenue"),
     path("login/",    views.login_visiteur,  name="login_visiteur"),
+    path("lien-portail/", views.lien_portail, name="lien_portail"),
     path("admin/",    views.login_admin,     name="login_admin"),
     path("traiteur/", views.login_traiteur,  name="login_traiteur"),
     path("logout/",   views.deconnexion,     name="deconnexion"),

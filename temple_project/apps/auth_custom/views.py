@@ -51,6 +51,38 @@ def login_visiteur(request):
     return render(request, "auth/login_visiteur.html")
 
 
+def lien_portail(request):
+    """Public : une loge saisit son email, on lui (re)envoie son lien d'accès au
+    portail. Réponse neutre pour ne pas révéler quels emails existent."""
+    envoye = False
+    if request.method == "POST":
+        email = (request.POST.get("email") or "").strip()
+        if email:
+            from temple_project.apps.loges.models import Loge
+            from temple_project.apps.reservations.models import DemandeAccesPortail
+            from temple_project.apps.administration.email_utils import send_mail_kellermann
+            loge = Loge.objects.filter(email__iexact=email).exclude(statut='inactive').first()
+            if loge and loge.email:
+                demande = DemandeAccesPortail.objects.filter(
+                    loge=loge, statut='validee').order_by('-created_at').first()
+                if not demande:
+                    demande = DemandeAccesPortail.objects.create(
+                        loge=loge, nom_venerable=loge.nom_contact or loge.nom,
+                        email=loge.email, statut='validee')
+                base = settings.SITE_URL.rstrip('/') if hasattr(settings, 'SITE_URL') else ''
+                url = f"{base}/reservations/portail/{demande.token}/"
+                send_mail_kellermann(
+                    subject="Votre lien d'accès — Espace loge Kellermann",
+                    message=(
+                        f"Bonjour,\n\nVoici votre lien d'accès à l'espace de votre loge :\n{url}\n\n"
+                        f"Conservez-le pour valider votre calendrier et gérer vos réservations.\n\n"
+                        f"Bien fraternellement,\nLes Temples Kellermann"),
+                    recipient_list=[loge.email],
+                )
+            envoye = True
+    return render(request, "auth/lien_portail.html", {"envoye": envoye})
+
+
 def login_admin(request):
     if request.user.is_authenticated and request.user.is_staff:
         return redirect("/admin/")
