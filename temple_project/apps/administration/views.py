@@ -1355,6 +1355,99 @@ def annuaire(request):
     })
 
 
+def _fusionner_loges(garder, suppr, appliquer):
+    """Réaffecte toutes les données de `suppr` vers `garder`, puis supprime `suppr`.
+    Renvoie un rapport {libellé: nombre}. Avec appliquer=False, ne fait qu'estimer
+    (lecture seule). Logique alignée sur la commande `fusionner_loges`."""
+    from django.db import transaction
+    from temple_project.apps.reservations.models import ValidationSaison, RegleRecurrence
+    report = {}
+
+    def _collecte(apply_writes):
+        # ValidationSaison est unique par (loge, année) : on retire les doublons d'abord
+        annees = set(ValidationSaison.objects.filter(loge=garder).values_list('annee', flat=True))
+        conflits = ValidationSaison.objects.filter(loge=suppr, annee__in=annees)
+        if conflits.exists():
+            report['Validations de saison en doublon (supprimées)'] = conflits.count()
+            if apply_writes:
+                conflits.delete()
+        # Réaffectation générique de toutes les FK pointant vers Loge
+        for rel in Loge._meta.related_objects:
+            fname = rel.field.name
+            Model = rel.related_model
+            base = Model.objects.filter(**{fname: suppr})
+            n = base.count()
+            if n:
+                report[f"{Model._meta.verbose_name} ({fname})"] = n
+                if apply_writes:
+                    base.update(**{fname: garder})
+
+    if not appliquer:
+        _collecte(False)
+        return report
+
+    with transaction.atomic():
+        _collecte(True)
+        # Complète les coordonnées manquantes de la loge conservée
+        for champ in ('email', 'telephone', 'nom_contact', 'rite', 'rite_precision', 'association'):
+            if not getattr(garder, champ, '') and getattr(suppr, champ, ''):
+                setattr(garder, champ, getattr(suppr, champ))
+        garder.save()
+        suppr.delete()
+        # Dédoublonnage des règles après réaffectation
+        vues, doublons = set(), 0
+        for r in RegleRecurrence.objects.filter(loge=garder).order_by('pk'):
+            key = (r.temple_id, r.jour_semaine, r.numero_semaine)
+            if key in vues:
+                r.delete(); doublons += 1
+            else:
+                vues.add(key)
+        if doublons:
+            report['Règles en double supprimées'] = doublons
+    return report
+
+
+@staff_required
+def fusion_loges(request):
+    """Fusion de deux loges en double depuis l'admin (remplace la commande shell).
+    Étape 1 : simulation (aperçu des objets réaffectés). Étape 2 : application."""
+    loges  = Loge.objects.select_related('obedience').order_by('nom')
+    garder = suppr = report = None
+
+    if request.method == 'POST':
+        try:
+            gid = int(request.POST.get('garder') or 0)
+            sid = int(request.POST.get('supprimer') or 0)
+        except (ValueError, TypeError):
+            gid = sid = 0
+        garder = Loge.objects.filter(pk=gid).first()
+        suppr  = Loge.objects.filter(pk=sid).first()
+        action = request.POST.get('action')
+
+        if not garder or not suppr:
+            messages.error(request, "Sélectionnez deux loges valides.")
+            garder = suppr = None
+        elif garder.pk == suppr.pk:
+            messages.error(request, "La loge à conserver et celle à supprimer doivent être différentes.")
+            garder = suppr = None
+        elif action == 'appliquer':
+            nom_suppr = suppr.nom
+            report = _fusionner_loges(garder, suppr, appliquer=True)
+            log_evenement('fusion_loges',
+                f"Fusion : « {nom_suppr} » absorbée dans « {garder.nom} » "
+                f"({sum(report.values())} objet(s) réaffectés)",
+                request=request, objet=garder)
+            messages.success(request,
+                f"Fusion effectuée : « {nom_suppr} » a été absorbée dans « {garder.nom} ».")
+            return redirect('administration:fusion_loges')
+        else:  # simuler
+            report = _fusionner_loges(garder, suppr, appliquer=False)
+
+    return render(request, 'administration/fusion_loges.html', {
+        'loges': loges, 'garder': garder, 'suppr': suppr, 'report': report,
+    })
+
+
 @staff_required
 def audit_export_excel(request):
     """Export Excel d'audit (à transmettre par mail) : tenues orphelines,

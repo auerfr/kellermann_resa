@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Fusion de loges{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <h1 class="h3 mb-1" style="color:#0F2137;">Fusion de loges en double</h1>
+  <p class="text-muted small mb-0" style="max-width:760px;">
+    Réaffecte toutes les données d'une loge (règles de récurrence, réservations, validations
+    de saison, accès portail…) vers une autre loge, puis supprime la loge en double.
+    Une <strong>simulation</strong> est affichée avant toute suppression. Action irréversible
+    une fois confirmée.
+  </p>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <form method="post" class="row g-3 align-items-end">
+      {% csrf_token %}
+      <div class="col-md-5">
+        <label class="form-label fw-semibold small">Loge à conserver</label>
+        <select name="garder" class="form-select" required>
+          <option value="">— Choisir —</option>
+          {% for l in loges %}
+          <option value="{{ l.pk }}" {% if garder and garder.pk == l.pk %}selected{% endif %}>
+            [{{ l.abreviation }}] {{ l.nom }}{% if l.statut != 'active' %} · {{ l.get_statut_display }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-5">
+        <label class="form-label fw-semibold small">Loge à supprimer <span class="text-muted fw-normal">(absorbée)</span></label>
+        <select name="supprimer" class="form-select" required>
+          <option value="">— Choisir —</option>
+          {% for l in loges %}
+          <option value="{{ l.pk }}" {% if suppr and suppr.pk == l.pk %}selected{% endif %}>
+            [{{ l.abreviation }}] {{ l.nom }}{% if l.statut != 'active' %} · {{ l.get_statut_display }}{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-grid">
+        <button type="submit" name="action" value="simuler" class="btn btn-outline-primary">Simuler</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if report is not None and garder and suppr %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #C8A84B;">
+  <div class="card-body">
+    <h6 class="mb-3">
+      Simulation :
+      <span style="color:#DC2626;">« {{ suppr.nom }} »</span>
+      <i class="ti ti-arrow-right"></i>
+      <span style="color:#16A34A;">« {{ garder.nom }} »</span>
+    </h6>
+
+    {% if report %}
+    <div class="table-responsive">
+      <table class="table table-sm align-middle" style="max-width:560px;">
+        <tbody>
+          {% for k, v in report.items %}
+          <tr>
+            <td>{{ k }}</td>
+            <td class="text-end fw-semibold" style="width:80px;">{{ v }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-3">
+      Aucune donnée liée à « {{ suppr.nom }} » : la fusion supprimera simplement cette loge vide.
+    </p>
+    {% endif %}
+
+    <form method="post"
+          onsubmit="return confirm('Confirmer la fusion ? « {{ suppr.nom|escapejs }} » sera définitivement supprimée. Cette action est irréversible.');">
+      {% csrf_token %}
+      <input type="hidden" name="garder" value="{{ garder.pk }}">
+      <input type="hidden" name="supprimer" value="{{ suppr.pk }}">
+      <button type="submit" name="action" value="appliquer" class="btn fw-semibold px-4"
+              style="background:#0F2137;color:#fff;">
+        ✓ Confirmer la fusion
+      </button>
+      <a href="{% url 'administration:fusion_loges' %}" class="btn btn-outline-secondary ms-2">Annuler</a>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
