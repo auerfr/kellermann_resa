@@ -115,6 +115,11 @@ def api_evenements(request):
         qs_salles = ReservationSalle.objects.select_related("salle", "loge").filter(
             date__gte=start, date__lte=end, statut__in=("validee", "attente")
         )
+        # Mêmes filtres que pour les temples : loge / obédience
+        if loge_id:
+            qs_salles = qs_salles.filter(loge_id=loge_id)
+        elif obd_id:
+            qs_salles = qs_salles.filter(loge__obedience_id=obd_id)
         if type_filtre == "cabinet":
             qs_salles = qs_salles.filter(salle__type_salle="cabinet_reflexion")
         elif type_filtre == "banquet":
