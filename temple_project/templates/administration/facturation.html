@@ -100,6 +100,7 @@
       <div class="col-md-4 d-flex gap-2">
         <button type="submit" class="btn btn-temple">🔎 Afficher</button>
         <a class="btn btn-success" href="{% url 'administration:facturation_export' %}?date_debut={{ date_debut|date:'Y-m-d' }}&amp;date_fin={{ date_fin|date:'Y-m-d' }}">⬇ Excel</a>
+        <a class="btn btn-outline-danger" href="{% url 'administration:facturation_pdf' %}?date_debut={{ date_debut|date:'Y-m-d' }}&amp;date_fin={{ date_fin|date:'Y-m-d' }}">🧾 PDF (toutes)</a>
       </div>
     </form>
   </div>
@@ -116,7 +117,10 @@
 <div class="card shadow-sm border-0 mb-3">
   <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;">
     <span style="color:#C8A84B;font-weight:600;">{{ grp.nom }}</span>
-    <span class="badge" style="background:#C8A84B;color:#0F2137;">{{ grp.total|floatformat:2 }} €</span>
+    <span class="d-flex align-items-center gap-2">
+      <a class="btn btn-sm btn-outline-light py-0" href="{% url 'administration:facturation_pdf' %}?date_debut={{ date_debut|date:'Y-m-d' }}&amp;date_fin={{ date_fin|date:'Y-m-d' }}&amp;nom={{ grp.nom|urlencode }}" title="Facture PDF de cette loge">🧾 PDF</a>
+      <span class="badge" style="background:#C8A84B;color:#0F2137;">{{ grp.total|floatformat:2 }} €</span>
+    </span>
   </div>
   <div class="table-responsive">
     <table class="table table-hover mb-0 align-middle">

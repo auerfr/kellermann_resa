@@ -4386,6 +4386,67 @@ def facturation(request):
 
 
 @staff_required
+def facturation_pdf(request):
+    """Facture PDF : d'une loge (?nom=...) ou de toutes (une page par loge)."""
+    from io import BytesIO
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, PageBreak)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    params = Parametres.get_instance()
+    date_debut, date_fin = _periode_facturation(request)
+    groupes, total, nb = _facturation_data(date_debut, date_fin, params)
+    nom_filtre = request.GET.get('nom')
+    if nom_filtre:
+        groupes = [g for g in groupes if g['nom'] == nom_filtre]
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5 * cm,
+                            bottomMargin=1.5 * cm, leftMargin=1.5 * cm, rightMargin=1.5 * cm)
+    styles = getSampleStyleSheet()
+    h = ParagraphStyle('h', parent=styles['Title'], fontSize=15, textColor=colors.HexColor('#0F2137'))
+    lg = ParagraphStyle('lg', parent=styles['Heading2'], textColor=colors.HexColor('#0F2137'))
+    sub = ParagraphStyle('sub', parent=styles['Normal'], fontSize=9, textColor=colors.grey)
+    elems = []
+    for gi, g in enumerate(groupes):
+        if gi > 0:
+            elems.append(PageBreak())
+        elems.append(Paragraph("Facture — Temples Kellermann", h))
+        elems.append(Paragraph(g['nom'], lg))
+        elems.append(Paragraph(f"Période : {date_debut:%d/%m/%Y} → {date_fin:%d/%m/%Y}", sub))
+        elems.append(Spacer(1, 0.4 * cm))
+        data = [['Date', 'Type', 'Temple(s)', 'Agapes', 'Montant']]
+        for l in g['lignes']:
+            d = f"{l['date']:%d/%m/%Y}" + (f" → {l['date_fin']:%d/%m/%Y}" if l['date_fin'] else '')
+            data.append([d, l['type'], l['temple'], 'Oui' if l['agapes'] else '—', f"{l['tarif']:.0f} €"])
+        data.append(['', '', '', 'Total', f"{g['total']:.0f} €"])
+        t = Table(data, colWidths=[3.4 * cm, 3.4 * cm, 5.4 * cm, 2 * cm, 2.5 * cm])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0F2137')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.grey),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#DBEAFE')),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+        ]))
+        elems.append(t)
+        elems.append(Spacer(1, 0.3 * cm))
+        elems.append(Paragraph("Montants hors prestations traiteur. Réf. tarifs votés en AG.", sub))
+    if not groupes:
+        elems.append(Paragraph("Aucune occupation facturable sur la période.", styles['Normal']))
+    doc.build(elems)
+    buf.seek(0)
+    resp = HttpResponse(buf, content_type='application/pdf')
+    fn = (nom_filtre or 'toutes').replace(' ', '_').replace('/', '-')[:40]
+    resp['Content-Disposition'] = f'attachment; filename="Facture_{fn}_{date.today():%Y%m%d}.pdf"'
+    return resp
+
+
+@staff_required
 def facturation_export_excel(request):
     params = Parametres.get_instance()
     date_debut, date_fin = _periode_facturation(request)

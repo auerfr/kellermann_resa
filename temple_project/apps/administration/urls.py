@@ -51,4 +51,5 @@ urlpatterns = [
     path("annonces/<int:pk>/supprimer/", views.annonce_supprimer, name="annonce_supprimer"),
     path("facturation/", views.facturation, name="facturation"),
     path("facturation/export/", views.facturation_export_excel, name="facturation_export"),
+    path("facturation/pdf/", views.facturation_pdf, name="facturation_pdf"),
 ]
