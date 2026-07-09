@@ -564,6 +564,107 @@ def api_verifier_conflit(request):
     })
 
 
+def api_apercu_recurrence(request):
+    """Aperçu en direct d'une règle de récurrence : génère les dates de la saison
+    à venir et indique, pour chacune, si le temple est libre ou déjà occupé.
+    Purement indicatif (aucune écriture), pour guider la loge au moment de la demande."""
+    from datetime import date as _date, timedelta, datetime as _dt
+    import calendar as _cal
+
+    try:
+        temple_id = int(request.GET.get('temple'))
+        jour      = int(request.GET.get('jour_semaine'))
+        num       = int(request.GET.get('numero_semaine'))
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'message': 'Complétez le temple, le jour et la semaine.'})
+
+    def _parse_h(v, defaut):
+        try:
+            return _dt.strptime(v, '%H:%M').time()
+        except (TypeError, ValueError):
+            return _dt.strptime(defaut, '%H:%M').time()
+
+    hd = _parse_h(request.GET.get('heure_debut'), '19:00')
+    hf = _parse_h(request.GET.get('heure_fin'),   '22:30')
+
+    mois = [int(m) for m in request.GET.getlist('mois_actifs') if m.isdigit()]
+    if not mois:
+        mois = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
+
+    temple = Temple.objects.filter(pk=temple_id).first()
+    if not temple:
+        return JsonResponse({'ok': False, 'message': 'Temple introuvable.'})
+
+    today = _date.today()
+    annee = today.year if today.month >= 7 else today.year - 1
+    d1, d2 = _date(annee, 9, 1), _date(annee + 1, 6, 30)
+
+    def _dates_du_mois(an, mo):
+        ndays = _cal.monthrange(an, mo)[1]
+        matching = [_date(an, mo, j) for j in range(1, ndays + 1)
+                    if _date(an, mo, j).weekday() == jour]
+        if num == 0:
+            return matching
+        if num == -1:
+            return matching[-1:] if matching else []
+        return [matching[num - 1]] if len(matching) >= num else []
+
+    JF = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.']
+    dates = []
+    for mo in mois:
+        if mo in (7, 8):
+            continue
+        an = annee if mo >= 9 else annee + 1
+        for d in _dates_du_mois(an, mo):
+            if d1 <= d <= d2:
+                dates.append(d)
+    dates = sorted(set(dates))
+
+    try:
+        from .models import Indisponibilite
+    except ImportError:
+        Indisponibilite = None
+
+    chevauchement = Q(heure_debut__lt=hf, heure_fin__gt=hd)
+    resultats, libres = [], 0
+    for d in dates:
+        conflit = Reservation.objects.filter(
+            temple=temple, date=d, statut__in=['validee', 'attente'],
+        ).filter(chevauchement).select_related('loge').first()
+        indispo = False
+        if not conflit and Indisponibilite is not None:
+            indispo = Indisponibilite.objects.filter(
+                temples=temple, date_debut__lte=d, date_fin__gte=d,
+            ).exists()
+        libre = not conflit and not indispo
+        if libre:
+            libres += 1
+        if conflit:
+            par = str(conflit.loge) if conflit.loge else ''
+            motif = f"occupé par {par}" if par else 'créneau déjà réservé'
+        elif indispo:
+            motif = 'temple indisponible'
+        else:
+            motif = ''
+        resultats.append({
+            'date':  d.isoformat(),
+            'label': f"{JF[d.weekday()]} {d.strftime('%d/%m/%Y')}",
+            'libre': libre,
+            'motif': motif,
+        })
+
+    total = len(resultats)
+    return JsonResponse({
+        'ok': True,
+        'saison':  f"{annee}-{annee + 1}",
+        'temple':  str(temple),
+        'total':   total,
+        'libres':  libres,
+        'occupes': total - libres,
+        'dates':   resultats,
+    })
+
+
 def api_grille_congres(request):
     """Grille de disponibilité d'un congrès (jours × temples) + salles, en JSON propre."""
     from datetime import date as _date, timedelta

@@ -20,6 +20,9 @@ urlpatterns = [
     path("api/grille-congres/",
          views.api_grille_congres,
          name="api_grille_congres"),
+    path("api/apercu-recurrence/",
+         views.api_apercu_recurrence,
+         name="api_apercu_recurrence"),
 
     # Salles de réunion
     path("demande-salle/",

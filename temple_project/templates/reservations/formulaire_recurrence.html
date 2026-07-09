@@ -137,6 +137,16 @@
             {% endfor %}
           </div>
 
+          {# ── Aperçu de disponibilité (temps réel) ── #}
+          <h6 class="text-uppercase text-muted mb-2" style="font-size:11px;letter-spacing:.08em;">Aperçu de la saison</h6>
+          <div id="apercu-reca" class="mb-4 p-3 rounded"
+               style="background:#F8FAFC;border:1px solid #E2E8F0;">
+            <div class="text-muted small">
+              Renseignez le temple, le jour et la semaine pour visualiser les dates générées
+              et repérer celles qui seraient déjà occupées.
+            </div>
+          </div>
+
           {# ── Commentaire ── #}
           <div class="mb-4">
             <label class="form-label fw-semibold">Commentaire <span class="text-muted fw-normal">(facultatif)</span></label>
@@ -168,6 +178,95 @@ function setMois(liste) {
   document.querySelectorAll('.mois-cb').forEach(function(cb) {
     cb.checked = liste.length ? liste.includes(parseInt(cb.value)) : false;
   });
+  rafraichirApercu();
 }
+
+// ── Aperçu de disponibilité en temps réel ──────────────────────────────────
+var apercuTimer = null;
+function planifierApercu() {
+  clearTimeout(apercuTimer);
+  apercuTimer = setTimeout(rafraichirApercu, 350);
+}
+function escapeHtmlReca(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function rafraichirApercu() {
+  var box    = document.getElementById('apercu-reca');
+  var temple = (document.querySelector('select[name="temple"]') || {}).value;
+  var jour   = (document.querySelector('select[name="jour_semaine"]') || {}).value;
+  var sem    = (document.querySelector('select[name="numero_semaine"]') || {}).value;
+  var hd     = (document.getElementById('id_heure_debut') || {}).value;
+  var hf     = (document.getElementById('id_heure_fin') || {}).value;
+  if (!temple || jour === '' || sem === '') {
+    box.innerHTML = '<div class="text-muted small">Renseignez le temple, le jour et la semaine pour '
+                  + 'visualiser les dates générées et repérer celles qui seraient déjà occupées.</div>';
+    return;
+  }
+  var params = new URLSearchParams();
+  params.set('temple', temple);
+  params.set('jour_semaine', jour);
+  params.set('numero_semaine', sem);
+  if (hd) params.set('heure_debut', hd);
+  if (hf) params.set('heure_fin', hf);
+  document.querySelectorAll('.mois-cb:checked').forEach(function (cb) {
+    params.append('mois_actifs', cb.value);
+  });
+  box.innerHTML = '<div class="text-muted small">Calcul en cours…</div>';
+  fetch('/reservations/api/apercu-recurrence/?' + params.toString())
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d.ok) {
+        box.innerHTML = '<div class="text-muted small">' + escapeHtmlReca(d.message || 'Aperçu indisponible.') + '</div>';
+        return;
+      }
+      if (!d.total) {
+        box.innerHTML = '<div class="text-muted small">Aucune date générée pour cette combinaison sur la saison '
+                      + escapeHtmlReca(d.saison) + '.</div>';
+        return;
+      }
+      var html = '<div class="d-flex flex-wrap gap-3 mb-2 small">'
+        + '<span class="fw-semibold" style="color:#0F2137;">Saison ' + escapeHtmlReca(d.saison) + ' · ' + d.total + ' tenue(s)</span>'
+        + '<span style="color:#16A34A;">✓ ' + d.libres + ' libre(s)</span>'
+        + (d.occupes ? '<span style="color:#DC2626;">✕ ' + d.occupes + ' à arbitrer</span>' : '')
+        + '</div>';
+      html += '<div class="d-flex flex-column gap-1">';
+      d.dates.forEach(function (it) {
+        var col = it.libre ? '#16A34A' : '#DC2626';
+        var ico = it.libre ? '✓' : '✕';
+        html += '<div class="d-flex align-items-center gap-2 small" '
+             + 'style="padding:4px 8px;border-radius:6px;background:white;border:1px solid #EEF1F4;">'
+             + '<span style="color:' + col + ';font-weight:600;">' + ico + '</span>'
+             + '<span style="min-width:150px;">' + escapeHtmlReca(it.label) + '</span>'
+             + (it.motif ? '<span class="text-muted">' + escapeHtmlReca(it.motif) + '</span>' : '')
+             + '</div>';
+      });
+      html += '</div>';
+      if (d.occupes) {
+        html += '<div class="text-muted mt-2" style="font-size:12px;">'
+             + 'Les dates occupées ne bloquent pas votre demande : l\'administration arbitrera '
+             + '(échange, déplacement ou autre temple).</div>';
+      }
+      box.innerHTML = html;
+    })
+    .catch(function () {
+      box.innerHTML = '<div class="text-muted small">Aperçu momentanément indisponible.</div>';
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  ['temple', 'jour_semaine', 'numero_semaine'].forEach(function (n) {
+    var el = document.querySelector('select[name="' + n + '"]');
+    if (el) el.addEventListener('change', rafraichirApercu);
+  });
+  ['id_heure_debut', 'id_heure_fin'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', planifierApercu);
+  });
+  document.querySelectorAll('.mois-cb').forEach(function (cb) {
+    cb.addEventListener('change', planifierApercu);
+  });
+});
 </script>
 {% endblock %}
