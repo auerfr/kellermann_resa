@@ -1144,6 +1144,45 @@ def occupation(request):
 
 
 @staff_required
+def relance_contacts(request):
+    """Relance des loges qui n'ont pas confirmé la saison : envoi d'un rappel
+    par email à celles qui en ont un, liste de celles à joindre autrement."""
+    from django.db.models import Q
+
+    if request.method == 'POST' and request.POST.get('action') == 'relancer':
+        pks = [int(x) for x in request.POST.getlist('loges') if x.isdigit()]
+        cibles = Loge.objects.filter(pk__in=pks).exclude(email='').exclude(email__isnull=True)
+        n = 0
+        for loge in cibles:
+            send_mail_kellermann(
+                subject="Rappel — Confirmation de votre calendrier / fiche de recensement",
+                message=(
+                    f"Bonjour,\n\n"
+                    f"Sauf erreur, nous n'avons pas encore reçu la confirmation de votre "
+                    f"calendrier de tenues (ou votre fiche de recensement) pour la nouvelle saison.\n\n"
+                    f"Merci de nous revenir dès que possible afin de finaliser la réservation "
+                    f"de vos temples et salles.\n\n"
+                    f"Bien fraternellement,\nLes Temples Kellermann"
+                ),
+                recipient_list=[loge.email],
+            )
+            n += 1
+        messages.success(request, f"{n} rappel(s) envoyé(s).")
+        log_evenement('envoi_emails_saison', f"Relance contacts : {n} email(s)",
+                      request=request, objet_type='systeme')
+        return redirect('administration:relance_contacts')
+
+    a_reconfirmer = Loge.objects.exclude(statut='inactive').filter(
+        statut='a_reconfirmer').select_related('obedience').order_by('nom')
+    avec_email = [l for l in a_reconfirmer if l.email]
+    sans_email = Loge.objects.exclude(statut='inactive').filter(
+        Q(email='') | Q(email__isnull=True)).select_related('obedience').order_by('nom')
+    return render(request, 'administration/relance_contacts.html', {
+        'avec_email': avec_email, 'sans_email': sans_email,
+    })
+
+
+@staff_required
 def sante_donnees(request):
     """Tableau de bord de la qualité des données : conflits, tenues orphelines,
     doublons, loges sans contact/récurrence, à reconfirmer."""

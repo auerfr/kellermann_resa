@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Relance des contacts{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h1 class="h3" style="color:#0F2137;">📣 Relance des contacts</h1>
+  <p class="text-muted mb-0">Loges qui n'ont pas confirmé la saison — relancez celles qui ont un email, joignez les autres autrement.</p>
+</div>
+
+{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="relancer">
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+      <strong>⏳ À reconfirmer, avec email ({{ avec_email|length }})</strong>
+      <div>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('.chk').forEach(c=>c.checked=true)">Tout cocher</button>
+        <button class="btn btn-sm btn-warning" onclick="return confirm('Envoyer un rappel aux loges cochées ?');">✉️ Envoyer le rappel</button>
+      </div>
+    </div>
+    <ul class="list-group list-group-flush">
+      {% for l in avec_email %}
+      <li class="list-group-item d-flex align-items-center gap-2">
+        <input type="checkbox" class="chk form-check-input" name="loges" value="{{ l.pk }}" checked>
+        <span class="flex-grow-1"><strong>{{ l.nom }}</strong> <span class="badge bg-light text-dark">{{ l.abreviation }}</span> — {{ l.nom_contact|default:"?" }}</span>
+        <a href="mailto:{{ l.email }}">{{ l.email }}</a>
+      </li>
+      {% empty %}
+      <li class="list-group-item text-success">Aucune loge à reconfirmer avec email. ✅</li>
+      {% endfor %}
+    </ul>
+  </div>
+</form>
+
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white"><strong>✉️ Sans email — à joindre par téléphone / courrier ({{ sans_email|length }})</strong></div>
+  <ul class="list-group list-group-flush">
+    {% for l in sans_email %}
+    <li class="list-group-item d-flex align-items-center gap-2">
+      <span class="flex-grow-1"><strong>{{ l.nom }}</strong> <span class="badge bg-light text-dark">{{ l.abreviation }}</span> — {{ l.nom_contact|default:"—" }} {% if l.statut == 'a_reconfirmer' %}<span class="badge badge-soft-warning">à reconfirmer</span>{% endif %}</span>
+      {% if l.telephone %}<a href="tel:{{ l.telephone }}" class="text-decoration-none">{{ l.telephone }}</a>{% else %}<span class="text-danger small">aucun contact</span>{% endif %}
+    </li>
+    {% empty %}
+    <li class="list-group-item text-success">Toutes les loges ont un email. ✅</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
