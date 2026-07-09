@@ -127,6 +127,10 @@
                 margin-right: 0.5rem;
                 min-width: 100px;
             }
+            /* Cellules sans libellé : pas de pseudo vide, contenu aligné à gauche
+               (évite l'effet « valeur justifiée à droite » sur mobile). */
+            .table td:not([data-label]) { justify-content: flex-start; gap: 0.5rem; }
+            .table td:not([data-label])::before { content: none; }
         }
 
         /* ── Footer ── */
