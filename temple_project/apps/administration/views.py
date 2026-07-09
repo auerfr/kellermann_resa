@@ -2348,7 +2348,7 @@ def validation_saison_admin(request):
                 pk__in=pks_selectionnes, annee=annee_cible, statut='attente'
             ).select_related('loge')
 
-            nb_email = nb_sans_email = nb_sans_token = 0
+            nb_email = nb_sans_email = nb_token_cree = 0
             for val in validations_attente:
                 loge = val.loge
                 nb_tenues = val.lignes.count()
@@ -2357,31 +2357,34 @@ def validation_saison_admin(request):
                     demande = DemandeAccesPortail.objects.filter(
                         loge=loge, statut='validee'
                     ).order_by('-created_at').first()
-                    if demande:
-                        portail_url = (
-                            f"{settings.SITE_URL.rstrip('/')}"
-                            f"/reservations/portail/{demande.token}/"
-                        ) if hasattr(settings, 'SITE_URL') else f"/reservations/portail/{demande.token}/"
-                        send_mail_kellermann(
-                            subject=f"Validation de votre calendrier — Saison {annee_cible}-{annee_cible + 1}",
-                            message=(
-                                f"Bonjour,\n\n"
-                                f"Nous vous invitons à valider le calendrier prévisionnel de vos tenues "
-                                f"pour la saison {annee_cible}-{annee_cible + 1} ({periode_cible}).\n\n"
-                                f"{nb_tenues} tenue(s) sont planifiées pour votre loge.\n\n"
-                                f"Accédez à votre espace loge pour confirmer, signaler un déplacement "
-                                f"ou une annulation :\n{portail_url}\n\n"
-                                f"Bien fraternellement,\nLes Temples Kellermann"
-                            ),
-                            recipient_list=[loge.email],
+                    if not demande:
+                        # Pas d'accès portail → on le crée automatiquement pour
+                        # que la loge puisse valider en ligne.
+                        demande = DemandeAccesPortail.objects.create(
+                            loge=loge, nom_venerable=loge.nom_contact or loge.nom,
+                            email=loge.email, statut='validee',
                         )
-                        val.statut     = 'ouverte'
-                        val.date_envoi = timezone.now()
-                        nb_email += 1
-                    else:
-                        # Email présent mais pas de token portail
-                        val.statut = 'ouverte'
-                        nb_sans_token += 1
+                        nb_token_cree += 1
+                    portail_url = (
+                        f"{settings.SITE_URL.rstrip('/')}"
+                        f"/reservations/portail/{demande.token}/"
+                    ) if hasattr(settings, 'SITE_URL') else f"/reservations/portail/{demande.token}/"
+                    send_mail_kellermann(
+                        subject=f"Validation de votre calendrier — Saison {annee_cible}-{annee_cible + 1}",
+                        message=(
+                            f"Bonjour,\n\n"
+                            f"Nous vous invitons à valider le calendrier prévisionnel de vos tenues "
+                            f"pour la saison {annee_cible}-{annee_cible + 1} ({periode_cible}).\n\n"
+                            f"{nb_tenues} tenue(s) sont planifiées pour votre loge.\n\n"
+                            f"Accédez à votre espace loge pour confirmer, signaler un déplacement "
+                            f"ou une annulation :\n{portail_url}\n\n"
+                            f"Bien fraternellement,\nLes Temples Kellermann"
+                        ),
+                        recipient_list=[loge.email],
+                    )
+                    val.statut     = 'ouverte'
+                    val.date_envoi = timezone.now()
+                    nb_email += 1
                 else:
                     val.statut = 'ouverte'
                     nb_sans_email += 1
@@ -2389,10 +2392,10 @@ def validation_saison_admin(request):
                 val.save()
 
             parts = [f"{nb_email} email(s) envoyé(s)"]
-            if nb_sans_token:
-                parts.append(f"{nb_sans_token} sans token portail")
+            if nb_token_cree:
+                parts.append(f"{nb_token_cree} accès portail créé(s)")
             if nb_sans_email:
-                parts.append(f"{nb_sans_email} sans adresse email")
+                parts.append(f"{nb_sans_email} sans adresse email (non envoyé)")
             messages.success(request, "Emails envoyés — " + ", ".join(parts) + ".")
             log_evenement('envoi_emails_saison',
                 f"Envoi emails validation saison {annee_cible}-{annee_cible + 1} : {', '.join(parts)}",
