@@ -100,8 +100,11 @@ def detail_loge(request, pk):
             'date': r.date, 'heure_debut': r.heure_debut, 'heure_fin': r.heure_fin,
             'statut': r.statut, 'get_statut_display': r.get_statut_display(),
             'type_code': 'temple', 'type_label': 'Temple',
+            'type_resa': r.get_type_reservation_display(),
+            'type_resa_code': r.type_reservation,
+            'sous_type': r.get_sous_type_display() if r.sous_type and r.sous_type != 'standard' else '',
             'lieu': str(r.temple) if r.temple else '—',
-            'detail': '', 'resa_pk': r.pk, 'temple_pk': r.temple_id,
+            'detail': (r.commentaire or '')[:60], 'resa_pk': r.pk, 'temple_pk': r.temple_id,
         }
 
     def _s(r):

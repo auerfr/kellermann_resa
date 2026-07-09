@@ -158,6 +158,10 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
               <td>
                 {% if e.type_code == 'temple' %}
                   <span class="badge" style="background:#0F2137;color:#C8A84B;">Temple</span>
+                  {% if e.type_resa_code == 'exceptionnelle' %}<span class="badge" style="background:#ca8a04;color:#fff;">{{ e.type_resa }}</span>
+                  {% elif e.type_resa_code == 'congres' %}<span class="badge" style="background:#7c3aed;color:#fff;">{{ e.type_resa }}</span>
+                  {% else %}<span class="badge bg-light text-dark">{{ e.type_resa }}</span>{% endif %}
+                  {% if e.sous_type %}<span class="badge" style="background:#0ea5e9;color:#fff;" title="Nature de la tenue">{{ e.sous_type }}</span>{% endif %}
                 {% elif e.type_code == 'agapes' %}
                   <span class="badge" style="background:#92400E;color:white;">Agapes</span>
                 {% elif e.type_code == 'cabinet_reflexion' %}
