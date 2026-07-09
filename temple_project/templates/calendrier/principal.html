@@ -47,6 +47,9 @@
   .agenda-titre { font-weight: 600; color: #0F2137; }
   .agenda-heure { font-size: 12px; color: #475569; white-space: nowrap; }
   .agenda-sub { font-size: 12px; color: #64748B; margin-top: 1px; }
+  .mv-btn { color: #cbd5e1; border: none; background: transparent; font-size: 13px; padding: 4px 6px; }
+  .mv-btn.active { background: #C8A84B; color: #0F2137; font-weight: 600; }
+  .mini-dow { text-align: center; font-size: 11px; color: #94A3B8; }
   .sheet-handle { display: none; }
   @media (max-width: 768px) {
     /* Rangées de la vue liste : masquer l'heure + la pastille natives,
@@ -269,6 +272,37 @@
   <div id="dispo-result"></div>
 </div>
 
+{# Bascule de vue (mobile uniquement) #}
+<div class="d-md-none mb-2">
+  <div class="d-flex gap-1 p-1 rounded" style="background:#0F2137;">
+    <button type="button" class="btn btn-sm flex-fill mv-btn active" data-mv="mois"   onclick="setMobileView('mois')">Mois</button>
+    <button type="button" class="btn btn-sm flex-fill mv-btn"        data-mv="agenda" onclick="setMobileView('agenda')">Agenda</button>
+    <button type="button" class="btn btn-sm flex-fill mv-btn"        data-mv="jour"   onclick="setMobileView('jour')">Jour</button>
+  </div>
+</div>
+
+{# Mini-mois d'occupation (mobile) — points par créneau (colonne) et par temple (couleur) #}
+<div id="mini-mois" class="d-md-none" style="display:none;">
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body p-2">
+      <div class="d-flex align-items-center justify-content-between mb-2">
+        <button class="btn btn-sm btn-outline-secondary px-3" onclick="miniNav(-1)">‹</button>
+        <div class="fw-semibold text-capitalize" id="mini-title" style="color:#0F2137;"></div>
+        <button class="btn btn-sm btn-outline-secondary px-3" onclick="miniNav(1)">›</button>
+      </div>
+      <div class="d-grid mb-1" style="grid-template-columns:repeat(7,1fr);gap:2px;">
+        <div class="mini-dow">L</div><div class="mini-dow">M</div><div class="mini-dow">M</div>
+        <div class="mini-dow">J</div><div class="mini-dow">V</div><div class="mini-dow">S</div><div class="mini-dow">D</div>
+      </div>
+      <div id="mini-grid" class="d-grid" style="grid-template-columns:repeat(7,1fr);gap:3px;"></div>
+      <div id="mini-legend" class="mt-2"></div>
+      <div class="text-center text-muted mt-1" style="font-size:11px;">
+        Colonnes par jour : matin · après-midi · soir — touchez un jour pour le détail
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="calendrier"></div>
 
 <div id="panel-overlay" onclick="closePanel()"></div>
@@ -319,7 +353,99 @@ function buildUrl(start, end) {
   return url;
 }
 
-function refreshCalendar() { if (calendar) calendar.refetchEvents(); }
+let miniDate = new Date(); miniDate.setDate(1);
+let mobileView = 'mois';
+
+function refreshCalendar() {
+  if (calendar) calendar.refetchEvents();
+  if (mobileView === 'mois' && window.innerWidth < 768) renderMiniMois();
+}
+
+// ── Mini-mois d'occupation (mobile) ────────────────────────────────────────
+function _creneauIndex(c) { return c === 'matin' ? 0 : (c === 'aprem' ? 1 : 2); }
+function _templeColor(p, ev) {
+  if (p.type === 'temple' && TEMPLE_COLORS[p.temple]) return TEMPLE_COLORS[p.temple].border;
+  return ev.borderColor || '#64748B';
+}
+function renderMiniLegend() {
+  var html = '';
+  Object.keys(TEMPLE_COLORS).forEach(function (name) {
+    html += '<span style="font-size:11px;color:#475569;margin:0 8px 2px 0;white-space:nowrap;">'
+          + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'
+          + TEMPLE_COLORS[name].border + ';margin-right:3px;vertical-align:middle;"></span>'
+          + name.replace('Temple ', '') + '</span>';
+  });
+  html += '<span style="font-size:11px;color:#475569;white-space:nowrap;">'
+        + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#64748B;margin-right:3px;vertical-align:middle;"></span>Salle / autre</span>';
+  document.getElementById('mini-legend').innerHTML =
+    '<div style="display:flex;flex-wrap:wrap;justify-content:center;">' + html + '</div>';
+}
+function renderMiniMois() {
+  var y = miniDate.getFullYear(), m = miniDate.getMonth();
+  var first = new Date(y, m, 1), last = new Date(y, m + 1, 0);
+  var mm = String(m + 1).padStart(2, '0');
+  document.getElementById('mini-title').textContent =
+    first.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  var startStr = y + '-' + mm + '-01';
+  var endStr   = y + '-' + mm + '-' + String(last.getDate()).padStart(2, '0');
+  fetch(buildUrl(startStr, endStr)).then(function (r) { return r.json(); }).then(function (evs) {
+    var days = {};
+    evs.forEach(function (ev) {
+      var p = ev.extendedProps || {};
+      if (p.type !== 'temple' && p.type !== 'salle') return;
+      var dstr = (ev.start || '').slice(0, 10);
+      if (!dstr) return;
+      var dd = parseInt(dstr.slice(8, 10), 10);
+      days[dd] = days[dd] || [[], [], []];
+      days[dd][_creneauIndex(p.creneau)].push(_templeColor(p, ev));
+    });
+    var offset = (first.getDay() + 6) % 7;   // lundi = 0
+    var today = new Date();
+    var isThisMonth = today.getFullYear() === y && today.getMonth() === m;
+    var html = '';
+    for (var i = 0; i < offset; i++) html += '<div></div>';
+    for (var d = 1; d <= last.getDate(); d++) {
+      var slots = days[d] || [[], [], []];
+      var cols = '';
+      for (var s = 0; s < 3; s++) {
+        var dots = '';
+        if (slots[s].length) {
+          slots[s].slice(0, 4).forEach(function (c) {
+            dots += '<span style="width:5px;height:5px;border-radius:50%;background:' + c + ';"></span>';
+          });
+        } else {
+          dots = '<span style="width:5px;height:5px;border-radius:50%;background:#E5E7EB;"></span>';
+        }
+        cols += '<span style="display:flex;flex-direction:column;align-items:center;gap:1px;">' + dots + '</span>';
+      }
+      var isToday = isThisMonth && today.getDate() === d;
+      var dateStr = y + '-' + mm + '-' + String(d).padStart(2, '0');
+      html += '<div onclick="openMiniDay(\'' + dateStr + '\')" style="cursor:pointer;min-height:46px;'
+            + 'border-radius:8px;border:1px solid ' + (isToday ? '#C8A84B' : '#EEF1F4') + ';background:#fff;'
+            + 'display:flex;flex-direction:column;align-items:center;padding:3px 0;gap:2px;">'
+            + '<span style="font-size:11px;color:#334155;' + (isToday ? 'font-weight:600;' : '') + '">' + d + '</span>'
+            + '<span style="display:flex;gap:3px;">' + cols + '</span></div>';
+    }
+    document.getElementById('mini-grid').innerHTML = html;
+  });
+}
+function miniNav(delta) { miniDate.setMonth(miniDate.getMonth() + delta); renderMiniMois(); }
+function openMiniDay(dateStr) { setMobileView('jour'); calendar.changeView('timeGridDay', dateStr); }
+function setMobileView(v) {
+  mobileView = v;
+  document.querySelectorAll('.mv-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.mv === v); });
+  var mini = document.getElementById('mini-mois');
+  var cal  = document.getElementById('calendrier');
+  if (v === 'mois') {
+    mini.style.display = ''; cal.style.display = 'none';
+    renderMiniMois();
+  } else {
+    mini.style.display = 'none'; cal.style.display = '';
+    if (v === 'agenda') calendar.changeView('listMonth', miniDate);
+    else                calendar.changeView('timeGridDay', new Date());
+    calendar.updateSize();
+  }
+}
 
 document.addEventListener("DOMContentLoaded", function() {
   const isMobile = window.innerWidth < 768;
@@ -330,7 +456,7 @@ document.addEventListener("DOMContentLoaded", function() {
     headerToolbar: {
       left:   "prev,next today",
       center: "title",
-      right:  isMobile ? "listMonth,dayGridMonth,timeGridDay" : "dayGridMonth,timeGridWeek,timeGridDay,listMonth",
+      right:  isMobile ? "" : "dayGridMonth,timeGridWeek,timeGridDay,listMonth",
     },
     navLinks: true,
     navLinkDayClick: "timeGridDay",
@@ -450,6 +576,7 @@ document.addEventListener("DOMContentLoaded", function() {
     },
   });
   calendar.render();
+  if (isMobile) { renderMiniLegend(); setMobileView('mois'); }
 });
 
 function openPanel(event) {
