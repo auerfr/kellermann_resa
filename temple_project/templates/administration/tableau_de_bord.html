@@ -11,18 +11,17 @@
     min-height: calc(100vh - 60px);
   }
 
-  /* ── KPI cards ────────────────────────────────────────────────────────── */
-  .kpi-card {
-    border-radius: 16px !important;
-    border: none !important;
-    box-shadow: 0 4px 15px rgba(0,0,0,.15);
-    transition: transform .15s, box-shadow .15s;
-    cursor: default;
+  /* ── KPI tiles (plates) ───────────────────────────────────────────────── */
+  .kpi-tile {
+    background: #fff; border: 1px solid #EAECEF; border-radius: 12px;
+    padding: 16px 18px; height: 100%;
+    display: flex; justify-content: space-between; align-items: center;
+    transition: border-color .15s;
   }
-  .kpi-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 10px 28px rgba(0,0,0,.20) !important;
-  }
+  a:hover .kpi-tile { border-color: #C8A84B; }
+  .kpi-num { font-size: 2rem; font-weight: 600; line-height: 1; }
+  .kpi-lbl { font-size: 13px; color: #64748B; margin-top: 4px; }
+  .kpi-ico { font-size: 26px; opacity: .28; }
 
   /* ── Section cards ────────────────────────────────────────────────────── */
   .tdb-card {
@@ -131,81 +130,35 @@
   </div>
 </div>
 
-{# ── KPI cards ────────────────────────────────────────────────────────────── #}
+{# ── KPI cards (plates) ───────────────────────────────────────────────────── #}
 <div class="row g-3 mb-4">
-
-  {# Réservations #}
   <div class="col-6 col-md-3">
-    <div class="card border-0 h-100 kpi-card"
-         style="background:linear-gradient(135deg,#1E40AF,#3B82F6);">
-      <div class="card-body p-4 d-flex flex-column justify-content-between">
-        <div class="text-end" style="font-size:2rem;opacity:.7;line-height:1;">🏛</div>
-        <div>
-          <div style="font-size:2.8rem;font-weight:700;color:white;line-height:1;margin-bottom:6px;">
-            {{ nb_reservations }}
-          </div>
-          <div style="color:rgba(255,255,255,.85);font-size:13px;font-weight:500;">
-            Réservations
-          </div>
-        </div>
-      </div>
+    <a href="{% url 'exports:reporting' %}" class="text-decoration-none">
+    <div class="kpi-tile">
+      <div><div class="kpi-num" style="color:#0F2137;">{{ nb_reservations }}</div><div class="kpi-lbl">Réservations</div></div>
+      <span class="kpi-ico">🏛</span>
+    </div></a>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="kpi-tile">
+      <div><div class="kpi-num" style="color:{% if nb_attente_salles %}#ca8a04{% else %}#16a34a{% endif %};">{{ nb_attente_salles }}</div><div class="kpi-lbl">Salles en attente</div></div>
+      <span class="kpi-ico">⏳</span>
     </div>
   </div>
-
-  {# En attente #}
   <div class="col-6 col-md-3">
-    <div class="card border-0 h-100 kpi-card"
-         style="background:linear-gradient(135deg,#D97706,#F59E0B);">
-      <div class="card-body p-4 d-flex flex-column justify-content-between">
-        <div class="text-end" style="font-size:2rem;opacity:.7;line-height:1;">⏳</div>
-        <div>
-          <div style="font-size:2.8rem;font-weight:700;color:white;line-height:1;margin-bottom:6px;">
-            {{ nb_attente_salles }}
-          </div>
-          <div style="color:rgba(255,255,255,.85);font-size:13px;font-weight:500;">
-            En attente
-          </div>
-        </div>
-      </div>
-    </div>
+    <a href="{% url 'administration:annuaire' %}" class="text-decoration-none">
+    <div class="kpi-tile">
+      <div><div class="kpi-num" style="color:#0F2137;">{{ nb_loges }}</div><div class="kpi-lbl">Loges actives</div></div>
+      <span class="kpi-ico">✅</span>
+    </div></a>
   </div>
-
-  {# Loges #}
   <div class="col-6 col-md-3">
-    <div class="card border-0 h-100 kpi-card"
-         style="background:linear-gradient(135deg,#059669,#34D399);">
-      <div class="card-body p-4 d-flex flex-column justify-content-between">
-        <div class="text-end" style="font-size:2rem;opacity:.7;line-height:1;">✅</div>
-        <div>
-          <div style="font-size:2.8rem;font-weight:700;color:white;line-height:1;margin-bottom:6px;">
-            {{ nb_loges }}
-          </div>
-          <div style="color:rgba(255,255,255,.85);font-size:13px;font-weight:500;">
-            Loges actives
-          </div>
-        </div>
-      </div>
-    </div>
+    <a href="{% url 'administration:regles_liste' %}" class="text-decoration-none">
+    <div class="kpi-tile">
+      <div><div class="kpi-num" style="color:#0F2137;">{{ nb_regles }}</div><div class="kpi-lbl">Règles actives</div></div>
+      <span class="kpi-ico">📋</span>
+    </div></a>
   </div>
-
-  {# Règles #}
-  <div class="col-6 col-md-3">
-    <div class="card border-0 h-100 kpi-card"
-         style="background:linear-gradient(135deg,#7C3AED,#A78BFA);">
-      <div class="card-body p-4 d-flex flex-column justify-content-between">
-        <div class="text-end" style="font-size:2rem;opacity:.7;line-height:1;">📋</div>
-        <div>
-          <div style="font-size:2.8rem;font-weight:700;color:white;line-height:1;margin-bottom:6px;">
-            {{ nb_regles }}
-          </div>
-          <div style="color:rgba(255,255,255,.85);font-size:13px;font-weight:500;">
-            Règles actives
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
 </div>
 
 {# ── Alerte tout est à jour ───────────────────────────────────────────────── #}
