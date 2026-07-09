@@ -69,6 +69,14 @@
       display: block; width: 40px; height: 4px; border-radius: 99px;
       background: #CBD5E1; margin: 8px auto 4px;
     }
+
+    /* Vue mois mobile : numéro de jour lisible et tapable, pastilles nettes */
+    .fc-daygrid-day { cursor: pointer; }
+    .fc-daygrid-day-top { justify-content: center; }
+    .fc-daygrid-day-number { font-size: 12px; padding: 4px 6px; }
+    .fc-daygrid-more-link { font-size: 10px; font-weight: 600; color: #0F2137; }
+    .fc-daygrid-event-dot { border-width: 4px; }
+    .fc-daygrid-dot-event .fc-event-title { font-size: 10px; }
   }
 </style>
 {% endblock %}
@@ -322,7 +330,13 @@ document.addEventListener("DOMContentLoaded", function() {
     headerToolbar: {
       left:   "prev,next today",
       center: "title",
-      right:  isMobile ? "listMonth,dayGridMonth,timeGrid3Day" : "dayGridMonth,timeGridWeek,listMonth",
+      right:  isMobile ? "listMonth,dayGridMonth,timeGridDay" : "dayGridMonth,timeGridWeek,timeGridDay,listMonth",
+    },
+    navLinks: true,
+    navLinkDayClick: "timeGridDay",
+    dateClick: function(info) {
+      // N'agit que depuis la vue mois : ouvrir la journée cliquée
+      if (info.view.type === "dayGridMonth") calendar.changeView("timeGridDay", info.dateStr);
     },
     slotMinTime: "07:00:00", slotMaxTime: "24:00:00",
     scrollTime: "19:00:00", slotDuration: "00:30:00",
@@ -371,10 +385,14 @@ document.addEventListener("DOMContentLoaded", function() {
 
       // ── Vue mensuelle ────────────────────────────────────────────
       if (view === 'dayGridMonth') {
-        var label;
+        // Mobile : rendu en pastille (list-item) — FullCalendar ajoute le point coloré,
+        // on ne fournit qu'un libellé court, sans bloc plein qui se chevauche.
         if (w < 768) {
-          label = emoji + ' ' + (p.loge_court || arg.event.title);               // 🌙 LV
-        } else if (w < 1200) {
+          return { html: '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+                 + pre + escapeHtml(p.loge_court || arg.event.title) + '</span>' };
+        }
+        var label;
+        if (w < 1200) {
           label = emoji + ' ' + (p.loge_court || arg.event.title);               // 🌙 Liberté
         } else {
           label = emoji + ' ' + (p.loge_nom || arg.event.title)
@@ -383,10 +401,11 @@ document.addEventListener("DOMContentLoaded", function() {
         return { html: '<div style="padding:0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + pre + label + '</div>' };
       }
 
-      // ── Vue semaine ──────────────────────────────────────────────
-      if (view === 'timeGridWeek') {
+      // ── Vue semaine / jour ───────────────────────────────────────
+      if (view === 'timeGridWeek' || view === 'timeGridDay') {
+        var isDay = view === 'timeGridDay';
         var twLabel;
-        if (w < 768) {
+        if (w < 768 && !isDay) {
           twLabel = emoji + ' ' + fmtH(arg.event.start);                         // 🌙 19h
         } else if (w < 1200) {
           twLabel = emoji + ' ' + (p.loge_court || arg.event.title)
@@ -403,6 +422,8 @@ document.addEventListener("DOMContentLoaded", function() {
     },
     eventDidMount: function(info) {
       var p = info.event.extendedProps;
+      // Vue mois mobile : rendu en pastilles (list-item), on ne teinte pas le bloc
+      if (info.view.type === "dayGridMonth" && window.innerWidth < 768) return;
       // Loge non confirmée : marqueur NON coloré (pointillés + hachures)
       if (p.a_reconfirmer) {
         info.el.style.backgroundColor = '#EEF2F6';
@@ -421,7 +442,12 @@ document.addEventListener("DOMContentLoaded", function() {
     eventClick: function(info) { openPanel(info.event); },
     eventTimeFormat: { hour: "2-digit", minute: "2-digit", hour12: false },
     displayEventEnd: true, height: "auto",
-    views: { timeGrid3Day: { type: "timeGrid", duration: { days: 3 }, buttonText: "3 jours" } },
+    views: {
+      dayGridMonth: {
+        dayMaxEvents: isMobile ? 3 : false,
+        eventDisplay: isMobile ? "list-item" : "auto",
+      },
+    },
   });
   calendar.render();
 });
