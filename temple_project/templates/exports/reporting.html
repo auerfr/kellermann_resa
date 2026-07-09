@@ -10,11 +10,13 @@
     min-height: calc(100vh - 60px);
   }
   .kpi-card {
-    transition: transform .15s, box-shadow .15s;
+    border: 1px solid #EAECEF !important;
+    box-shadow: none !important;
+    border-radius: 12px !important;
+    transition: border-color .15s;
   }
   .kpi-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0,0,0,.09) !important;
+    border-color: #C8A84B !important;
   }
   .trend-up   { color: #16A34A; font-size: 11px; font-weight: 600; }
   .trend-down { color: #DC2626; font-size: 11px; font-weight: 600; }

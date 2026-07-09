@@ -472,21 +472,44 @@
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                         ⚙️ Administration
                     </a>
-                    <ul class="dropdown-menu">
+                    <ul class="dropdown-menu" style="max-height:78vh;overflow-y:auto;">
+                        <li><h6 class="dropdown-header">Pilotage</h6></li>
                         <li><a class="dropdown-item" href="{% url 'administration:accueil' %}">🏠 Accueil (pilotage)</a></li>
                         <li><a class="dropdown-item" href="/admin/">📊 Tableau de bord</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Loges &amp; contacts</h6></li>
                         <li><a class="dropdown-item" href="{% url 'administration:annuaire' %}">📇 Annuaire des loges</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:relance_contacts' %}">📣 Relance des contacts</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:loges_saison' %}">🔄 Suivi loges / saison</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Réservations &amp; créneaux</h6></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:reservation_directe' %}">➕ Réservation directe</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:occupation' %}">📊 Occupation / capacité</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:conflits' %}">⚠️ Conflits / catapultages</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Saison</h6></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:gestion_saison' %}">📅 Gestion saison</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:regenerer' %}">🔄 Régénérer les tenues</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:validation_saison_admin' %}">✉️ Validation de saison</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:annonces_liste' %}">📢 Annonces / Pop-up</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Finances &amp; statistiques</h6></li>
                         <li><a class="dropdown-item" href="{% url 'administration:facturation' %}">💶 Facturation</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:statistiques' %}">📈 Statistiques</a></li>
-                        <li><a class="dropdown-item" href="{% url 'administration:sante_donnees' %}">🩺 Santé des données</a></li>
-                        <li><a class="dropdown-item" href="{% url 'administration:conflits' %}">⚠️ Conflits / catapultages</a></li>
-                        <li><a class="dropdown-item" href="{% url 'administration:occupation' %}">📊 Occupation / capacité</a></li>
-                        <li><a class="dropdown-item" href="{% url 'administration:journal' %}">📋 Journal de traçabilité</a></li>
-                        <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="/exports/reporting/">📊 Reporting</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header">Données &amp; système</h6></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:import_excel' %}">📂 Importer Excel</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:export_excel' %}">📤 Exporter les données</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:template_excel' %}">📥 Template d'import</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:backup' %}">💾 Sauvegarde</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:salles_liste' %}">🚪 Salles</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:regles_liste' %}">📋 Règles de récurrence</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:agapes_traiteur' %}">🍽 Agapes</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:sante_donnees' %}">🩺 Santé des données</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:journal' %}">📋 Journal de traçabilité</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:portail_acces_admin' %}">🔑 Accès portails</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:parametres' %}">⚙️ Paramètres</a></li>
                     </ul>
                 </li>
                 {% endif %}
