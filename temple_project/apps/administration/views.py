@@ -19,11 +19,28 @@ from .models import Parametres, JournalEvenement, Annonce
 from .journal import log_evenement
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from functools import wraps
+from django.core.exceptions import PermissionDenied
+from django.contrib.auth.views import redirect_to_login
+
+
+def staff_required(view_func):
+    """Réserve la vue aux administrateurs (is_staff) : les membres connectés non
+    staff reçoivent un 403, les visiteurs sont redirigés vers la connexion.
+    Protège notamment les coordonnées des loges (annuaire, fiches)."""
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
+        if not request.user.is_staff:
+            raise PermissionDenied
+        return view_func(request, *args, **kwargs)
+    return _wrapped
 
 
 # ── Tableau de bord ───────────────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def tableau_de_bord(request):
     reservations_attente  = Reservation.objects.filter(statut='attente').select_related('loge', 'temple').order_by('date')
     reservations_recentes = Reservation.objects.order_by('-created_at')[:10]
@@ -90,7 +107,7 @@ def tarif_reservation(resa, params=None):
 
 # ── Validation réservations ───────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def valider_reservation(request, pk):
     resa = get_object_or_404(Reservation, pk=pk)
 
@@ -171,7 +188,7 @@ def valider_reservation(request, pk):
     })
 
 
-@login_required
+@staff_required
 def valider_reservation_salle(request, pk):
     resa = get_object_or_404(ReservationSalle, pk=pk)
     is_cabinet = resa.salle.type_salle == 'cabinet_reflexion'
@@ -308,7 +325,7 @@ Détails :
         print(f"Erreur email décision : {e}")
 
 
-@login_required
+@staff_required
 def valider_acces_portail(request, pk):
     demande = get_object_or_404(DemandeAccesPortail, pk=pk)
 
@@ -412,7 +429,7 @@ Détails :
 
 # ── Règles de récurrence ──────────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def regles_liste(request):
     regles = RegleRecurrence.objects.select_related('loge', 'loge__obedience', 'temple').order_by('temple__nom', 'jour_semaine', 'numero_semaine')
     if request.GET.get('temple'):
@@ -426,7 +443,7 @@ def regles_liste(request):
     })
 
 
-@login_required
+@staff_required
 def regle_form(request, pk=None):
     regle = get_object_or_404(RegleRecurrence, pk=pk) if pk else None
     if request.method == 'POST':
@@ -481,7 +498,7 @@ def regle_form(request, pk=None):
     })
 
 
-@login_required
+@staff_required
 def regle_supprimer(request, pk):
     regle = get_object_or_404(RegleRecurrence, pk=pk)
     if request.method == 'POST':
@@ -494,7 +511,7 @@ def regle_supprimer(request, pk):
 
 # ── Regénération intelligente ─────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def regenerer_intelligent(request):
     if request.method == 'POST':
         annee     = int(request.POST.get('annee', date.today().year))
@@ -575,7 +592,7 @@ def regenerer_intelligent(request):
     })
 
 
-@login_required
+@staff_required
 def regenerer_conflits(request):
     """Rapport des conflits de régénération : pour chaque tenue récurrente qui
     n'a pas pu être créée (temple occupé), propose les temples LIBRES du créneau
@@ -662,7 +679,7 @@ def _exclure_date_regle(resa):
         regle.save(update_fields=['dates_exclues'])
 
 
-@login_required
+@staff_required
 def echanger_tenue(request):
     """Déplace exceptionnellement UNE tenue vers un temple libre (échange
     bienveillant), libérant ainsi le temple d'origine. La tenue est détachée de
@@ -691,7 +708,7 @@ def echanger_tenue(request):
     return redirect(nxt)
 
 
-@login_required
+@staff_required
 def deplacer_tenue(request):
     """Déplace exceptionnellement UNE tenue vers une autre DATE (échange de dates
     entre loges), avec contrôle du créneau. La tenue est détachée de sa règle
@@ -744,7 +761,7 @@ def deplacer_tenue(request):
     return redirect(nxt)
 
 
-@login_required
+@staff_required
 def annuler_tenue(request):
     """Supprime UNE tenue (occurrence), en marquant sa date comme exclue sur sa
     règle pour qu'elle ne soit pas recréée à la régénération. Utile pour retirer
@@ -966,7 +983,7 @@ def _scan_conflits():
     return confs
 
 
-@login_required
+@staff_required
 def conflits(request):
     """Page de gestion des conflits / catapultages (lecture + annulation)."""
     if request.method == 'POST' and request.POST.get('action') == 'annuler':
@@ -1090,7 +1107,7 @@ def _creneaux_libres(annee, temple_id=None):
     return out
 
 
-@login_required
+@staff_required
 def occupation(request):
     defaut = date.today().year if date.today().month >= 7 else date.today().year - 1
     try:
@@ -1126,7 +1143,7 @@ def occupation(request):
     return render(request, 'administration/occupation.html', ctx)
 
 
-@login_required
+@staff_required
 def annuaire(request):
     """Annuaire admin : toutes les loges avec coordonnées (association, contact,
     email, téléphone) et créneaux, pour joindre facilement une structure."""
@@ -1168,7 +1185,7 @@ def annuaire(request):
     })
 
 
-@login_required
+@staff_required
 def audit_export_excel(request):
     """Export Excel d'audit (à transmettre par mail) : tenues orphelines,
     doublons le même jour, loges sans contact, loges sans récurrence."""
@@ -1297,7 +1314,7 @@ def audit_export_excel(request):
 
 # ── Import Excel ──────────────────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def import_excel(request):
     errors = []
     stats  = None
@@ -1338,7 +1355,7 @@ def _style_row(ws, row, vals, thin, ctr, fill=None):
         c.border = thin; c.alignment = ctr
         if fill: c.fill = fill
 
-@login_required
+@staff_required
 def telecharger_template_excel(request):
     """Template vierge avec exemples, listes déroulantes et onglet Référence."""
     from openpyxl.utils import get_column_letter
@@ -1436,7 +1453,7 @@ def telecharger_template_excel(request):
     return response
 
 
-@login_required
+@staff_required
 def telecharger_export_excel(request):
     """Export des données existantes (loges + règles) au même format que le template."""
     from openpyxl.utils import get_column_letter
@@ -1500,7 +1517,7 @@ def telecharger_export_excel(request):
 
 # ── Génération annuelle ───────────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def generer_reservations_annuelles(request):
     if request.method == 'POST':
         annee = int(request.POST.get('annee', date.today().year + 1))
@@ -1526,7 +1543,7 @@ def generer_reservations_annuelles(request):
 
 # ── Reset / Nettoyage calendrier ─────────────────────────────────────────────
 
-@login_required
+@staff_required
 def reset_calendrier(request):
     today = date.today()
     annees = list(range(today.year - 2, today.year + 3))
@@ -1702,7 +1719,7 @@ def _dry_run_saison(annee):
     return lignes
 
 
-@login_required
+@staff_required
 def gestion_saison(request):
     # Statistiques par saison
     current_year = date.today().year
@@ -1892,7 +1909,7 @@ def gestion_saison(request):
     })
 
 
-@login_required
+@staff_required
 def preview_saison_excel(request):
     """Export Excel du dry-run groupé par loge."""
     from collections import defaultdict
@@ -2033,7 +2050,7 @@ def preview_saison_excel(request):
     return response
 
 
-@login_required
+@staff_required
 def preview_saison_pdf(request):
     """Export PDF du dry-run groupé par loge."""
     from io import BytesIO
@@ -2243,7 +2260,7 @@ def preview_saison_pdf(request):
     return response
 
 
-@login_required
+@staff_required
 def validation_saison_admin(request):
     """Dashboard de validation de saison par les loges."""
     from django.utils import timezone
@@ -2454,7 +2471,7 @@ def validation_saison_admin(request):
     })
 
 
-@login_required
+@staff_required
 def telecharger_backup(request):
     """Télécharge la base de données SQLite en tant que sauvegarde."""
     import os
@@ -2482,7 +2499,7 @@ def telecharger_backup(request):
         return response
 
 
-@login_required
+@staff_required
 def restaurer_backup(request):
     """Permet de restaurer une sauvegarde de la base de données."""
     import os
@@ -2948,7 +2965,7 @@ def _calculer_dates_regle(regle, annee):
 
 # ── Paramètres ────────────────────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def parametres(request):
     params = Parametres.get_instance()
     if request.method == 'POST':
@@ -2967,7 +2984,7 @@ def parametres(request):
     return render(request, 'administration/parametres.html', {'params': params})
 
 
-@login_required
+@staff_required
 def tester_smtp(request):
     if request.method != 'POST':
         return redirect('administration:parametres')
@@ -2990,7 +3007,7 @@ def tester_smtp(request):
 
 # ── Gestion des salles ────────────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def salles_liste(request):
     salles = SalleReunion.objects.all().order_by('nom')
     return render(request, 'administration/salles_liste.html', {
@@ -2999,7 +3016,7 @@ def salles_liste(request):
     })
 
 
-@login_required
+@staff_required
 def salle_form(request, pk=None):
     salle = get_object_or_404(SalleReunion, pk=pk) if pk else None
     if request.method == 'POST':
@@ -3029,7 +3046,7 @@ def salle_form(request, pk=None):
     })
 
 
-@login_required
+@staff_required
 def salle_supprimer(request, pk):
     salle = get_object_or_404(SalleReunion, pk=pk)
     if request.method == 'POST':
@@ -3057,7 +3074,7 @@ def _couverts_admin(t):
     return (0, True)
 
 
-@login_required
+@staff_required
 def agapes_traiteur(request):
     """Vue synthétique agapes + banquets pour le traiteur."""
     today = date.today()
@@ -3146,7 +3163,7 @@ def agapes_traiteur(request):
     return render(request, 'administration/agapes_traiteur.html', context)
 
 
-@login_required
+@staff_required
 def agapes_export_excel(request):
     """Export Excel agapes/banquets — période et type filtrables."""
     from datetime import datetime as dt
@@ -3303,7 +3320,7 @@ def agapes_export_excel(request):
     return response
 
 
-@login_required
+@staff_required
 def agapes_export_pdf(request):
     """Export PDF de la synthèse agapes/banquets (mensuel ou 7 jours)."""
     from io import BytesIO
@@ -3667,7 +3684,7 @@ def _analyser_disponibilite(type_resa, ressource, date_r, hd, hf):
     return conflits, alternatives
 
 
-@login_required
+@staff_required
 def reservation_directe(request):
     """Créer une réservation directement validée, avec contrôle de disponibilité."""
     from temple_project.apps.traiteur.forms import ReservationDirecteForm
@@ -3893,7 +3910,7 @@ def reservation_directe(request):
 
 # ── Journal de traçabilité ────────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def journal(request):
     """Journal de traçabilité — accès staff uniquement."""
     from django.contrib.auth import get_user_model
@@ -3968,7 +3985,7 @@ def journal(request):
 
 # ── Gestion des accès portail ─────────────────────────────────────────────────
 
-@login_required
+@staff_required
 def portail_acces_admin(request):
     if request.method == 'POST':
         action  = request.POST.get('action')
@@ -4077,7 +4094,7 @@ def _parse_dt_local(valeur):
     return dt
 
 
-@login_required
+@staff_required
 def annonces_liste(request):
     annonces = Annonce.objects.all()
     return render(request, 'administration/annonces_liste.html', {
@@ -4086,7 +4103,7 @@ def annonces_liste(request):
     })
 
 
-@login_required
+@staff_required
 def annonce_form(request, pk=None):
     annonce = get_object_or_404(Annonce, pk=pk) if pk else None
     if request.method == 'POST':
@@ -4125,7 +4142,7 @@ def annonce_form(request, pk=None):
     })
 
 
-@login_required
+@staff_required
 def annonce_toggle(request, pk):
     annonce = get_object_or_404(Annonce, pk=pk)
     annonce.actif = not annonce.actif
@@ -4137,7 +4154,7 @@ def annonce_toggle(request, pk):
     return redirect('administration:annonces_liste')
 
 
-@login_required
+@staff_required
 def annonce_supprimer(request, pk):
     annonce = get_object_or_404(Annonce, pk=pk)
     if request.method == 'POST':
@@ -4244,7 +4261,7 @@ def _facturation_data(date_debut, date_fin, params):
     return groupes_list, total, nb_lignes
 
 
-@login_required
+@staff_required
 def facturation(request):
     from decimal import Decimal, InvalidOperation
     params = Parametres.get_instance()
@@ -4275,7 +4292,7 @@ def facturation(request):
     })
 
 
-@login_required
+@staff_required
 def facturation_export_excel(request):
     params = Parametres.get_instance()
     date_debut, date_fin = _periode_facturation(request)
@@ -4346,7 +4363,7 @@ def facturation_export_excel(request):
 
 # ── Suivi des loges par saison (statut Active / À reconfirmer / Inactive) ──────
 
-@login_required
+@staff_required
 def loges_saison(request):
     """Écran de suivi : loges sans récurrence / à reconfirmer, avec gestion du statut."""
     from django.db.models import Count, Q as _Q
