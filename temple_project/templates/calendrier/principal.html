@@ -40,6 +40,36 @@
   @media (max-width: 480px) {
     .fc-col-header-cell-cushion { font-size: 9px; letter-spacing: 0; }
   }
+
+  /* ── Agenda mobile : événements de la vue liste en cartes lisibles ── */
+  .agenda-item { padding: 2px 0; }
+  .agenda-row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .agenda-titre { font-weight: 600; color: #0F2137; }
+  .agenda-heure { font-size: 12px; color: #475569; white-space: nowrap; }
+  .agenda-sub { font-size: 12px; color: #64748B; margin-top: 1px; }
+  .sheet-handle { display: none; }
+  @media (max-width: 768px) {
+    /* Rangées de la vue liste : masquer l'heure + la pastille natives,
+       remplacées par notre carte à liseré coloré */
+    .fc-list-event-time { display: none !important; }
+    .fc-list-event-graphic { display: none !important; }
+    .fc-list-event td.fc-list-event-title { padding: 6px 12px !important; }
+    .fc-list-day-cushion { background: #F1F5F9 !important; font-size: 12px; }
+
+    /* Panneau de détail → feuille qui monte du bas (bottom-sheet) */
+    #detail-panel {
+      top: auto; bottom: -100%; left: 0; right: 0;
+      width: 100%; height: auto; max-height: 85vh;
+      border-radius: 16px 16px 0 0;
+      padding: 0.5rem 1.25rem 1.75rem;
+      transition: bottom .3s ease;
+    }
+    #detail-panel.open { bottom: 0; right: 0; }
+    .sheet-handle {
+      display: block; width: 40px; height: 4px; border-radius: 99px;
+      background: #CBD5E1; margin: 8px auto 4px;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -49,13 +79,32 @@
     <h1 class="h3 mb-1 temple-title">📅 Calendrier des temples</h1>
     <p class="text-muted small mb-0 d-none d-md-block">Cliquez sur une tenue pour voir les détails</p>
   </div>
-  <div class="d-flex gap-2 flex-wrap">
+  {# Barre complète : desktop / tablette #}
+  <div class="d-none d-md-flex gap-2 flex-wrap">
     <button class="btn btn-outline-secondary btn-sm" onclick="toggleDispo()">🔍 Dispo</button>
     <a href="{% url 'reservations:demande' %}" class="btn btn-sm btn-temple">+ Temple</a>
     <a href="{% url 'reservations:demande_salle' %}" class="btn btn-sm btn-outline-primary">+ Salle</a>
     <a href="{% url 'reservations:demande_banquet' %}" class="btn btn-sm btn-outline-warning">🍽 + Banquet</a>
     <a href="{% url 'reservations:demande_recurrence' %}" class="btn btn-sm btn-outline-secondary" title="Demander une réservation récurrente">+ Récurrence</a>
     <button class="btn btn-sm btn-outline-danger" onclick="togglePdfPanel()" title="Exporter le planning en PDF">📄 PDF</button>
+  </div>
+
+  {# Barre compacte : mobile #}
+  <div class="d-flex d-md-none gap-2 w-100">
+    <div class="dropdown flex-grow-1">
+      <button class="btn btn-sm w-100 dropdown-toggle fw-semibold" type="button"
+              style="background:#C8A84B;color:#0F2137;border:none;" data-bs-toggle="dropdown">
+        ＋ Réserver
+      </button>
+      <ul class="dropdown-menu w-100">
+        <li><a class="dropdown-item" href="{% url 'reservations:demande' %}">🏛 Temple</a></li>
+        <li><a class="dropdown-item" href="{% url 'reservations:demande_salle' %}">🪑 Salle de réunion</a></li>
+        <li><a class="dropdown-item" href="{% url 'reservations:demande_banquet' %}">🍽 Banquet</a></li>
+        <li><a class="dropdown-item" href="{% url 'reservations:demande_recurrence' %}">🔁 Récurrence</a></li>
+      </ul>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" onclick="toggleDispo()" title="Vérifier les disponibilités">🔍</button>
+    <button class="btn btn-sm btn-outline-danger" onclick="togglePdfPanel()" title="Exporter en PDF">📄</button>
   </div>
 </div>
 
@@ -216,6 +265,7 @@
 
 <div id="panel-overlay" onclick="closePanel()"></div>
 <div id="detail-panel">
+  <div class="sheet-handle" onclick="closePanel()"></div>
   <button onclick="closePanel()" class="btn-close position-absolute" style="top:16px;right:16px;"></button>
   <div id="panel-content" class="mt-3"></div>
 </div>
@@ -234,6 +284,12 @@ const TEMPLE_COLORS = {
 const CRENEAU_EMOJI = { matin: "🌅", aprem: "☀️", soir: "🌙" };
 const IS_ADMIN = {{ request.user.is_staff|yesno:"true,false" }};
 let calendar;
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+  });
+}
 
 function getFilters() {
   return {
@@ -291,6 +347,26 @@ document.addEventListener("DOMContentLoaded", function() {
         if (!dt) return '';
         var m = dt.getMinutes();
         return dt.getHours() + 'h' + (m < 10 ? '0' + m : m);
+      }
+
+      // ── Vue liste / agenda (mobile) ──────────────────────────────
+      if (view.indexOf('list') === 0 && (p.type === 'temple' || p.type === 'salle')) {
+        var bar = arg.event.borderColor || '#0F2137';
+        if (p.type === 'temple' && TEMPLE_COLORS[p.temple]) bar = TEMPLE_COLORS[p.temple].border;
+        if (p.a_reconfirmer) bar = '#475569';
+        var titre, lieu;
+        if (p.type === 'temple') { titre = p.loge_nom || arg.event.title; lieu = p.temple; }
+        else { titre = p.organisation || p.salle; lieu = p.salle; }
+        var heure = fmtH(arg.event.start) + (arg.event.end ? '–' + fmtH(arg.event.end) : '');
+        var sub = (emoji ? emoji + ' ' : '') + escapeHtml(lieu)
+                + (p.type === 'temple' && p.obedience && p.obedience !== '—' ? ' · ' + escapeHtml(p.obedience) : '');
+        return { html:
+          '<div class="agenda-item" style="border-left:4px ' + (p.a_reconfirmer ? 'dashed' : 'solid') + ' ' + bar + ';padding-left:10px;">'
+          + '<div class="agenda-row1"><span class="agenda-titre">' + pre + escapeHtml(titre) + '</span>'
+          + '<span class="agenda-heure">' + heure + '</span></div>'
+          + '<div class="agenda-sub">' + sub + '</div>'
+          + '</div>'
+        };
       }
 
       // ── Vue mensuelle ────────────────────────────────────────────
