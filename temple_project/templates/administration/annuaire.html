@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Annuaire des loges{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📇 Annuaire des loges</h1>
+    <p class="text-muted mb-0">Coordonnées de contact et créneaux — {{ total }} structure(s).</p>
+  </div>
+  <a href="{% url 'administration:export_excel' %}" class="btn btn-outline-primary btn-sm">⬇️ Export Excel</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-4">
+    <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Rechercher (nom, abrév., association, contact, email)…">
+  </div>
+  <div class="col-md-2">
+    <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="">Tous types</option>
+      <option value="loge" {% if f_type == 'loge' %}selected{% endif %}>Loges bleues</option>
+      <option value="haut_grade" {% if f_type == 'haut_grade' %}selected{% endif %}>Hauts grades</option>
+    </select>
+  </div>
+  <div class="col-md-2">
+    <select name="statut" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="">Tous statuts</option>
+      <option value="active" {% if f_statut == 'active' %}selected{% endif %}>Actives</option>
+      <option value="a_reconfirmer" {% if f_statut == 'a_reconfirmer' %}selected{% endif %}>À reconfirmer</option>
+      <option value="inactive" {% if f_statut == 'inactive' %}selected{% endif %}>Inactives</option>
+    </select>
+  </div>
+  <div class="col-md-3">
+    <select name="obedience" class="form-select form-select-sm" onchange="this.form.submit()">
+      <option value="">Toutes obédiences</option>
+      {% for o in obediences %}<option value="{{ o.nom }}" {% if f_obd == o.nom %}selected{% endif %}>{{ o.nom }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-1 d-grid">
+    <button class="btn btn-sm btn-temple">OK</button>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle bg-white">
+    <thead style="background:#0F2137;color:#fff;">
+      <tr>
+        <th>Loge</th><th>Association</th><th>Type</th><th>Obéd.</th>
+        <th>Contact</th><th>Email</th><th>Téléphone</th><th>Créneaux</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for x in lignes %}
+      <tr {% if x.loge.statut == 'inactive' %}class="text-muted"{% endif %}>
+        <td>
+          <a href="{% url 'loges:detail' x.loge.pk %}" class="fw-semibold text-decoration-none" style="color:#0F2137;">{{ x.loge.nom }}</a>
+          {% if x.loge.abreviation %}<span class="badge bg-light text-dark">{{ x.loge.abreviation }}</span>{% endif %}
+          {% if x.loge.statut == 'a_reconfirmer' %}<span class="badge badge-soft-warning">à reconfirmer</span>{% elif x.loge.statut == 'inactive' %}<span class="badge bg-secondary">inactive</span>{% endif %}
+        </td>
+        <td class="small">{{ x.loge.association|default:"—" }}</td>
+        <td class="small">{% if x.loge.type_loge == 'haut_grade' %}Haut grade{% else %}Bleue{% endif %}</td>
+        <td class="small">{{ x.loge.obedience.nom }}</td>
+        <td class="small">{{ x.loge.nom_contact|default:"—" }}</td>
+        <td class="small">{% if x.loge.email %}<a href="mailto:{{ x.loge.email }}">{{ x.loge.email }}</a>{% else %}<span class="text-danger">—</span>{% endif %}</td>
+        <td class="small">{% if x.loge.telephone %}<a href="tel:{{ x.loge.telephone }}" class="text-decoration-none">{{ x.loge.telephone }}</a>{% else %}—{% endif %}</td>
+        <td class="small text-muted">{{ x.recurrences|default:"—" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="text-center text-muted py-4">Aucune loge pour ce filtre.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

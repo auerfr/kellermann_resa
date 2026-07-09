@@ -1127,6 +1127,44 @@ def occupation(request):
 
 
 @login_required
+def annuaire(request):
+    """Annuaire admin : toutes les loges avec coordonnées (association, contact,
+    email, téléphone) et créneaux, pour joindre facilement une structure."""
+    from django.db.models import Q
+    q       = request.GET.get('q', '').strip()
+    f_type  = request.GET.get('type', '')
+    f_statut = request.GET.get('statut', '')
+    f_obd   = request.GET.get('obedience', '')
+
+    loges = Loge.objects.select_related('obedience').order_by('nom')
+    if q:
+        loges = loges.filter(
+            Q(nom__icontains=q) | Q(abreviation__icontains=q) | Q(association__icontains=q)
+            | Q(nom_contact__icontains=q) | Q(email__icontains=q))
+    if f_type in ('loge', 'haut_grade'):
+        loges = loges.filter(type_loge=f_type)
+    if f_statut in ('active', 'a_reconfirmer', 'inactive'):
+        loges = loges.filter(statut=f_statut)
+    if f_obd:
+        loges = loges.filter(obedience__nom=f_obd)
+
+    JF = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+    POS = {1: '1re', 2: '2e', 3: '3e', 4: '4e', -1: 'Der'}
+    lignes = []
+    for l in loges:
+        rec = [f"{POS.get(r.numero_semaine, r.numero_semaine)} {JF[r.jour_semaine]} "
+               f"{str(r.temple).replace('Temple ', '')}"
+               for r in l.regles.filter(actif=True).select_related('temple')]
+        lignes.append({'loge': l, 'recurrences': ' · '.join(rec)})
+
+    return render(request, 'administration/annuaire.html', {
+        'lignes': lignes, 'total': len(lignes),
+        'q': q, 'f_type': f_type, 'f_statut': f_statut, 'f_obd': f_obd,
+        'obediences': Obedience.objects.order_by('nom'),
+    })
+
+
+@login_required
 def audit_export_excel(request):
     """Export Excel d'audit (à transmettre par mail) : tenues orphelines,
     doublons le même jour, loges sans contact, loges sans récurrence."""
