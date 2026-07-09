@@ -69,8 +69,7 @@ def lien_portail(request):
                     demande = DemandeAccesPortail.objects.create(
                         loge=loge, nom_venerable=loge.nom_contact or loge.nom,
                         email=loge.email, statut='validee')
-                base = settings.SITE_URL.rstrip('/') if hasattr(settings, 'SITE_URL') else ''
-                url = f"{base}/reservations/portail/{demande.token}/"
+                url = request.build_absolute_uri(f"/reservations/portail/{demande.token}/")
                 send_mail_kellermann(
                     subject="Votre lien d'accès — Espace loge Kellermann",
                     message=(

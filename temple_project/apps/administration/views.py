@@ -2495,10 +2495,8 @@ def validation_saison_admin(request):
                             email=loge.email, statut='validee',
                         )
                         nb_token_cree += 1
-                    portail_url = (
-                        f"{settings.SITE_URL.rstrip('/')}"
-                        f"/reservations/portail/{demande.token}/"
-                    ) if hasattr(settings, 'SITE_URL') else f"/reservations/portail/{demande.token}/"
+                    portail_url = request.build_absolute_uri(
+                        f"/reservations/portail/{demande.token}/")
                     send_mail_kellermann(
                         subject=f"Validation de votre calendrier — Saison {annee_cible}-{annee_cible + 1}",
                         message=(
