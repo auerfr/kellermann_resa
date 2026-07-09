@@ -21,6 +21,7 @@ urlpatterns = [
     path("conflits/", views.conflits, name="conflits"),
     path("occupation/", views.occupation, name="occupation"),
     path("annuaire/", views.annuaire, name="annuaire"),
+    path("sante/", views.sante_donnees, name="sante_donnees"),
     path("reset/", views.reset_calendrier, name="reset_calendrier"),
     path("salles/", views.salles_liste, name="salles_liste"),
     path("salles/ajouter/", views.salle_form, name="salle_ajouter"),

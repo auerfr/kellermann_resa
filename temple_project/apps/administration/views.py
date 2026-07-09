@@ -1144,6 +1144,57 @@ def occupation(request):
 
 
 @staff_required
+def sante_donnees(request):
+    """Tableau de bord de la qualité des données : conflits, tenues orphelines,
+    doublons, loges sans contact/récurrence, à reconfirmer."""
+    from django.db.models import Count, Q
+
+    if request.method == 'POST' and request.POST.get('action') == 'purger_orphelines':
+        n = Reservation.objects.filter(loge__isnull=True, type_reservation='reguliere').delete()[0]
+        messages.success(request, f"{n} tenue(s) orpheline(s) supprimée(s).")
+        return redirect('administration:sante_donnees')
+
+    conflits = _scan_conflits()
+    orph_temple = Reservation.objects.filter(loge__isnull=True, type_reservation='reguliere').count()
+    orph_salle = ReservationSalle.objects.filter(loge__isnull=True).count()
+    doublons_regles = (RegleRecurrence.objects
+                       .values('loge', 'temple', 'jour_semaine', 'numero_semaine')
+                       .annotate(n=Count('id')).filter(n__gt=1).count())
+    actives = Loge.objects.exclude(statut='inactive')
+    sans_email = actives.filter(Q(email='') | Q(email__isnull=True)).count()
+    sans_regle = actives.annotate(
+        nr=Count('regles', filter=Q(regles__actif=True))).filter(nr=0).count()
+    a_reconfirmer = Loge.objects.filter(statut='a_reconfirmer').count()
+
+    indicateurs = [
+        {'label': 'Catapultages (conflits de créneau)', 'valeur': len(conflits),
+         'url': 'administration:conflits', 'icone': '⚠️',
+         'aide': 'Deux structures sur le même lieu/créneau.'},
+        {'label': 'Tenues orphelines (sans loge)', 'valeur': orph_temple,
+         'action': 'purger_orphelines', 'icone': '👻',
+         'aide': 'Tenues récurrentes détachées de leur loge — à purger.'},
+        {'label': 'Réservations de salle sans loge', 'valeur': orph_salle,
+         'url': 'administration:annuaire', 'icone': '🪑',
+         'aide': 'Salles non rattachées (le rattachement auto agit à la création).'},
+        {'label': 'Doublons de règles de récurrence', 'valeur': doublons_regles,
+         'icone': '🔁', 'aide': 'Commande : dedup_regles.'},
+        {'label': 'Loges actives sans email', 'valeur': sans_email,
+         'url': 'administration:annuaire', 'icone': '✉️',
+         'aide': 'Impossible de les contacter / leur envoyer la validation.'},
+        {'label': 'Loges actives sans récurrence', 'valeur': sans_regle,
+         'url': 'administration:annuaire', 'icone': '📅',
+         'aide': 'Aucune règle active — structures à clarifier.'},
+        {'label': 'Loges à reconfirmer', 'valeur': a_reconfirmer,
+         'url': 'administration:loges_saison', 'icone': '⏳',
+         'aide': 'N’ont pas confirmé la saison.'},
+    ]
+    total_pb = sum(1 for i in indicateurs if i['valeur'])
+    return render(request, 'administration/sante_donnees.html', {
+        'indicateurs': indicateurs, 'total_pb': total_pb, 'conflits': conflits,
+    })
+
+
+@staff_required
 def annuaire(request):
     """Annuaire admin : toutes les loges avec coordonnées (association, contact,
     email, téléphone) et créneaux, pour joindre facilement une structure."""

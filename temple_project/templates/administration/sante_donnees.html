@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Santé des données{% endblock %}
+{% block content %}
+<div class="mb-3">
+  <h1 class="h3" style="color:#0F2137;">🩺 Santé des données</h1>
+  <p class="text-muted mb-0">Vue d'ensemble de la qualité des données — {% if total_pb %}<span class="text-danger fw-semibold">{{ total_pb }} point(s) à regarder</span>{% else %}<span class="text-success fw-semibold">tout est propre ✅</span>{% endif %}.</p>
+</div>
+
+{% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+<div class="row g-3">
+  {% for i in indicateurs %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body d-flex flex-column">
+        <div class="d-flex justify-content-between align-items-start">
+          <div class="text-muted small text-uppercase">{{ i.icone }} {{ i.label }}</div>
+          <span class="h3 mb-0 {% if i.valeur %}text-danger{% else %}text-success{% endif %}">{{ i.valeur }}</span>
+        </div>
+        <div class="small text-muted mt-1 flex-grow-1">{{ i.aide }}</div>
+        <div class="mt-2">
+          {% if i.valeur and i.action %}
+          <form method="post" onsubmit="return confirm('Confirmer la purge ?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{{ i.action }}">
+            <button class="btn btn-sm btn-outline-danger">Purger</button>
+          </form>
+          {% elif i.url %}
+          <a href="{% url i.url %}" class="btn btn-sm btn-outline-primary">Voir / traiter</a>
+          {% elif i.valeur %}
+          <span class="badge bg-light text-dark">Commande manuelle</span>
+          {% else %}
+          <span class="text-success small">✅ rien à faire</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if conflits %}
+<h2 class="h5 mt-4" style="color:#0F2137;">Aperçu des catapultages</h2>
+<div class="table-responsive">
+  <table class="table table-sm bg-white">
+    <thead style="background:#0F2137;color:#fff;"><tr><th>Date</th><th>Lieu</th><th>Structure A</th><th>Structure B</th></tr></thead>
+    <tbody>
+      {% for c in conflits|slice:":10" %}
+      <tr><td>{{ c.date|date:"d/m/Y" }}</td><td>{{ c.lieu }}</td><td>{{ c.a.who }} <small class="text-muted">{{ c.a.hd|time:"H:i" }}-{{ c.a.hf|time:"H:i" }}</small></td><td>{{ c.b.who }} <small class="text-muted">{{ c.b.hd|time:"H:i" }}-{{ c.b.hf|time:"H:i" }}</small></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<a href="{% url 'administration:conflits' %}" class="btn btn-sm btn-outline-primary">Tout voir / résoudre →</a>
+{% endif %}
+{% endblock %}
