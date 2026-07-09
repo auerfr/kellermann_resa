@@ -463,80 +463,77 @@
           {% csrf_token %}
           <input type="hidden" name="action" value="soumettre_validation">
 
-          {# Compteurs + bouton haut #}
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3
-                       px-3 py-2 rounded" style="background:#F8FAFC;border:1px solid #E2E8F0;">
-            <div class="d-flex gap-3 flex-wrap">
-              <span class="badge" style="background:#D1FAE5;color:#065F46;font-size:13px;" id="cnt-ok-top">
-                ✓ <span id="n-ok">0</span> confirmée(s)
-              </span>
-              <span class="badge" style="background:#FEF9C3;color:#92400E;font-size:13px;" id="cnt-dep-top">
-                ↻ <span id="n-deplacer">0</span> à déplacer
-              </span>
-              <span class="badge" style="background:#FEE2E2;color:#991B1B;font-size:13px;" id="cnt-ann-top">
-                ✕ <span id="n-annuler">0</span> à annuler
-              </span>
+          {# ── Récapitulatif + progression (collant en haut) ─────────────── #}
+          <div class="mb-3 px-3 py-3 rounded"
+               style="background:#F8FAFC;border:1px solid #E2E8F0;position:sticky;top:8px;z-index:5;">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+              <div class="fw-semibold small" style="color:#0F2137;">
+                <span id="n-total">0</span> tenue(s) · saison {{ validation.annee }}–{{ validation.annee|add:1 }}
+              </div>
+              <button type="button" class="btn btn-outline-success btn-sm px-3"
+                      onclick="toutConfirmer()">✓ Tout confirmer</button>
             </div>
-            <button type="button" class="btn btn-outline-success btn-sm px-3"
-                    onclick="toutConfirmer()">
-              ✓ Tout confirmer
-            </button>
+            <div class="progress mb-2" style="height:9px;border-radius:99px;background:#E5E7EB;">
+              <div class="progress-bar" id="bar-ok"  style="background:#16A34A;width:0%"></div>
+              <div class="progress-bar" id="bar-dep" style="background:#F59E0B;width:0%"></div>
+              <div class="progress-bar" id="bar-ann" style="background:#DC2626;width:0%"></div>
+            </div>
+            <div class="d-flex gap-3 flex-wrap small">
+              <span style="color:#16A34A;">✓ <b id="n-ok">0</b> confirmée(s)</span>
+              <span style="color:#B45309;">↻ <b id="n-deplacer">0</b> à déplacer</span>
+              <span style="color:#DC2626;">✕ <b id="n-annuler">0</b> à annuler</span>
+            </div>
           </div>
 
-          {# Tableau #}
-          <div class="table-responsive mb-3">
-            <table class="table table-sm" style="font-size:13px;" id="table-validation">
-              <thead style="background:#0F2137;position:sticky;top:0;z-index:1;">
-                <tr>
-                  <th style="color:#C8A84B;">Date</th>
-                  <th style="color:#C8A84B;">Temple</th>
-                  <th style="color:#C8A84B;">Horaires</th>
-                  <th style="color:#C8A84B;">Avis</th>
-                  <th style="color:#C8A84B;">
-                    Commentaire
-                    <small class="opacity-75">(requis si déplacement/annulation)</small>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for ligne in validation.lignes.all %}
-                <tr class="val-row" id="row-{{ ligne.pk }}">
-                  <td class="fw-semibold align-middle" style="white-space:nowrap;">
-                    {{ ligne.date|date:"D d/m/Y" }}
-                  </td>
-                  <td class="align-middle small">{{ ligne.temple_nom }}</td>
-                  <td class="align-middle small" style="white-space:nowrap;">
-                    {{ ligne.heure_debut|time:"H:i" }}–{{ ligne.heure_fin|time:"H:i" }}
-                  </td>
-                  <td class="align-middle">
-                    <select name="avis_{{ ligne.pk }}"
-                            class="form-select form-select-sm avis-select"
-                            data-row="{{ ligne.pk }}" style="min-width:130px;">
-                      <option value="ok"
-                        {% if ligne.avis == 'ok' or ligne.avis == 'attente' %}selected{% endif %}>
-                        ✓ Confirmée
-                      </option>
-                      <option value="deplacer"
-                        {% if ligne.avis == 'deplacer' %}selected{% endif %}>
-                        ↻ À déplacer
-                      </option>
-                      <option value="annuler"
-                        {% if ligne.avis == 'annuler' %}selected{% endif %}>
-                        ✕ À annuler
-                      </option>
-                    </select>
-                  </td>
-                  <td class="align-middle">
-                    <input type="text" name="commentaire_{{ ligne.pk }}"
-                           value="{{ ligne.commentaire }}"
-                           class="form-control form-control-sm commentaire-field"
-                           id="comment-{{ ligne.pk }}"
-                           placeholder="Précisez…">
-                  </td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+          {# ── Une carte par tenue ───────────────────────────────────────── #}
+          <div class="d-flex flex-column gap-2 mb-3">
+            {% for ligne in validation.lignes.all %}
+            <div class="val-card" id="card-{{ ligne.pk }}"
+                 style="border:1px solid #E5E7EB;border-left:4px solid #16A34A;border-radius:10px;padding:12px 14px;">
+              <input type="hidden" name="commentaire_{{ ligne.pk }}" id="comment-{{ ligne.pk }}"
+                     value="{{ ligne.commentaire }}">
+
+              <div class="fw-semibold" style="color:#0F2137;">{{ ligne.date|date:"D d/m/Y" }}</div>
+              <div class="small text-muted mb-2">
+                {{ ligne.temple_nom }} · {{ ligne.heure_debut|time:"H:i" }}–{{ ligne.heure_fin|time:"H:i" }}
+              </div>
+
+              {# Choix segmenté #}
+              <div class="btn-group btn-group-sm w-100 mb-1" role="group">
+                <input type="radio" class="btn-check avis-radio" name="avis_{{ ligne.pk }}" value="ok"
+                       id="avis_{{ ligne.pk }}_ok" data-row="{{ ligne.pk }}"
+                       {% if ligne.avis == 'ok' or ligne.avis == 'attente' %}checked{% endif %}>
+                <label class="btn btn-outline-success" for="avis_{{ ligne.pk }}_ok">✓ Confirmer</label>
+
+                <input type="radio" class="btn-check avis-radio" name="avis_{{ ligne.pk }}" value="deplacer"
+                       id="avis_{{ ligne.pk }}_dep" data-row="{{ ligne.pk }}"
+                       {% if ligne.avis == 'deplacer' %}checked{% endif %}>
+                <label class="btn btn-outline-warning" for="avis_{{ ligne.pk }}_dep">↻ Déplacer</label>
+
+                <input type="radio" class="btn-check avis-radio" name="avis_{{ ligne.pk }}" value="annuler"
+                       id="avis_{{ ligne.pk }}_ann" data-row="{{ ligne.pk }}"
+                       {% if ligne.avis == 'annuler' %}checked{% endif %}>
+                <label class="btn btn-outline-danger" for="avis_{{ ligne.pk }}_ann">✕ Annuler</label>
+              </div>
+
+              {# Détails conditionnels (déplacement / annulation) #}
+              <div class="val-extra mt-2" id="extra-{{ ligne.pk }}" style="display:none;">
+                <div class="row g-2">
+                  <div class="col-sm-5 val-datewish" style="display:none;">
+                    <label class="form-label small mb-1">Nouvelle date souhaitée</label>
+                    <input type="date" class="form-control form-control-sm datewish-field"
+                           id="datewish-{{ ligne.pk }}" data-row="{{ ligne.pk }}"
+                           min="{{ validation.annee }}-09-01" max="{{ validation.annee|add:1 }}-06-30">
+                  </div>
+                  <div class="col-sm val-motif">
+                    <label class="form-label small mb-1">Motif</label>
+                    <input type="text" class="form-control form-control-sm motif-field"
+                           id="motif-{{ ligne.pk }}" data-row="{{ ligne.pk }}" placeholder="Précisez…">
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
           </div>
 
           {# Commentaire global #}
@@ -546,12 +543,8 @@
                       placeholder="Informations complémentaires pour l'équipe Kellermann…"></textarea>
           </div>
 
-          {# Boutons bas #}
-          <div class="d-flex gap-2 flex-wrap">
-            <button type="button" class="btn btn-outline-success btn-sm px-3"
-                    onclick="toutConfirmer()">
-              ✓ Tout confirmer
-            </button>
+          {# Bouton bas #}
+          <div class="d-grid d-sm-block">
             <button type="submit" class="btn px-4 fw-semibold"
                     style="background:#0F2137;color:white;"
                     onclick="return confirm('Confirmer la soumission de votre validation de saison ?')">
@@ -608,60 +601,109 @@
 
 {% if validation and validation.statut == 'ouverte' %}
 <script>
-const BG = { ok: '#F0FDF4', deplacer: '#FEFCE8', annuler: '#FEF2F2' };
+const COL = { ok: '#16A34A', deplacer: '#F59E0B', annuler: '#DC2626' };
 
-function majLigne(select) {
-  const pk      = select.dataset.row;
-  const avis    = select.value;
-  const row     = document.getElementById('row-' + pk);
-  const comment = document.getElementById('comment-' + pk);
-  row.style.background    = BG[avis] || '';
-  comment.style.display   = (avis === 'ok') ? 'none' : '';
-  if (avis === 'ok') comment.value = '';
+function avisOf(pk) {
+  const r = document.querySelector('input[name="avis_' + pk + '"]:checked');
+  return r ? r.value : 'ok';
 }
-
-function majCompteurs() {
-  const selects = document.querySelectorAll('.avis-select');
-  let ok = 0, deplacer = 0, annuler = 0;
-  selects.forEach(s => {
-    if      (s.value === 'ok')       ok++;
-    else if (s.value === 'deplacer') deplacer++;
-    else                             annuler++;
+function fmtDate(v) {              // yyyy-mm-dd → dd/mm/yyyy
+  if (!v) return '';
+  const p = v.split('-');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+// Reconstitue le commentaire réel (champ caché) à partir de la date + motif
+function assemble(pk) {
+  const avis   = avisOf(pk);
+  const hidden = document.getElementById('comment-' + pk);
+  const motif  = (document.getElementById('motif-' + pk).value || '').trim();
+  const dw     = fmtDate(document.getElementById('datewish-' + pk).value);
+  let txt = '';
+  if (avis === 'deplacer')      txt = (dw ? 'Date souhaitée : ' + dw : '') + (motif ? (dw ? ' — ' : '') + motif : '');
+  else if (avis === 'annuler')  txt = motif;
+  hidden.value = txt;
+}
+function majCard(pk) {
+  const avis  = avisOf(pk);
+  const card  = document.getElementById('card-' + pk);
+  const extra = document.getElementById('extra-' + pk);
+  card.style.borderLeftColor = COL[avis];
+  if (avis === 'ok') {
+    extra.style.display = 'none';
+  } else {
+    extra.style.display = '';
+    extra.querySelector('.val-datewish').style.display = (avis === 'deplacer') ? '' : 'none';
+  }
+  assemble(pk);
+}
+function majTotaux() {
+  let ok = 0, dep = 0, ann = 0, tot = 0;
+  document.querySelectorAll('.val-card').forEach(c => {
+    tot++;
+    const a = avisOf(c.id.replace('card-', ''));
+    if      (a === 'ok')       ok++;
+    else if (a === 'deplacer') dep++;
+    else                       ann++;
   });
   document.getElementById('n-ok').textContent       = ok;
-  document.getElementById('n-deplacer').textContent = deplacer;
-  document.getElementById('n-annuler').textContent  = annuler;
+  document.getElementById('n-deplacer').textContent = dep;
+  document.getElementById('n-annuler').textContent  = ann;
+  document.getElementById('n-total').textContent    = tot;
+  const pct = n => tot ? (n / tot * 100) : 0;
+  document.getElementById('bar-ok').style.width  = pct(ok)  + '%';
+  document.getElementById('bar-dep').style.width = pct(dep) + '%';
+  document.getElementById('bar-ann').style.width = pct(ann) + '%';
 }
-
 function toutConfirmer() {
-  document.querySelectorAll('.avis-select').forEach(s => {
-    s.value = 'ok';
-    majLigne(s);
+  document.querySelectorAll('.val-card').forEach(c => {
+    const pk = c.id.replace('card-', '');
+    document.getElementById('avis_' + pk + '_ok').checked = true;
+    majCard(pk);
   });
-  majCompteurs();
+  majTotaux();
 }
 
-document.querySelectorAll('.avis-select').forEach(s => {
-  s.addEventListener('change', function () { majLigne(this); majCompteurs(); });
-  majLigne(s);
+document.querySelectorAll('.avis-radio').forEach(r => {
+  r.addEventListener('change', function () { majCard(this.dataset.row); majTotaux(); });
 });
-majCompteurs();
+document.querySelectorAll('.datewish-field, .motif-field').forEach(f => {
+  f.addEventListener('input', function () { assemble(this.dataset.row); });
+});
+
+// Initialisation : pré-remplir le motif à partir d'un commentaire déjà enregistré
+document.querySelectorAll('.val-card').forEach(c => {
+  const pk     = c.id.replace('card-', '');
+  const avis   = avisOf(pk);
+  const hidden = document.getElementById('comment-' + pk);
+  if ((avis === 'deplacer' || avis === 'annuler') && hidden.value) {
+    document.getElementById('motif-' + pk).value = hidden.value;
+  }
+  majCard(pk);
+});
+majTotaux();
 
 document.getElementById('form-validation-saison').addEventListener('submit', function (e) {
-  const manquants = [];
-  document.querySelectorAll('.avis-select').forEach(s => {
-    if (s.value !== 'ok') {
-      const c = document.getElementById('comment-' + s.dataset.row);
-      if (!c.value.trim()) manquants.push(c);
+  let premier = null;
+  document.querySelectorAll('.val-card').forEach(c => {
+    const pk   = c.id.replace('card-', '');
+    const avis = avisOf(pk);
+    const dw   = document.getElementById('datewish-' + pk).value;
+    const mo   = document.getElementById('motif-' + pk).value.trim();
+    if (avis === 'deplacer' && !dw && !mo) {
+      premier = premier || document.getElementById('motif-' + pk);
+      c.style.borderLeftColor = '#DC2626';
+    } else if (avis === 'annuler' && !mo) {
+      premier = premier || document.getElementById('motif-' + pk);
+      c.style.borderLeftColor = '#DC2626';
     }
+    assemble(pk);
   });
-  if (manquants.length) {
+  if (premier) {
     e.preventDefault();
-    manquants[0].focus();
-    manquants.forEach(c => c.classList.add('is-invalid'));
-    alert('Merci d\'indiquer un commentaire pour chaque tenue à déplacer ou annuler.');
-    manquants.forEach(c => c.addEventListener('input',
-      () => c.classList.remove('is-invalid'), { once: true }));
+    premier.focus();
+    premier.classList.add('is-invalid');
+    alert('Merci d\'indiquer une date souhaitée ou un motif pour chaque déplacement, et un motif pour chaque annulation.');
+    premier.addEventListener('input', () => premier.classList.remove('is-invalid'), { once: true });
   }
 });
 </script>
