@@ -173,6 +173,7 @@ def modifier_loge(request, pk):
     if request.method == 'POST':
         loge.nom                    = request.POST.get('nom', loge.nom)
         loge.abreviation            = request.POST.get('abreviation', loge.abreviation)
+        loge.association            = request.POST.get('association', loge.association).strip()
         loge.nom_contact            = request.POST.get('nom_contact', loge.nom_contact).strip()
         loge.email                  = request.POST.get('email', loge.email)
         loge.telephone              = request.POST.get('telephone', loge.telephone).strip()

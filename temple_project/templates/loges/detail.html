@@ -27,6 +27,7 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
       <span class="badge fs-6 px-3 py-2 temple-badge">{{ loge.abreviation }}</span>
       <h1 class="h3 mb-0 temple-title">{{ loge.nom }}</h1>
     </div>
+    {% if loge.association %}<div class="text-muted small mb-1">🏷 {{ loge.association }}</div>{% endif %}
     <div class="d-flex gap-3 text-muted small">
       <span>{{ loge.obedience }}</span>
       <span>·</span>
