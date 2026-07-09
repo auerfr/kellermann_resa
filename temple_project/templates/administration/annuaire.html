@@ -1,12 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Annuaire des loges{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-3">
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
   <div>
     <h1 class="h3 mb-1" style="color:#0F2137;">📇 Annuaire des loges</h1>
-    <p class="text-muted mb-0">Coordonnées de contact et créneaux — {{ total }} structure(s).</p>
+    <p class="text-muted mb-0">Coordonnées et créneaux — cliquez un en-tête pour trier.</p>
   </div>
-  <a href="{% url 'administration:export_excel' %}" class="btn btn-outline-primary btn-sm">⬇️ Export Excel</a>
+  <div class="d-flex gap-2">
+    <a href="/django-admin/loges/loge/add/" class="btn btn-success btn-sm">➕ Ajouter une loge</a>
+    <a href="{% url 'administration:export_excel' %}" class="btn btn-outline-primary btn-sm">⬇️ Export Excel</a>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <span class="badge bg-dark">Total : {{ total }}</span>
+  <span class="badge" style="background:#16a34a;">🟢 Actives : {{ nb.active }}</span>
+  <span class="badge" style="background:#ca8a04;">🟠 À reconfirmer : {{ nb.a_reconfirmer }}</span>
+  <span class="badge bg-secondary">⚪ Inactives : {{ nb.inactive }}</span>
+  <span class="badge bg-danger">✉️ Sans email : {{ nb.sans_email }}</span>
 </div>
 
 <form method="get" class="row g-2 mb-3">
@@ -34,39 +45,84 @@
       {% for o in obediences %}<option value="{{ o.nom }}" {% if f_obd == o.nom %}selected{% endif %}>{{ o.nom }}</option>{% endfor %}
     </select>
   </div>
-  <div class="col-md-1 d-grid">
-    <button class="btn btn-sm btn-temple">OK</button>
-  </div>
+  <div class="col-md-1 d-grid"><button class="btn btn-sm btn-temple">OK</button></div>
 </form>
 
 <div class="table-responsive">
-  <table class="table table-sm table-hover align-middle bg-white">
+  <table class="table table-sm table-hover align-middle bg-white" id="tbl-annuaire">
     <thead style="background:#0F2137;color:#fff;">
       <tr>
-        <th>Loge</th><th>Association</th><th>Type</th><th>Obéd.</th>
-        <th>Contact</th><th>Email</th><th>Téléphone</th><th>Créneaux</th>
+        <th role="button" data-sort="text">Loge ⇅</th>
+        <th role="button" data-sort="text">Association ⇅</th>
+        <th role="button" data-sort="text">Type ⇅</th>
+        <th role="button" data-sort="text">Obéd. ⇅</th>
+        <th role="button" data-sort="num">Effectif ⇅</th>
+        <th role="button" data-sort="text">Contact ⇅</th>
+        <th>Email</th>
+        <th>Téléphone</th>
+        <th>Créneaux</th>
       </tr>
     </thead>
     <tbody>
       {% for x in lignes %}
       <tr {% if x.loge.statut == 'inactive' %}class="text-muted"{% endif %}>
-        <td>
+        <td data-val="{{ x.loge.nom }}">
+          {% if x.loge.statut == 'active' %}<span title="Active" style="color:#16a34a;">●</span>{% elif x.loge.statut == 'a_reconfirmer' %}<span title="À reconfirmer" style="color:#ca8a04;">●</span>{% else %}<span title="Inactive" style="color:#9ca3af;">●</span>{% endif %}
           <a href="{% url 'loges:detail' x.loge.pk %}" class="fw-semibold text-decoration-none" style="color:#0F2137;">{{ x.loge.nom }}</a>
           {% if x.loge.abreviation %}<span class="badge bg-light text-dark">{{ x.loge.abreviation }}</span>{% endif %}
-          {% if x.loge.statut == 'a_reconfirmer' %}<span class="badge badge-soft-warning">à reconfirmer</span>{% elif x.loge.statut == 'inactive' %}<span class="badge bg-secondary">inactive</span>{% endif %}
+          <a href="{% url 'loges:modifier' x.loge.pk %}" class="text-muted ms-1" title="Modifier">✏️</a>
+          <a href="{% url 'loges:supprimer' x.loge.pk %}" class="text-muted" title="Supprimer">🗑️</a>
         </td>
-        <td class="small">{{ x.loge.association|default:"—" }}</td>
-        <td class="small">{% if x.loge.type_loge == 'haut_grade' %}Haut grade{% else %}Bleue{% endif %}</td>
-        <td class="small">{{ x.loge.obedience.nom }}</td>
-        <td class="small">{{ x.loge.nom_contact|default:"—" }}</td>
-        <td class="small">{% if x.loge.email %}<a href="mailto:{{ x.loge.email }}">{{ x.loge.email }}</a>{% else %}<span class="text-danger">—</span>{% endif %}</td>
+        <td class="small" data-val="{{ x.loge.association }}">{{ x.loge.association|default:"—" }}</td>
+        <td class="small" data-val="{% if x.loge.type_loge == 'haut_grade' %}Haut grade{% else %}Bleue{% endif %}">{% if x.loge.type_loge == 'haut_grade' %}Haut grade{% else %}Bleue{% endif %}</td>
+        <td class="small" data-val="{{ x.loge.obedience.nom }}">{{ x.loge.obedience.nom }}</td>
+        <td class="small" data-val="{{ x.loge.effectif_total }}">{{ x.loge.effectif_total|default:"—" }}{% if x.loge.effectif_moyen_agapes %} <span class="text-muted">(🍽 {{ x.loge.effectif_moyen_agapes }})</span>{% endif %}</td>
+        <td class="small" data-val="{{ x.loge.nom_contact }}">{{ x.loge.nom_contact|default:"—" }}</td>
+        <td class="small">
+          {% if x.loge.email %}
+          <a href="mailto:{{ x.loge.email }}">{{ x.loge.email }}</a>
+          <button type="button" class="btn btn-sm btn-link p-0 ms-1 btn-copy" data-email="{{ x.loge.email }}" title="Copier l'email">📋</button>
+          {% else %}<span class="text-danger">—</span>{% endif %}
+        </td>
         <td class="small">{% if x.loge.telephone %}<a href="tel:{{ x.loge.telephone }}" class="text-decoration-none">{{ x.loge.telephone }}</a>{% else %}—{% endif %}</td>
         <td class="small text-muted">{{ x.recurrences|default:"—" }}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="8" class="text-center text-muted py-4">Aucune loge pour ce filtre.</td></tr>
+      <tr><td colspan="9" class="text-center text-muted py-4">Aucune loge pour ce filtre.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+<script>
+(function(){
+  // Copier l'email
+  document.querySelectorAll('.btn-copy').forEach(function(b){
+    b.addEventListener('click', function(){
+      navigator.clipboard.writeText(b.dataset.email).then(function(){
+        var old=b.textContent; b.textContent='✅';
+        setTimeout(function(){ b.textContent=old; }, 1200);
+      });
+    });
+  });
+  // Tri par colonne (client)
+  var table=document.getElementById('tbl-annuaire');
+  var tbody=table.querySelector('tbody');
+  table.querySelectorAll('th[data-sort]').forEach(function(th, idx){
+    var asc=true;
+    th.addEventListener('click', function(){
+      var rows=Array.from(tbody.querySelectorAll('tr'));
+      var type=th.dataset.sort;
+      rows.sort(function(r1,r2){
+        var a=(r1.children[idx].dataset.val||r1.children[idx].textContent).trim();
+        var b=(r2.children[idx].dataset.val||r2.children[idx].textContent).trim();
+        if(type==='num'){ a=parseFloat(a)||0; b=parseFloat(b)||0; return asc?a-b:b-a; }
+        return asc? a.localeCompare(b,'fr') : b.localeCompare(a,'fr');
+      });
+      asc=!asc;
+      rows.forEach(function(r){ tbody.appendChild(r); });
+    });
+  });
+})();
+</script>
 {% endblock %}

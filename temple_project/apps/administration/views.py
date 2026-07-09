@@ -1151,14 +1151,18 @@ def annuaire(request):
     JF = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
     POS = {1: '1re', 2: '2e', 3: '3e', 4: '4e', -1: 'Der'}
     lignes = []
+    nb = {'active': 0, 'a_reconfirmer': 0, 'inactive': 0, 'sans_email': 0}
     for l in loges:
         rec = [f"{POS.get(r.numero_semaine, r.numero_semaine)} {JF[r.jour_semaine]} "
                f"{str(r.temple).replace('Temple ', '')}"
                for r in l.regles.filter(actif=True).select_related('temple')]
         lignes.append({'loge': l, 'recurrences': ' · '.join(rec)})
+        nb[l.statut] = nb.get(l.statut, 0) + 1
+        if not l.email:
+            nb['sans_email'] += 1
 
     return render(request, 'administration/annuaire.html', {
-        'lignes': lignes, 'total': len(lignes),
+        'lignes': lignes, 'total': len(lignes), 'nb': nb,
         'q': q, 'f_type': f_type, 'f_statut': f_statut, 'f_obd': f_obd,
         'obediences': Obedience.objects.order_by('nom'),
     })
