@@ -1123,8 +1123,10 @@ def occupation(request):
     if moment in ('soir', 'après-midi', 'matin'):
         creneaux = [c for c in creneaux if c['creneau'] == moment]
     ctx = _occupation_temples(annee)
-    # Potentiel financier : loge 85 €/membre, haut grade 22,80 €/membre, 15-20 membres
-    MB_MIN, MB_MAX, T_LOGE, T_HG = 15, 20, 85, 22.80
+    # Potentiel financier : tarifs/membre paramétrables (Facturation), 15-20 membres
+    params = Parametres.get_instance()
+    MB_MIN, MB_MAX = 15, 20
+    T_LOGE, T_HG = float(params.tarif_membre_loge), float(params.tarif_membre_hg)
     ctx['fin'] = {
         't_loge': T_LOGE, 't_hg': T_HG, 'mb_min': MB_MIN, 'mb_max': MB_MAX,
         'loge_min': MB_MIN * T_LOGE, 'loge_max': MB_MAX * T_LOGE,
@@ -4406,9 +4408,11 @@ def facturation(request):
             de = (request.POST.get('tarif_date_effet') or '').strip()
             params.tarif_date_effet = date.fromisoformat(de) if de else None
             params.facturation_active = 'facturation_active' in request.POST
+            params.tarif_membre_loge = Decimal(request.POST.get('tarif_membre_loge') or '0')
+            params.tarif_membre_hg = Decimal(request.POST.get('tarif_membre_hg') or '0')
             params.save(update_fields=['tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
                                        'tarif_congres_jour', 'tarif_funebre', 'tarif_date_effet',
-                                       'facturation_active'])
+                                       'facturation_active', 'tarif_membre_loge', 'tarif_membre_hg'])
             messages.success(request, "Tarifs mis à jour. Ils ne s'appliquent pas aux dates antérieures à leur entrée en vigueur.")
         except (InvalidOperation, ValueError):
             messages.error(request, "Valeurs invalides : vérifiez les montants et la date.")

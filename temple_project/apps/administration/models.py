@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -20,6 +21,13 @@ class Parametres(models.Model):
         default=True,
         help_text="Active la facturation des occupations. À désactiver tant que "
                   "le modèle n'est pas validé avec le trésorier.")
+    # Tarifs récurrents par membre (base à confirmer avec le trésorier)
+    tarif_membre_loge = models.DecimalField(
+        max_digits=8, decimal_places=2, default=85,
+        help_text="Redevance par membre pour une loge bleue (€).")
+    tarif_membre_hg = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal('22.80'),
+        help_text="Redevance par membre pour un haut grade (€).")
     # ── Tarifs de facturation des réservations exceptionnelles ────────────────
     tarif_exc_sans_agapes = models.DecimalField(
         max_digits=8, decimal_places=2, default=100,
