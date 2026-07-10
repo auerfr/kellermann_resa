@@ -25,6 +25,13 @@
   .filtres-wrapper { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .filtres-wrapper select { min-width: 120px; flex: 1; }
   .legende-wrapper { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; margin-top: 0.5rem; }
+  /* ── Peaufinage desktop ── */
+  .fc-day-today { background: rgba(200,168,75,.10) !important; }
+  .fc-daygrid-day.fc-day-today .fc-daygrid-day-number { color: #0F2137; font-weight: 700; }
+  .fc-day-sat, .fc-day-sun { background: #FAFBFC; }
+  .fc-daygrid-event, .fc-timegrid-event { transition: filter .12s, box-shadow .12s; }
+  .fc-daygrid-event:hover, .fc-timegrid-event:hover { filter: brightness(.96); box-shadow: 0 1px 4px rgba(15,33,55,.18); }
+  .fc-toolbar-title { text-transform: capitalize; }
   @media (max-width: 768px) {
     .fc-toolbar { flex-wrap: wrap; gap: 0.4rem; }
     .fc-toolbar-chunk { display: flex; justify-content: center; }
