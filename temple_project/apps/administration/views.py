@@ -1293,8 +1293,8 @@ def sante_donnees(request):
          'action': 'purger_orphelines', 'icone': '👻',
          'aide': 'Tenues récurrentes détachées de leur loge — à purger.'},
         {'label': 'Réservations de salle sans loge', 'valeur': orph_salle,
-         'url': 'administration:annuaire', 'icone': '🪑',
-         'aide': 'Salles non rattachées (le rattachement auto agit à la création).'},
+         'url': 'administration:rattachement_salles', 'icone': '🪑',
+         'aide': 'Salles non rattachées — cliquez pour les relier à une loge.'},
         {'label': 'Doublons de règles de récurrence', 'valeur': doublons_regles,
          'icone': '🔁', 'aide': 'Commande : dedup_regles.'},
         {'label': 'Loges actives sans email', 'valeur': sans_email,
@@ -1445,6 +1445,58 @@ def fusion_loges(request):
 
     return render(request, 'administration/fusion_loges.html', {
         'loges': loges, 'garder': garder, 'suppr': suppr, 'report': report,
+    })
+
+
+@staff_required
+def rattachement_salles(request):
+    """Rattache manuellement à une loge les réservations de salle sans loge que
+    l'auto-rattachement (par nom d'organisation) n'a pas su relier. En un clic,
+    par organisation (toutes les réservations d'un même nom) ou à l'unité."""
+    from collections import OrderedDict
+    from temple_project.apps.reservations.signals import match_loge_par_organisation
+
+    if request.method == 'POST':
+        loge = Loge.objects.filter(pk=request.POST.get('loge') or 0).first()
+        resa_id = request.POST.get('resa_id')
+        org     = request.POST.get('organisation')
+        if not loge:
+            messages.error(request, "Sélectionnez une loge avant de rattacher.")
+        elif resa_id:
+            n = ReservationSalle.objects.filter(pk=resa_id, loge__isnull=True).update(loge=loge)
+            if n:
+                log_evenement('rattachement_salle',
+                    f"Réservation salle #{resa_id} rattachée à « {loge.nom} »",
+                    request=request, objet=loge)
+                messages.success(request, f"Réservation rattachée à « {loge.nom} ».")
+        elif org is not None:
+            n = ReservationSalle.objects.filter(loge__isnull=True, organisation=org).update(loge=loge)
+            log_evenement('rattachement_salle',
+                f"{n} réservation(s) « {org} » rattachée(s) à « {loge.nom} »",
+                request=request, objet=loge)
+            messages.success(request, f"{n} réservation(s) « {org or '—'} » rattachée(s) à « {loge.nom} ».")
+        return redirect('administration:rattachement_salles')
+
+    orphelines = (ReservationSalle.objects.filter(loge__isnull=True)
+                  .select_related('salle').order_by('organisation', 'date'))
+    groupes, isolees = OrderedDict(), []
+    for r in orphelines:
+        key = (r.organisation or '').strip()
+        if key:
+            g = groupes.get(key)
+            if not g:
+                g = {'organisation': key, 'count': 0, 'exemples': [],
+                     'suggestion': match_loge_par_organisation(key)}
+                groupes[key] = g
+            g['count'] += 1
+            if len(g['exemples']) < 4:
+                g['exemples'].append(r)
+        else:
+            isolees.append(r)
+
+    return render(request, 'administration/rattachement_salles.html', {
+        'groupes': list(groupes.values()), 'isolees': isolees,
+        'loges': Loge.objects.order_by('nom'), 'total': orphelines.count(),
     })
 
 

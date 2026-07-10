@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Rattachement des salles{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <h1 class="h3 mb-1" style="color:#0F2137;">Rattacher les réservations de salle</h1>
+  <p class="text-muted small mb-0" style="max-width:760px;">
+    Ces réservations de salle n'ont pas de loge liée : le rattachement automatique
+    (par nom d'organisation) ne les a pas reconnues. Reliez-les ici à la bonne loge —
+    elles apparaîtront alors sur la fiche et le portail de cette loge.
+  </p>
+</div>
+
+{% if total == 0 %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body text-center text-muted py-5">
+    <div style="font-size:2rem;">✅</div>
+    Toutes les réservations de salle sont rattachées à une loge.
+  </div>
+</div>
+{% else %}
+
+<div class="text-muted small mb-3">{{ total }} réservation(s) sans loge.</div>
+
+{% if groupes %}
+<div class="small text-uppercase text-muted mb-2" style="letter-spacing:.06em;">Par organisation</div>
+{% for g in groupes %}
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+      <div>
+        <span class="fw-semibold" style="color:#0F2137;">{{ g.organisation }}</span>
+        <span class="badge bg-secondary ms-1">{{ g.count }}</span>
+        {% if g.suggestion %}
+        <div class="small mt-1" style="color:#16A34A;">
+          Suggestion : {{ g.suggestion.abreviation }} — {{ g.suggestion.nom }}
+        </div>
+        {% endif %}
+      </div>
+      <div class="small text-muted">
+        {% for r in g.exemples %}
+          {{ r.date|date:"d/m/Y" }} · {{ r.salle.nom|default:"salle" }}{% if not forloop.last %}<br>{% endif %}
+        {% endfor %}
+        {% if g.count > g.exemples|length %}<br>…{% endif %}
+      </div>
+    </div>
+    <form method="post" class="d-flex flex-wrap gap-2 align-items-center">
+      {% csrf_token %}
+      <input type="hidden" name="organisation" value="{{ g.organisation }}">
+      <select name="loge" class="form-select form-select-sm" style="max-width:360px;" required>
+        <option value="">— Choisir la loge —</option>
+        {% for l in loges %}
+        <option value="{{ l.pk }}" {% if g.suggestion and g.suggestion.pk == l.pk %}selected{% endif %}>
+          [{{ l.abreviation }}] {{ l.nom }}
+        </option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm fw-semibold px-3" style="background:#0F2137;color:#fff;">
+        Rattacher les {{ g.count }}
+      </button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if isolees %}
+<div class="small text-uppercase text-muted mb-2 mt-4" style="letter-spacing:.06em;">Sans nom d'organisation</div>
+{% for r in isolees %}
+<div class="card border-0 shadow-sm mb-2">
+  <div class="card-body py-2">
+    <form method="post" class="d-flex flex-wrap gap-2 align-items-center">
+      {% csrf_token %}
+      <input type="hidden" name="resa_id" value="{{ r.pk }}">
+      <span class="small" style="min-width:190px;">
+        <span class="fw-semibold" style="color:#0F2137;">{{ r.date|date:"d/m/Y" }}</span>
+        · {{ r.salle.nom|default:"salle" }}
+        {% if r.objet %}<span class="text-muted">· {{ r.objet }}</span>{% endif %}
+      </span>
+      <select name="loge" class="form-select form-select-sm" style="max-width:320px;" required>
+        <option value="">— Choisir la loge —</option>
+        {% for l in loges %}
+        <option value="{{ l.pk }}">[{{ l.abreviation }}] {{ l.nom }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-primary">Rattacher</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% endif %}
+{% endblock %}

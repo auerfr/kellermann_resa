@@ -22,6 +22,7 @@ urlpatterns = [
     path("occupation/", views.occupation, name="occupation"),
     path("annuaire/", views.annuaire, name="annuaire"),
     path("fusion-loges/", views.fusion_loges, name="fusion_loges"),
+    path("rattachement-salles/", views.rattachement_salles, name="rattachement_salles"),
     path("accueil/", views.accueil, name="accueil"),
     path("sante/", views.sante_donnees, name="sante_donnees"),
     path("relance/", views.relance_contacts, name="relance_contacts"),
