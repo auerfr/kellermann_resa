@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Recherche{% endblock %}
+{% block content %}
+
+<div class="mb-3">
+  <h1 class="h3 mb-1" style="color:#0F2137;">Recherche</h1>
+  <p class="text-muted small mb-0">Loge, tenue, temple, organisation… ou une date (jj/mm ou jj/mm/aaaa) pour voir l'occupation d'un jour.</p>
+</div>
+
+<form method="get" class="mb-4">
+  <div class="input-group">
+    <input type="text" name="q" value="{{ q }}" autofocus
+           class="form-control form-control-lg" placeholder="Rechercher…">
+    <button class="btn fw-semibold px-4" style="background:#0F2137;color:#fff;">Chercher</button>
+  </div>
+</form>
+
+{% if q %}
+
+{% if date_detectee %}
+<div class="alert alert-secondary d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <span>Occupation du <strong>{{ date_detectee|date:"l d F Y" }}</strong></span>
+  <a href="{% url 'calendrier:principal' %}" class="btn btn-sm btn-outline-secondary">Ouvrir le calendrier</a>
+</div>
+{% endif %}
+
+{# ── Loges ── #}
+<div class="d-flex align-items-baseline gap-2 mb-2">
+  <span class="small text-uppercase text-muted" style="letter-spacing:.06em;">Loges</span>
+  <span class="badge bg-secondary">{{ loges|length }}</span>
+</div>
+{% if loges %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <tbody>
+        {% for l in loges %}
+        <tr>
+          <td data-label="Loge">
+            <a href="{% url 'loges:detail' l.pk %}" class="fw-semibold text-decoration-none" style="color:#0F2137;">
+              [{{ l.abreviation }}] {{ l.nom }}
+            </a>
+          </td>
+          <td data-label="Obédience" class="text-muted small">{{ l.obedience }}</td>
+          <td data-label="Statut">
+            {% if l.statut == 'active' %}<span class="badge bg-success">Active</span>
+            {% elif l.statut == 'a_reconfirmer' %}<span class="badge bg-warning text-dark">À reconfirmer</span>
+            {% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+          </td>
+          <td data-label="" class="text-end">
+            <a href="{% url 'loges:detail' l.pk %}" class="btn btn-sm btn-outline-primary">Fiche</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<p class="text-muted small mb-4">Aucune loge.</p>
+{% endif %}
+
+{# ── Tenues (temple) ── #}
+<div class="d-flex align-items-baseline gap-2 mb-2">
+  <span class="small text-uppercase text-muted" style="letter-spacing:.06em;">Tenues{% if not date_detectee %} à venir{% endif %}</span>
+  <span class="badge bg-secondary">{{ tenues|length }}</span>
+</div>
+{% if tenues %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <tbody>
+        {% for t in tenues %}
+        <tr>
+          <td data-label="Date" class="fw-semibold" style="color:#0F2137;">{{ t.date|date:"D d/m/Y" }}</td>
+          <td data-label="Loge">
+            {% if t.loge %}<a href="{% url 'loges:detail' t.loge.pk %}" class="text-decoration-none" style="color:#0F2137;">{{ t.loge.nom }}</a>
+            {% else %}<span class="text-muted">{{ t.nom_organisation|default:"—" }}</span>{% endif %}
+          </td>
+          <td data-label="Temple" class="text-muted small">{{ t.temple }}</td>
+          <td data-label="Horaires" class="text-muted small">{{ t.heure_debut|time:"H:i" }} – {{ t.heure_fin|time:"H:i" }}</td>
+          <td data-label="Statut">
+            {% if t.statut == 'validee' %}<span class="badge bg-success">Validée</span>
+            {% else %}<span class="badge bg-warning text-dark">Attente</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<p class="text-muted small mb-4">Aucune tenue.</p>
+{% endif %}
+
+{# ── Salles ── #}
+<div class="d-flex align-items-baseline gap-2 mb-2">
+  <span class="small text-uppercase text-muted" style="letter-spacing:.06em;">Salles{% if not date_detectee %} à venir{% endif %}</span>
+  <span class="badge bg-secondary">{{ salles|length }}</span>
+</div>
+{% if salles %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <tbody>
+        {% for s in salles %}
+        <tr>
+          <td data-label="Date" class="fw-semibold" style="color:#0F2137;">{{ s.date|date:"D d/m/Y" }}</td>
+          <td data-label="Salle">{{ s.salle.nom|default:"—" }}</td>
+          <td data-label="Organisation" class="text-muted small">
+            {% if s.loge %}<a href="{% url 'loges:detail' s.loge.pk %}" class="text-decoration-none text-muted">{{ s.loge.nom }}</a>
+            {% else %}{{ s.organisation|default:"—" }}{% endif %}
+          </td>
+          <td data-label="Horaires" class="text-muted small">{{ s.heure_debut|time:"H:i" }} – {{ s.heure_fin|time:"H:i" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<p class="text-muted small mb-4">Aucune salle.</p>
+{% endif %}
+
+{% else %}
+<p class="text-muted">Saisissez un terme pour lancer la recherche.</p>
+{% endif %}
+
+{% endblock %}

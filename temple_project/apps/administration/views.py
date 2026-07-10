@@ -1449,6 +1449,57 @@ def fusion_loges(request):
 
 
 @staff_required
+def recherche_globale(request):
+    """Recherche unique : loges, tenues et salles à venir, ou occupation d'un jour
+    précis si la requête est une date (jj/mm ou jj/mm/aaaa)."""
+    import re, datetime
+    from django.db.models import Q
+
+    q = request.GET.get('q', '').strip()
+    loges = tenues = salles = []
+    date_detectee = None
+
+    if q:
+        loges = (Loge.objects.filter(
+                    Q(nom__icontains=q) | Q(abreviation__icontains=q) | Q(association__icontains=q)
+                    | Q(nom_contact__icontains=q) | Q(email__icontains=q))
+                 .select_related('obedience').order_by('nom')[:40])
+
+        m = re.match(r'^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?$', q)
+        if m:
+            d, mo, y = int(m.group(1)), int(m.group(2)), m.group(3)
+            y = int(y) if y else datetime.date.today().year
+            if y < 100:
+                y += 2000
+            try:
+                date_detectee = datetime.date(y, mo, d)
+            except ValueError:
+                date_detectee = None
+
+        today = datetime.date.today()
+        if date_detectee:
+            tenues = (Reservation.objects.filter(date=date_detectee, statut__in=['validee', 'attente'])
+                      .select_related('loge', 'temple').order_by('heure_debut')[:60])
+            salles = (ReservationSalle.objects.filter(date=date_detectee, statut__in=['validee', 'attente'])
+                      .select_related('salle', 'loge').order_by('heure_debut')[:60])
+        else:
+            tenues = (Reservation.objects.filter(
+                        Q(loge__nom__icontains=q) | Q(loge__abreviation__icontains=q)
+                        | Q(temple__nom__icontains=q) | Q(nom_organisation__icontains=q),
+                        date__gte=today, statut__in=['validee', 'attente'])
+                      .select_related('loge', 'temple').order_by('date')[:40])
+            salles = (ReservationSalle.objects.filter(
+                        Q(organisation__icontains=q) | Q(loge__nom__icontains=q) | Q(salle__nom__icontains=q),
+                        date__gte=today, statut__in=['validee', 'attente'])
+                      .select_related('salle', 'loge').order_by('date')[:40])
+
+    return render(request, 'administration/recherche.html', {
+        'q': q, 'loges': loges, 'tenues': tenues, 'salles': salles,
+        'date_detectee': date_detectee,
+    })
+
+
+@staff_required
 def rattachement_salles(request):
     """Rattache manuellement à une loge les réservations de salle sans loge que
     l'auto-rattachement (par nom d'organisation) n'a pas su relier. En un clic,

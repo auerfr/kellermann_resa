@@ -475,6 +475,7 @@
                     <ul class="dropdown-menu" style="max-height:78vh;overflow-y:auto;">
                         <li><h6 class="dropdown-header">Pilotage</h6></li>
                         <li><a class="dropdown-item" href="{% url 'administration:accueil' %}">🏠 Accueil (pilotage)</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:recherche_globale' %}">🔎 Recherche</a></li>
                         <li><a class="dropdown-item" href="/admin/">📊 Tableau de bord</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><h6 class="dropdown-header">Loges &amp; contacts</h6></li>
@@ -516,6 +517,12 @@
                 </li>
                 {% endif %}
             </ul>
+            {% if user.is_staff %}
+            <form class="d-none d-lg-flex me-2" method="get" action="{% url 'administration:recherche_globale' %}" role="search">
+                <input type="search" name="q" class="form-control form-control-sm" style="width:170px;"
+                       placeholder="🔎 Rechercher…" aria-label="Rechercher">
+            </form>
+            {% endif %}
             <ul class="navbar-nav mt-2 mt-lg-0">
                 {% if user.is_staff %}
                 <li class="nav-item dropdown">
