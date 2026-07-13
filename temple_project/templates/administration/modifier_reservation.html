@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Modifier le type — {{ reservation.loge }}{% endblock %}
+{% block title %}Modifier — {{ reservation.loge }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-lg-7">
 
     <div class="mb-4">
-      <h1 class="h3 mb-1" style="color:#0F2137;">✏️ Modifier le type de réservation</h1>
-      <p class="text-muted small">Cette modification recalcule automatiquement le tarif.</p>
+      <h1 class="h3 mb-1" style="color:#0F2137;">✏️ Modifier type et tarif</h1>
+      <p class="text-muted small">Le tarif peut être saisi manuellement ou calculé automatiquement selon le type.</p>
     </div>
 
     {# Fiche de la réservation #}
@@ -38,6 +38,9 @@
               <span class="badge {% if reservation.type_reservation == 'reguliere' %}bg-success{% elif reservation.type_reservation == 'exceptionnelle' %}bg-warning text-dark{% else %}bg-info{% endif %}">
                 {{ reservation.get_type_reservation_display }}
               </span>
+              {% if reservation.regle_source %}
+              <span class="badge bg-light text-muted ms-1" style="font-size:10px;">générée depuis règle</span>
+              {% endif %}
             </td>
           </tr>
           <tr>
@@ -50,77 +53,106 @@
               {% endif %}
             </td>
           </tr>
-          {% if reservation.regle_source %}
-          <tr>
-            <td class="text-muted ps-4">Règle source</td>
-            <td class="small text-muted">Générée depuis une règle récurrente</td>
-          </tr>
-          {% endif %}
         </table>
       </div>
     </div>
 
-    {# Impact tarifaire #}
-    <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #F59E0B !important;">
+    {# Référence tarifaire automatique #}
+    <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #64748B !important;">
       <div class="card-body py-3">
-        <strong>Impact tarifaire selon le type :</strong>
-        <div class="d-flex gap-4 mt-2">
+        <strong class="small text-muted text-uppercase" style="letter-spacing:.05em;">Tarif automatique selon le type</strong>
+        <div class="d-flex gap-4 mt-2 flex-wrap">
           <div>
             <span class="badge bg-success">Régulière</span>
-            <span class="ms-2 fw-semibold">{{ tarif_si_reguliere }} €</span>
+            <span class="ms-2 fw-semibold">{{ tarif_auto_reguliere }} €</span>
+            <span class="text-muted small ms-1">(toujours 0 — couverte par cotisation)</span>
           </div>
           <div>
             <span class="badge bg-warning text-dark">Exceptionnelle</span>
-            <span class="ms-2 fw-semibold">{{ tarif_si_exceptionnelle }} €</span>
+            <span class="ms-2 fw-semibold">{{ tarif_auto_exceptionnelle }} €</span>
+            <span class="text-muted small ms-1">
+              {% if reservation.date.weekday >= 5 %}
+                (week-end → facturable)
+              {% elif reservation.date.month in "7,8" %}
+                (juillet/août → facturable)
+              {% else %}
+                (semaine en saison → 0 € auto)
+              {% endif %}
+            </span>
           </div>
         </div>
         <p class="text-muted small mb-0 mt-2">
-          Les tenues régulières générées depuis une règle récurrente ne sont jamais facturées (tarif = 0).
-          Les tenues exceptionnelles sont facturées selon le barème en vigueur.
+          Si vous laissez le champ tarif vide, le montant ci-dessus est appliqué automatiquement.
+          Pour facturer une tenue en semaine hors calendrier, saisissez le montant manuellement.
         </p>
       </div>
     </div>
 
-    {# Formulaire de modification #}
+    {# Formulaire #}
     <div class="card shadow-sm border-0">
       <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
-        Nouveau type
+        Modification
       </div>
       <div class="card-body p-4">
-        <form method="post">
+        <form method="post" id="form-modifier">
           {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.META.HTTP_REFERER }}">
+          <input type="hidden" name="next" value="{{ request.GET.next }}">
 
+          {# Type #}
           <div class="mb-4">
             <label class="form-label fw-semibold">Type de réservation</label>
-            <div class="d-flex gap-3 flex-wrap">
+            <div class="d-flex gap-4 flex-wrap">
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="type_reservation"
                        id="type_reg" value="reguliere"
-                       {% if reservation.type_reservation == 'reguliere' %}checked{% endif %}>
+                       {% if reservation.type_reservation == 'reguliere' %}checked{% endif %}
+                       onchange="majTarifAuto()">
                 <label class="form-check-label" for="type_reg">
                   <span class="badge bg-success">Régulière</span>
-                  <span class="text-muted small ms-1">— tenue récurrente du calendrier annuel</span>
+                  <span class="text-muted small ms-1">tenue du calendrier annuel, cotisation incluse</span>
                 </label>
               </div>
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="type_reservation"
                        id="type_exc" value="exceptionnelle"
-                       {% if reservation.type_reservation == 'exceptionnelle' %}checked{% endif %}>
+                       {% if reservation.type_reservation == 'exceptionnelle' %}checked{% endif %}
+                       onchange="majTarifAuto()">
                 <label class="form-check-label" for="type_exc">
                   <span class="badge bg-warning text-dark">Exceptionnelle</span>
-                  <span class="text-muted small ms-1">— tenue hors calendrier, facturée</span>
+                  <span class="text-muted small ms-1">tenue hors calendrier (week-end, 5e semaine, événement)</span>
                 </label>
               </div>
             </div>
           </div>
 
+          {# Tarif manuel #}
+          <div class="mb-4">
+            <label class="form-label fw-semibold">
+              Tarif à facturer
+              <span class="text-muted fw-normal small">(laisser vide = calcul automatique)</span>
+            </label>
+            <div class="input-group" style="max-width:220px;">
+              <input type="text" name="tarif_manuel" id="tarif_manuel"
+                     class="form-control"
+                     placeholder="Ex : 120"
+                     value="{{ reservation.tarif|default:'' }}">
+              <span class="input-group-text">€</span>
+            </div>
+            <div class="form-text" id="hint-tarif">
+              Tarif automatique pour ce type :
+              <strong id="tarif-auto-val">
+                {% if reservation.type_reservation == 'reguliere' %}{{ tarif_auto_reguliere }}{% else %}{{ tarif_auto_exceptionnelle }}{% endif %} €
+              </strong>
+              — saisissez 0 pour ne pas facturer, ou le montant souhaité.
+            </div>
+          </div>
+
           <div class="d-flex gap-3">
             <button type="submit" class="btn fw-semibold px-4" style="background:#0F2137;color:#C8A84B;"
-                    onclick="return confirm('Modifier le type et recalculer le tarif ?')">
-              ✓ Appliquer la modification
+                    onclick="return confirm('Appliquer ces modifications ?')">
+              ✓ Enregistrer
             </button>
-            <a href="{{ request.META.HTTP_REFERER|default:'/admin/' }}" class="btn btn-outline-secondary">
+            <a href="{{ request.GET.next|default:'/admin/' }}" class="btn btn-outline-secondary">
               ← Annuler
             </a>
           </div>
@@ -130,4 +162,16 @@
 
   </div>
 </div>
+
+<script>
+const TARIF_REG = "{{ tarif_auto_reguliere }}";
+const TARIF_EXC = "{{ tarif_auto_exceptionnelle }}";
+
+function majTarifAuto() {
+  const isReg = document.getElementById('type_reg').checked;
+  const el = document.getElementById('tarif-auto-val');
+  if (el) el.textContent = (isReg ? TARIF_REG : TARIF_EXC) + ' €';
+}
+document.addEventListener('DOMContentLoaded', majTarifAuto);
+</script>
 {% endblock %}

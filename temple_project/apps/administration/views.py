@@ -2901,7 +2901,8 @@ def validation_saison_admin(request):
 
 @staff_required
 def modifier_reservation(request, pk):
-    """Modifier le type (et recalculer le tarif) d'une réservation déjà validée."""
+    """Modifier le type et/ou le tarif d'une réservation déjà validée."""
+    from decimal import Decimal, InvalidOperation
     resa = get_object_or_404(Reservation, pk=pk)
     params = Parametres.get_instance()
 
@@ -2914,33 +2915,45 @@ def modifier_reservation(request, pk):
         ancien_type  = resa.get_type_reservation_display()
         ancien_tarif = resa.tarif
         resa.type_reservation = nouveau_type
-        resa.tarif = tarif_reservation(resa, params)
+
+        # Tarif : manuel si saisi, sinon calcul automatique
+        tarif_manuel_str = request.POST.get('tarif_manuel', '').strip()
+        if tarif_manuel_str:
+            try:
+                resa.tarif = Decimal(tarif_manuel_str.replace(',', '.'))
+            except InvalidOperation:
+                messages.error(request, "Montant invalide.")
+                return redirect('administration:modifier_reservation', pk=pk)
+        else:
+            resa.tarif = tarif_reservation(resa, params)
+
         resa.save()
 
         log_evenement('modification_reservation',
-            f"Type modifié : {ancien_type} → {resa.get_type_reservation_display()} | "
+            f"Type : {ancien_type} → {resa.get_type_reservation_display()} | "
             f"Tarif : {ancien_tarif} € → {resa.tarif} € | "
             f"{resa.loge} — {resa.date:%d/%m/%Y} ({resa.temple})",
             request=request, objet=resa)
 
         messages.success(request,
-            f"Type mis à jour → {resa.get_type_reservation_display()} | "
-            f"Tarif recalculé : {resa.tarif} €.")
+            f"Réservation mise à jour — type : {resa.get_type_reservation_display()}, "
+            f"tarif : {resa.tarif} €.")
         next_url = request.POST.get('next', '')
         return redirect(next_url or 'administration:tableau_de_bord')
 
-    # Prévisualisation des tarifs pour chaque type
+    # Prévisualisation tarif automatique selon le type
     from copy import copy
-    def _tarif_pour_type(t):
+    def _tarif_auto(t):
         sim = copy(resa)
         sim.type_reservation = t
-        sim.regle_source_id = None  # forcer le calcul (pas de règle source)
+        sim.regle_source_id = None
         return tarif_reservation(sim, params)
 
     return render(request, 'administration/modifier_reservation.html', {
-        'reservation': resa,
-        'tarif_si_reguliere':     _tarif_pour_type('reguliere'),
-        'tarif_si_exceptionnelle': _tarif_pour_type('exceptionnelle'),
+        'reservation':             resa,
+        'tarif_auto_reguliere':    _tarif_auto('reguliere'),
+        'tarif_auto_exceptionnelle': _tarif_auto('exceptionnelle'),
+        'params':                  params,
     })
 
 
