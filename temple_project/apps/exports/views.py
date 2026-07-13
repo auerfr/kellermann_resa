@@ -1021,7 +1021,7 @@ def bilan_saison_excel(request):
     default_annee = today.year if today.month >= 7 else today.year - 1
     annee = int(request.GET.get('saison', default_annee))
     debut = date(annee, 9, 1)
-    fin   = date(annee + 1, 6, 30)
+    fin   = date(annee + 1, 8, 31)
     saison_label = f"{annee}-{annee + 1}"
 
     def duree_h(r):
