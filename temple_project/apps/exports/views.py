@@ -1196,21 +1196,22 @@ def bilan_saison_excel(request):
     ws.cell(row=ri_tot, column=1).font = Font(bold=True, color=OR, size=9)
 
     for ci, key in enumerate([
-        'temple_creneaux', None, 'agapes_creneaux', None,
-        'cabinet_creneaux', 'reunion_creneaux', None,
+        'temple_creneaux', 'temple_heures', 'agapes_creneaux', 'agapes_heures',
+        'cabinet_creneaux', 'reunion_creneaux', 'reunion_heures',
     ], 8):
-        if key:
-            v = sum(s[key] for s in lignes)
-        else:
-            v = ''
-        _cell(ws, ri_tot, ci, v, bold=True, align='center', bg='E2E8F0')
+        is_h = 'heures' in key
+        v = round(sum(s[key] for s in lignes), 2) if is_h else sum(s[key] for s in lignes)
+        _cell(ws, ri_tot, ci, v, bold=True, align='center',
+              fmt='0.0"h"' if is_h else None, bg='E2E8F0')
 
     _cell(ws, ri_tot, 15, sum(
         s['temple_creneaux']+s['agapes_creneaux']+s['cabinet_creneaux']+s['reunion_creneaux']
         for s in lignes), bold=True, align='center', bg=VERT)
     _cell(ws, ri_tot, 16, round(sum(
         s['temple_heures']+s['agapes_heures']+s['reunion_heures']
-        for s in lignes), 2), bold=True, align='center', bg=VERT)
+        for s in lignes), 2), bold=True, align='center', fmt='0.0"h"', bg=VERT)
+    _cell(ws, ri_tot, 17, sum(s['temple_creneaux'] for s in lignes),
+          bold=True, align='center', bg=VERT)
 
     # Largeurs colonnes
     largeurs = [38, 10, 22, 14, 12, 14, 12, 10, 9, 10, 9, 10, 10, 9, 14, 12, 12]
