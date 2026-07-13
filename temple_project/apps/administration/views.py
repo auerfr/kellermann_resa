@@ -2785,6 +2785,61 @@ def validation_saison_admin(request):
             messages.success(request, f"Validation de {val.loge} réinitialisée.")
             return redirect(f"{request.path}?annee={annee}")
 
+        elif action == 'relancer':
+            annee_cible = int(request.POST.get('annee_cible', annee))
+            periode_cible = f"01/09/{annee_cible} → 30/06/{annee_cible + 1}"
+            pks_selectionnes = set(
+                int(x) for x in request.POST.getlist('validation_pks') if x.isdigit()
+            )
+            if not pks_selectionnes:
+                messages.warning(request, "Aucune loge sélectionnée.")
+                return redirect(f"{request.path}?annee={annee_cible}")
+            validations_ouverte = ValidationSaison.objects.filter(
+                pk__in=pks_selectionnes, annee=annee_cible, statut='ouverte'
+            ).select_related('loge')
+
+            nb_email = nb_sans_email = 0
+            for val in validations_ouverte:
+                loge = val.loge
+                nb_tenues = val.lignes.count()
+                if loge.email:
+                    demande = DemandeAccesPortail.objects.filter(
+                        loge=loge, statut='validee'
+                    ).order_by('-created_at').first()
+                    if not demande:
+                        demande = DemandeAccesPortail.objects.create(
+                            loge=loge, nom_venerable=loge.nom_contact or loge.nom,
+                            email=loge.email, statut='validee',
+                        )
+                    portail_url = request.build_absolute_uri(
+                        f"/reservations/portail/{demande.token}/")
+                    send_mail_kellermann(
+                        subject=f"[RAPPEL] Validation de votre calendrier — Saison {annee_cible}-{annee_cible + 1}",
+                        message=(
+                            f"Bonjour,\n\n"
+                            f"Nous n'avons pas encore reçu votre validation concernant le calendrier "
+                            f"prévisionnel de vos tenues pour la saison {annee_cible}-{annee_cible + 1} "
+                            f"({periode_cible}).\n\n"
+                            f"{nb_tenues} tenue(s) sont planifiées pour votre loge.\n\n"
+                            f"Accédez à votre espace loge pour confirmer, signaler un déplacement "
+                            f"ou une annulation :\n{portail_url}\n\n"
+                            f"Bien fraternellement,\nLes Temples Kellermann"
+                        ),
+                        recipient_list=[loge.email],
+                    )
+                    nb_email += 1
+                else:
+                    nb_sans_email += 1
+
+            parts = [f"{nb_email} rappel(s) envoyé(s)"]
+            if nb_sans_email:
+                parts.append(f"{nb_sans_email} sans adresse email (non envoyé)")
+            messages.success(request, "Relance effectuée — " + ", ".join(parts) + ".")
+            log_evenement('relance_validation_saison',
+                f"Relance validation saison {annee_cible}-{annee_cible + 1} : {', '.join(parts)}",
+                request=request, objet_type='systeme')
+            return redirect(f"{request.path}?annee={annee_cible}")
+
     # ── GET ──────────────────────────────────────────────────────────────────────
     validations = (
         ValidationSaison.objects
@@ -2820,6 +2875,7 @@ def validation_saison_admin(request):
         loges_manquantes = Loge.objects.none()
 
     validations_attente_list = [v for v in validations if v.statut == 'attente']
+    validations_ouverte_list = [v for v in validations if v.statut == 'ouverte']
 
     return render(request, 'administration/validation_saison.html', {
         'annee':                   annee,
@@ -2828,6 +2884,7 @@ def validation_saison_admin(request):
         'periode_label':           periode_label,
         'validations':             validations,
         'validations_attente_list': validations_attente_list,
+        'validations_ouverte_list': validations_ouverte_list,
         'nb_total':                nb_total,
         'nb_attente':              nb_attente,
         'nb_ouverte':              nb_ouverte,

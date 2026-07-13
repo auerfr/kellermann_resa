@@ -108,6 +108,13 @@
       📤 Envoyer les emails ({{ nb_attente }} loge{{ nb_attente|pluralize }}) ▾
     </button>
     {% endif %}
+    {# Relance des loges en statut 'ouverte' (email envoyé, pas de réponse) #}
+    {% if nb_ouverte > 0 %}
+    <button class="btn btn-sm fw-semibold px-3 btn-outline-primary"
+            data-bs-toggle="collapse" data-bs-target="#panel-relance">
+      🔔 Relancer ({{ nb_ouverte }} loge{{ nb_ouverte|pluralize }} sans réponse) ▾
+    </button>
+    {% endif %}
   </div>
 </div>
 
@@ -199,6 +206,82 @@
           </button>
           <button type="button" class="btn btn-outline-secondary btn-sm"
                   data-bs-toggle="collapse" data-bs-target="#panel-envoi-emails">
+            Annuler
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Panneau de relance (loges en statut 'ouverte') ──────────────────────── #}
+{% if nb_ouverte > 0 %}
+<div class="collapse mb-3" id="panel-relance">
+  <div class="card border-0 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center" style="background:#1D4ED8;">
+      <span style="color:#fff;font-size:12px;letter-spacing:.06em;text-transform:uppercase;">
+        🔔 Relance — loges sans réponse
+      </span>
+      <span class="text-white small" id="label-nb-relance">0 / {{ nb_ouverte }} sélectionnée(s)</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="px-3 pt-2 pb-1">
+        <p class="text-muted small mb-1">Ces loges ont reçu l'email de validation mais n'ont pas encore répondu. Un rappel leur sera envoyé avec leur lien portail.</p>
+      </div>
+      <form method="post" id="form-relance">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="relancer">
+        <input type="hidden" name="annee_cible" value="{{ annee }}">
+        <div class="px-3 pt-1 pb-1 d-flex gap-2">
+          <button type="button" class="btn btn-xs btn-outline-secondary btn-sm py-0 px-2"
+                  onclick="toggleToutRelance(true)">☑ Tout</button>
+          <button type="button" class="btn btn-xs btn-outline-secondary btn-sm py-0 px-2"
+                  onclick="toggleToutRelance(false)">☐ Aucun</button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0" style="font-size:13px;">
+            <thead style="background:#F8FAFC;">
+              <tr>
+                <th style="width:36px;"></th>
+                <th class="text-muted small">LOGE</th>
+                <th class="text-muted small text-center">TENUES</th>
+                <th class="text-muted small">EMAIL</th>
+                <th class="text-muted small">ENVOYÉ LE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for v in validations_ouverte_list %}
+              <tr style="{% if not v.loge.email %}opacity:.6;{% endif %}">
+                <td class="text-center align-middle">
+                  <input type="checkbox" name="validation_pks" value="{{ v.pk }}"
+                         class="form-check-input cb-relance"
+                         {% if v.loge.email %}checked{% endif %}
+                         {% if not v.loge.email %}disabled title="Pas d'adresse email"{% endif %}>
+                </td>
+                <td class="fw-semibold align-middle">{{ v.loge.nom }}</td>
+                <td class="text-center align-middle">{{ v.lignes.count }}</td>
+                <td class="align-middle small">
+                  {% if v.loge.email %}
+                    <span class="text-success">✓ {{ v.loge.email }}</span>
+                  {% else %}
+                    <span class="badge bg-danger">Email manquant</span>
+                  {% endif %}
+                </td>
+                <td class="align-middle small text-muted">
+                  {% if v.date_envoi %}{{ v.date_envoi|date:"d/m/Y H:i" }}{% else %}—{% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="px-3 py-3 border-top d-flex gap-2 align-items-center">
+          <button type="submit" class="btn btn-primary fw-semibold px-4" id="btn-relancer">
+            🔔 Envoyer les rappels (<span id="nb-rel">0</span>)
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+                  data-bs-toggle="collapse" data-bs-target="#panel-relance">
             Annuler
           </button>
         </div>
@@ -356,8 +439,8 @@
 </div>
 {% endif %}
 
-{% if nb_attente > 0 %}
 <script>
+{% if nb_attente > 0 %}
 function majCompteur() {
   const n = document.querySelectorAll('.cb-envoi:checked').length;
   const el = document.getElementById('nb-sel');
@@ -369,17 +452,41 @@ function toggleTout(etat) {
   document.querySelectorAll('.cb-envoi:not(:disabled)').forEach(cb => cb.checked = etat);
   majCompteur();
 }
+{% endif %}
+{% if nb_ouverte > 0 %}
+function majCompteurRelance() {
+  const n = document.querySelectorAll('.cb-relance:checked').length;
+  const el = document.getElementById('nb-rel');
+  const lbl = document.getElementById('label-nb-relance');
+  if (el)  el.textContent = n;
+  if (lbl) lbl.textContent = n + ' / {{ nb_ouverte }} sélectionnée(s)';
+}
+function toggleToutRelance(etat) {
+  document.querySelectorAll('.cb-relance:not(:disabled)').forEach(cb => cb.checked = etat);
+  majCompteurRelance();
+}
+{% endif %}
 document.addEventListener('DOMContentLoaded', function() {
+  {% if nb_attente > 0 %}
   document.querySelectorAll('.cb-envoi').forEach(cb => cb.addEventListener('change', majCompteur));
   majCompteur();
-  // Confirmation avant soumission
   const form = document.getElementById('form-envoi-emails');
   if (form) form.addEventListener('submit', function(e) {
     const n = document.querySelectorAll('.cb-envoi:checked').length;
     if (!n) { e.preventDefault(); alert('Sélectionnez au moins une loge.'); return; }
     if (!confirm('Envoyer les emails de validation à ' + n + ' loge(s) ?')) e.preventDefault();
   });
+  {% endif %}
+  {% if nb_ouverte > 0 %}
+  document.querySelectorAll('.cb-relance').forEach(cb => cb.addEventListener('change', majCompteurRelance));
+  majCompteurRelance();
+  const formRelance = document.getElementById('form-relance');
+  if (formRelance) formRelance.addEventListener('submit', function(e) {
+    const n = document.querySelectorAll('.cb-relance:checked').length;
+    if (!n) { e.preventDefault(); alert('Sélectionnez au moins une loge.'); return; }
+    if (!confirm('Envoyer un rappel à ' + n + ' loge(s) ?')) e.preventDefault();
+  });
+  {% endif %}
 });
 </script>
-{% endif %}
 {% endblock %}
