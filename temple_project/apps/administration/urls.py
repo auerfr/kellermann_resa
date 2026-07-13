@@ -57,4 +57,5 @@ urlpatterns = [
     path("facturation/", views.facturation, name="facturation"),
     path("facturation/export/", views.facturation_export_excel, name="facturation_export"),
     path("facturation/pdf/", views.facturation_pdf, name="facturation_pdf"),
+    path("reservation/<int:pk>/modifier/", views.modifier_reservation, name="modifier_reservation"),
 ]

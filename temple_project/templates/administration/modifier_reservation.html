@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Modifier le type — {{ reservation.loge }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="mb-4">
+      <h1 class="h3 mb-1" style="color:#0F2137;">✏️ Modifier le type de réservation</h1>
+      <p class="text-muted small">Cette modification recalcule automatiquement le tarif.</p>
+    </div>
+
+    {# Fiche de la réservation #}
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+        Réservation concernée
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-borderless mb-0">
+          <tr>
+            <td class="text-muted ps-4" style="width:160px;">Loge</td>
+            <td class="fw-semibold">{{ reservation.loge }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted ps-4">Temple</td>
+            <td>{{ reservation.temple }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted ps-4">Date</td>
+            <td class="fw-semibold">{{ reservation.date|date:"l d F Y" }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted ps-4">Horaires</td>
+            <td>{{ reservation.heure_debut|time:"H:i" }} – {{ reservation.heure_fin|time:"H:i" }}</td>
+          </tr>
+          <tr>
+            <td class="text-muted ps-4">Type actuel</td>
+            <td>
+              <span class="badge {% if reservation.type_reservation == 'reguliere' %}bg-success{% elif reservation.type_reservation == 'exceptionnelle' %}bg-warning text-dark{% else %}bg-info{% endif %}">
+                {{ reservation.get_type_reservation_display }}
+              </span>
+            </td>
+          </tr>
+          <tr>
+            <td class="text-muted ps-4">Tarif actuel</td>
+            <td class="fw-semibold">
+              {% if reservation.tarif %}
+                <span class="text-danger">{{ reservation.tarif }} €</span>
+              {% else %}
+                <span class="text-success">0 € (non facturé)</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% if reservation.regle_source %}
+          <tr>
+            <td class="text-muted ps-4">Règle source</td>
+            <td class="small text-muted">Générée depuis une règle récurrente</td>
+          </tr>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+
+    {# Impact tarifaire #}
+    <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #F59E0B !important;">
+      <div class="card-body py-3">
+        <strong>Impact tarifaire selon le type :</strong>
+        <div class="d-flex gap-4 mt-2">
+          <div>
+            <span class="badge bg-success">Régulière</span>
+            <span class="ms-2 fw-semibold">{{ tarif_si_reguliere }} €</span>
+          </div>
+          <div>
+            <span class="badge bg-warning text-dark">Exceptionnelle</span>
+            <span class="ms-2 fw-semibold">{{ tarif_si_exceptionnelle }} €</span>
+          </div>
+        </div>
+        <p class="text-muted small mb-0 mt-2">
+          Les tenues régulières générées depuis une règle récurrente ne sont jamais facturées (tarif = 0).
+          Les tenues exceptionnelles sont facturées selon le barème en vigueur.
+        </p>
+      </div>
+    </div>
+
+    {# Formulaire de modification #}
+    <div class="card shadow-sm border-0">
+      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+        Nouveau type
+      </div>
+      <div class="card-body p-4">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.META.HTTP_REFERER }}">
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Type de réservation</label>
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="type_reservation"
+                       id="type_reg" value="reguliere"
+                       {% if reservation.type_reservation == 'reguliere' %}checked{% endif %}>
+                <label class="form-check-label" for="type_reg">
+                  <span class="badge bg-success">Régulière</span>
+                  <span class="text-muted small ms-1">— tenue récurrente du calendrier annuel</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="type_reservation"
+                       id="type_exc" value="exceptionnelle"
+                       {% if reservation.type_reservation == 'exceptionnelle' %}checked{% endif %}>
+                <label class="form-check-label" for="type_exc">
+                  <span class="badge bg-warning text-dark">Exceptionnelle</span>
+                  <span class="text-muted small ms-1">— tenue hors calendrier, facturée</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-3">
+            <button type="submit" class="btn fw-semibold px-4" style="background:#0F2137;color:#C8A84B;"
+                    onclick="return confirm('Modifier le type et recalculer le tarif ?')">
+              ✓ Appliquer la modification
+            </button>
+            <a href="{{ request.META.HTTP_REFERER|default:'/admin/' }}" class="btn btn-outline-secondary">
+              ← Annuler
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

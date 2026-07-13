@@ -212,6 +212,11 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
                     Annuler
                   </button>
                 </form>
+                <a href="{% url 'administration:modifier_reservation' e.resa_pk %}?next={{ request.get_full_path|urlencode }}"
+                   class="btn btn-sm btn-outline-secondary py-0"
+                   title="Modifier le type (Régulière / Exceptionnelle) et recalculer le tarif">
+                  ✏️ Type
+                </a>
                 {% endif %}
               </td>
               {% endif %}

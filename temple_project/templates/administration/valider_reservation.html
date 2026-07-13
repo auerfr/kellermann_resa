@@ -127,6 +127,35 @@
       <div class="card-body p-4">
         <form method="post">
           {% csrf_token %}
+          {# Correction du type avant que le tarif soit figé #}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">
+              Type de réservation
+              <span class="badge bg-warning text-dark ms-2" style="font-size:10px;">Vérifier avant validation</span>
+            </label>
+            <div class="d-flex gap-4 flex-wrap">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="type_reservation"
+                       id="vr_type_reg" value="reguliere"
+                       {% if reservation.type_reservation == 'reguliere' %}checked{% endif %}>
+                <label class="form-check-label" for="vr_type_reg">
+                  <span class="badge bg-success">Régulière</span>
+                  <span class="text-muted small ms-1">— tenue du calendrier annuel, non facturée</span>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="type_reservation"
+                       id="vr_type_exc" value="exceptionnelle"
+                       {% if reservation.type_reservation == 'exceptionnelle' %}checked{% endif %}>
+                <label class="form-check-label" for="vr_type_exc">
+                  <span class="badge bg-warning text-dark">Exceptionnelle</span>
+                  <span class="text-muted small ms-1">— tenue hors calendrier, facturée</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-text">Le tarif est calculé au moment de la validation selon ce type.</div>
+          </div>
+
           <div class="mb-4">
             <label class="form-label fw-semibold">Commentaire pour le demandeur <span class="text-muted fw-normal">(optionnel)</span></label>
             <textarea name="commentaire_admin" class="form-control" rows="3"

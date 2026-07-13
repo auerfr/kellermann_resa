@@ -153,6 +153,10 @@ def valider_reservation(request, pk):
 
         resa.statut = 'validee' if action == 'valider' else 'refusee'
         if action == 'valider':
+            # L'admin peut corriger le type avant que le tarif soit figé
+            type_corrige = request.POST.get('type_reservation', '').strip()
+            if type_corrige in ('reguliere', 'exceptionnelle', 'congres'):
+                resa.type_reservation = type_corrige
             # Fige le tarif en vigueur au moment de la validation
             resa.tarif = tarif_reservation(resa)
         resa.save()
@@ -2892,6 +2896,51 @@ def validation_saison_admin(request):
         'nb_traitee':              nb_traitee,
         'nb_anomalies_total':      nb_anomalies_total,
         'loges_manquantes':        loges_manquantes,
+    })
+
+
+@staff_required
+def modifier_reservation(request, pk):
+    """Modifier le type (et recalculer le tarif) d'une réservation déjà validée."""
+    resa = get_object_or_404(Reservation, pk=pk)
+    params = Parametres.get_instance()
+
+    if request.method == 'POST':
+        nouveau_type = request.POST.get('type_reservation', '').strip()
+        if nouveau_type not in ('reguliere', 'exceptionnelle', 'congres'):
+            messages.error(request, "Type invalide.")
+            return redirect('administration:modifier_reservation', pk=pk)
+
+        ancien_type  = resa.get_type_reservation_display()
+        ancien_tarif = resa.tarif
+        resa.type_reservation = nouveau_type
+        resa.tarif = tarif_reservation(resa, params)
+        resa.save()
+
+        log_evenement('modification_reservation',
+            f"Type modifié : {ancien_type} → {resa.get_type_reservation_display()} | "
+            f"Tarif : {ancien_tarif} € → {resa.tarif} € | "
+            f"{resa.loge} — {resa.date:%d/%m/%Y} ({resa.temple})",
+            request=request, objet=resa)
+
+        messages.success(request,
+            f"Type mis à jour → {resa.get_type_reservation_display()} | "
+            f"Tarif recalculé : {resa.tarif} €.")
+        next_url = request.POST.get('next', '')
+        return redirect(next_url or 'administration:tableau_de_bord')
+
+    # Prévisualisation des tarifs pour chaque type
+    from copy import copy
+    def _tarif_pour_type(t):
+        sim = copy(resa)
+        sim.type_reservation = t
+        sim.regle_source_id = None  # forcer le calcul (pas de règle source)
+        return tarif_reservation(sim, params)
+
+    return render(request, 'administration/modifier_reservation.html', {
+        'reservation': resa,
+        'tarif_si_reguliere':     _tarif_pour_type('reguliere'),
+        'tarif_si_exceptionnelle': _tarif_pour_type('exceptionnelle'),
     })
 
 
