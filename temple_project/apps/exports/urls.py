@@ -14,4 +14,5 @@ urlpatterns = [
     path("portail/<str:token>/planning.pdf", views.planning_loge_pdf, name="planning_loge_pdf"),
     path("portail/<str:token>/grille.pdf", views.planning_loge_grille_pdf, name="planning_loge_grille_pdf"),
     path("portail/<str:token>/annuel.pdf", views.planning_loge_annuel_pdf, name="planning_loge_annuel_pdf"),
+    path("bilan-saison/", views.bilan_saison_excel, name="bilan_saison"),
 ]

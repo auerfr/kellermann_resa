@@ -1004,3 +1004,282 @@ def planning_loge_pdf(request, token):
     response = HttpResponse(buf, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{nom}"'
     return response
+
+
+@login_required
+def bilan_saison_excel(request):
+    """Bilan complet d'occupation par structure pour une saison :
+    créneaux, heures, effectifs, ventilation par type de salle."""
+    from collections import defaultdict
+    from datetime import datetime
+    from openpyxl.styles import Border, Side, numbers
+    from openpyxl.utils import get_column_letter
+    from temple_project.apps.reservations.models import ReservationSalle
+    from temple_project.apps.loges.models import Loge
+
+    today = date.today()
+    default_annee = today.year if today.month >= 7 else today.year - 1
+    annee = int(request.GET.get('saison', default_annee))
+    debut = date(annee, 9, 1)
+    fin   = date(annee + 1, 6, 30)
+    saison_label = f"{annee}-{annee + 1}"
+
+    def duree_h(r):
+        d = datetime.combine(r.date, r.heure_fin) - datetime.combine(r.date, r.heure_debut)
+        return round(d.total_seconds() / 3600, 2)
+
+    # ── Collecte réservations temples ────────────────────────────────────────
+    resas_temple = (
+        Reservation.objects
+        .filter(date__gte=debut, date__lte=fin, statut='validee')
+        .select_related('loge', 'loge__obedience', 'temple')
+        .order_by('loge__nom', 'date')
+    )
+
+    # ── Collecte réservations salles (agapes / cabinets / réunion) ──────────
+    resas_salle = (
+        ReservationSalle.objects
+        .filter(date__gte=debut, date__lte=fin, statut='validee')
+        .select_related('loge', 'loge__obedience', 'salle')
+        .order_by('loge__nom', 'date')
+    )
+
+    # ── Agrégation par loge ──────────────────────────────────────────────────
+    # clé : loge pk (ou None pour réservations sans loge)
+    struct = defaultdict(lambda: {
+        'label': '', 'abrev': '', 'obedience': '', 'type_loge': '',
+        'rite': '', 'effectif_total': '', 'effectif_agapes': '',
+        'temple_creneaux': 0, 'temple_heures': 0.0,
+        'agapes_creneaux': 0, 'agapes_heures': 0.0,
+        'cabinet_creneaux': 0,
+        'reunion_creneaux': 0, 'reunion_heures': 0.0,
+        'loge_obj': None,
+    })
+
+    for r in resas_temple:
+        key = r.loge_id or f'ext_{r.nom_demandeur}'
+        s = struct[key]
+        if r.loge and not s['label']:
+            lg = r.loge
+            s['label']          = lg.nom
+            s['abrev']          = lg.abreviation or ''
+            s['obedience']      = lg.obedience.nom if lg.obedience else ''
+            s['type_loge']      = lg.get_type_loge_display() if hasattr(lg, 'get_type_loge_display') else lg.type_loge
+            s['rite']           = lg.rite or ''
+            s['effectif_total'] = lg.effectif_total or ''
+            s['effectif_agapes']= lg.effectif_moyen_agapes or ''
+            s['loge_obj']       = lg
+        elif not s['label']:
+            s['label'] = r.nom_organisation or r.nom_demandeur or '(sans loge)'
+        s['temple_creneaux'] += 1
+        s['temple_heures']   += duree_h(r)
+
+    for r in resas_salle:
+        key = r.loge_id or f'ext_{r.nom_demandeur}'
+        s = struct[key]
+        if r.loge and not s['label']:
+            lg = r.loge
+            s['label']          = lg.nom
+            s['abrev']          = lg.abreviation or ''
+            s['obedience']      = lg.obedience.nom if lg.obedience else ''
+            s['type_loge']      = lg.get_type_loge_display() if hasattr(lg, 'get_type_loge_display') else lg.type_loge
+            s['rite']           = lg.rite or ''
+            s['effectif_total'] = lg.effectif_total or ''
+            s['effectif_agapes']= lg.effectif_moyen_agapes or ''
+            s['loge_obj']       = lg
+        elif not s['label']:
+            s['label'] = r.organisation or r.nom_demandeur or '(sans loge)'
+        ts = r.salle.type_salle if r.salle else ''
+        if ts == 'agapes':
+            s['agapes_creneaux'] += 1
+            s['agapes_heures']   += duree_h(r)
+        elif ts == 'cabinet_reflexion':
+            s['cabinet_creneaux'] += 1
+        elif ts == 'reunion':
+            s['reunion_creneaux'] += 1
+            s['reunion_heures']   += duree_h(r)
+
+    lignes = sorted(struct.values(), key=lambda x: x['label'].lower())
+
+    # ── Excel ────────────────────────────────────────────────────────────────
+    wb = openpyxl.Workbook()
+
+    # ── Feuille 1 : BILAN PAR STRUCTURE ─────────────────────────────────────
+    ws = wb.active
+    ws.title = "Bilan par structure"
+
+    BLEU   = "0F2137"
+    OR     = "C8A84B"
+    GRIS   = "F1F5F9"
+    VERT   = "D1FAE5"
+    thin   = Side(style='thin', color='CCCCCC')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    def _hdr(ws, row, col, val, bg=BLEU, fg=OR, bold=True, center=True):
+        c = ws.cell(row=row, column=col, value=val)
+        c.font      = Font(bold=bold, color=fg, size=9)
+        c.fill      = PatternFill('solid', fgColor=bg)
+        c.alignment = Alignment(horizontal='center' if center else 'left',
+                                vertical='center', wrap_text=True)
+        c.border    = border
+        return c
+
+    def _cell(ws, row, col, val, bold=False, align='left', fmt=None, bg=None):
+        c = ws.cell(row=row, column=col, value=val)
+        c.font      = Font(bold=bold, size=9)
+        c.alignment = Alignment(horizontal=align, vertical='center')
+        c.border    = border
+        if bg:
+            c.fill  = PatternFill('solid', fgColor=bg)
+        if fmt:
+            c.number_format = fmt
+        return c
+
+    # Ligne 1 : titre
+    ws.merge_cells('A1:Q1')
+    t = ws.cell(row=1, column=1, value=f"BILAN D'OCCUPATION DES TEMPLES KELLERMANN — Saison {saison_label}")
+    t.font      = Font(bold=True, color=OR, size=12)
+    t.fill      = PatternFill('solid', fgColor=BLEU)
+    t.alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 22
+
+    # Ligne 2 : groupes de colonnes
+    ws.merge_cells('A2:G2'); _hdr(ws, 2, 1,  'STRUCTURE')
+    ws.merge_cells('H2:I2'); _hdr(ws, 2, 8,  'TEMPLES', bg='1E3A5F')
+    ws.merge_cells('J2:K2'); _hdr(ws, 2, 10, 'BANQUET / AGAPES', bg='92400E')
+    _hdr(ws, 2, 12, 'CABINETS', bg='4B5563')
+    ws.merge_cells('M2:N2'); _hdr(ws, 2, 13, 'SALLES DE RÉUNION', bg='065F46')
+    ws.merge_cells('O2:Q2'); _hdr(ws, 2, 15, 'TOTAUX', bg='1E3A5F')
+
+    # Ligne 3 : sous-en-têtes
+    cols_hdr = [
+        'Loge', 'Abrév.', 'Obédience', 'Type', 'Rite',
+        'Effectif total', 'Moy. agapes',
+        'Créneaux', 'Heures',
+        'Créneaux', 'Heures',
+        'Créneaux',
+        'Créneaux', 'Heures',
+        'Créneaux total', 'Heures total', 'Dont temples',
+    ]
+    for ci, h in enumerate(cols_hdr, 1):
+        _hdr(ws, 3, ci, h, bg='334155', fg='FFFFFF')
+    ws.row_dimensions[3].height = 32
+
+    # Données
+    for ri, s in enumerate(lignes, 4):
+        tot_creneaux = s['temple_creneaux'] + s['agapes_creneaux'] + s['cabinet_creneaux'] + s['reunion_creneaux']
+        tot_heures   = round(s['temple_heures'] + s['agapes_heures'] + s['reunion_heures'], 2)
+        bg_row = 'FFFFFF' if ri % 2 == 0 else GRIS
+
+        _cell(ws, ri,  1, s['label'],           bold=True,  bg=bg_row)
+        _cell(ws, ri,  2, s['abrev'],            align='center', bg=bg_row)
+        _cell(ws, ri,  3, s['obedience'],        bg=bg_row)
+        _cell(ws, ri,  4, s['type_loge'],        align='center', bg=bg_row)
+        _cell(ws, ri,  5, s['rite'],             align='center', bg=bg_row)
+        _cell(ws, ri,  6, s['effectif_total'],   align='center', bg=bg_row)
+        _cell(ws, ri,  7, s['effectif_agapes'],  align='center', bg=bg_row)
+        _cell(ws, ri,  8, s['temple_creneaux'],  align='center', bg=bg_row)
+        _cell(ws, ri,  9, round(s['temple_heures'], 2), align='center', fmt='0.0"h"', bg=bg_row)
+        _cell(ws, ri, 10, s['agapes_creneaux'],  align='center', bg=bg_row)
+        _cell(ws, ri, 11, round(s['agapes_heures'], 2), align='center', fmt='0.0"h"', bg=bg_row)
+        _cell(ws, ri, 12, s['cabinet_creneaux'], align='center', bg=bg_row)
+        _cell(ws, ri, 13, s['reunion_creneaux'], align='center', bg=bg_row)
+        _cell(ws, ri, 14, round(s['reunion_heures'], 2), align='center', fmt='0.0"h"', bg=bg_row)
+        _cell(ws, ri, 15, tot_creneaux,          align='center', bold=True, bg=VERT)
+        _cell(ws, ri, 16, tot_heures,            align='center', bold=True, fmt='0.0"h"', bg=VERT)
+        _cell(ws, ri, 17, s['temple_creneaux'],  align='center', bg=VERT)
+
+    # Ligne TOTAL
+    ri_tot = len(lignes) + 4
+    ws.merge_cells(f'A{ri_tot}:G{ri_tot}')
+    _cell(ws, ri_tot, 1, 'TOTAL SAISON', bold=True, bg='0F2137')
+    ws.cell(row=ri_tot, column=1).font = Font(bold=True, color=OR, size=9)
+
+    for ci, key in enumerate([
+        'temple_creneaux', None, 'agapes_creneaux', None,
+        'cabinet_creneaux', 'reunion_creneaux', None,
+    ], 8):
+        if key:
+            v = sum(s[key] for s in lignes)
+        else:
+            v = ''
+        _cell(ws, ri_tot, ci, v, bold=True, align='center', bg='E2E8F0')
+
+    _cell(ws, ri_tot, 15, sum(
+        s['temple_creneaux']+s['agapes_creneaux']+s['cabinet_creneaux']+s['reunion_creneaux']
+        for s in lignes), bold=True, align='center', bg=VERT)
+    _cell(ws, ri_tot, 16, round(sum(
+        s['temple_heures']+s['agapes_heures']+s['reunion_heures']
+        for s in lignes), 2), bold=True, align='center', bg=VERT)
+
+    # Largeurs colonnes
+    largeurs = [38, 10, 22, 14, 12, 14, 12, 10, 9, 10, 9, 10, 10, 9, 14, 12, 12]
+    for i, w in enumerate(largeurs, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = 'A4'
+
+    # ── Feuille 2 : DÉTAIL TENUES TEMPLE ────────────────────────────────────
+    ws2 = wb.create_sheet("Détail tenues temples")
+    hdrs2 = ['Date', 'Jour', 'Loge', 'Obédience', 'Temple',
+             'Type', 'Heure début', 'Heure fin', 'Durée (h)',
+             'Agapes', 'Nb repas', 'Statut', 'Tarif €']
+    for ci, h in enumerate(hdrs2, 1):
+        _hdr(ws2, 1, ci, h, bg=BLEU, fg=OR)
+    ws2.freeze_panes = 'A2'
+
+    JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+    for ri, r in enumerate(resas_temple, 2):
+        bg = GRIS if ri % 2 == 0 else 'FFFFFF'
+        _cell(ws2, ri,  1, r.date,         fmt='DD/MM/YYYY', bg=bg)
+        _cell(ws2, ri,  2, JOURS[r.date.weekday()], align='center', bg=bg)
+        _cell(ws2, ri,  3, r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur or ''), bg=bg)
+        _cell(ws2, ri,  4, r.loge.obedience.nom if r.loge and r.loge.obedience else '', bg=bg)
+        _cell(ws2, ri,  5, str(r.temple) if r.temple else '', bg=bg)
+        _cell(ws2, ri,  6, r.get_type_reservation_display(), align='center', bg=bg)
+        _cell(ws2, ri,  7, str(r.heure_debut)[:5], align='center', bg=bg)
+        _cell(ws2, ri,  8, str(r.heure_fin)[:5],   align='center', bg=bg)
+        _cell(ws2, ri,  9, duree_h(r), align='center', fmt='0.0"h"', bg=bg)
+        _cell(ws2, ri, 10, 'Oui' if r.besoin_agapes else 'Non', align='center', bg=bg)
+        _cell(ws2, ri, 11, r.nombre_repas or '', align='center', bg=bg)
+        _cell(ws2, ri, 12, r.get_statut_display(), align='center', bg=bg)
+        _cell(ws2, ri, 13, float(r.tarif) if r.tarif else 0, align='center', fmt='#,##0.00 €', bg=bg)
+
+    for ci, w in enumerate([12,6,32,20,20,14,9,9,9,6,8,10,10], 1):
+        ws2.column_dimensions[get_column_letter(ci)].width = w
+
+    # ── Feuille 3 : DÉTAIL SALLES ────────────────────────────────────────────
+    ws3 = wb.create_sheet("Détail salles et cabinets")
+    hdrs3 = ['Date', 'Jour', 'Loge', 'Obédience', 'Type salle', 'Salle',
+             'Heure début', 'Heure fin', 'Durée (h)', 'Participants', 'Statut']
+    for ci, h in enumerate(hdrs3, 1):
+        _hdr(ws3, 1, ci, h, bg=BLEU, fg=OR)
+    ws3.freeze_panes = 'A2'
+
+    TYPE_SALLE_LABEL = {'agapes': 'Banquet/Agapes', 'cabinet_reflexion': 'Cabinet', 'reunion': 'Salle réunion'}
+    for ri, r in enumerate(resas_salle, 2):
+        bg = GRIS if ri % 2 == 0 else 'FFFFFF'
+        ts = r.salle.type_salle if r.salle else ''
+        _cell(ws3, ri,  1, r.date,         fmt='DD/MM/YYYY', bg=bg)
+        _cell(ws3, ri,  2, JOURS[r.date.weekday()], align='center', bg=bg)
+        _cell(ws3, ri,  3, r.loge.nom if r.loge else (r.organisation or r.nom_demandeur or ''), bg=bg)
+        _cell(ws3, ri,  4, r.loge.obedience.nom if r.loge and r.loge.obedience else '', bg=bg)
+        _cell(ws3, ri,  5, TYPE_SALLE_LABEL.get(ts, ts), align='center', bg=bg)
+        _cell(ws3, ri,  6, str(r.salle) if r.salle else '', bg=bg)
+        _cell(ws3, ri,  7, str(r.heure_debut)[:5], align='center', bg=bg)
+        _cell(ws3, ri,  8, str(r.heure_fin)[:5],   align='center', bg=bg)
+        _cell(ws3, ri,  9, duree_h(r), align='center', fmt='0.0"h"', bg=bg)
+        _cell(ws3, ri, 10, r.nombre_participants or '', align='center', bg=bg)
+        _cell(ws3, ri, 11, r.get_statut_display(), align='center', bg=bg)
+
+    for ci, w in enumerate([12,6,32,20,18,20,9,9,9,12,10], 1):
+        ws3.column_dimensions[get_column_letter(ci)].width = w
+
+    # ── Réponse ──────────────────────────────────────────────────────────────
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"bilan_occupation_kellermann_{saison_label}.xlsx"
+    response = HttpResponse(buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
