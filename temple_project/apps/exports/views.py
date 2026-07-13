@@ -30,7 +30,9 @@ def export_csv(request):
     for r in qs:
         writer.writerow([
             r.date, r.heure_debut, r.heure_fin,
-            r.loge.nom, r.loge.obedience.nom, str(r.temple),
+            r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur or ''),
+            r.loge.obedience.nom if r.loge and r.loge.obedience else '',
+            str(r.temple) if r.temple else '',
             r.get_type_reservation_display(), r.get_sous_type_display(),
             r.get_statut_display(), "Oui" if r.besoin_agapes else "Non",
             r.nombre_repas, r.nom_demandeur, r.email_demandeur,
@@ -68,7 +70,9 @@ def export_excel(request):
     for row_idx, r in enumerate(qs, 2):
         data = [
             r.date, str(r.heure_debut), str(r.heure_fin),
-            r.loge.nom, r.loge.obedience.nom, str(r.temple),
+            r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur or ''),
+            r.loge.obedience.nom if r.loge and r.loge.obedience else '',
+            str(r.temple) if r.temple else '',
             r.get_type_reservation_display(), r.get_sous_type_display(),
             r.get_statut_display(), "Oui" if r.besoin_agapes else "Non",
             r.nombre_repas,
