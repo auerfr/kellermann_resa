@@ -20,6 +20,7 @@ urlpatterns = [
     path("audit/export/", views.audit_export_excel, name="audit_export"),
     path("conflits/", views.conflits, name="conflits"),
     path("occupation/", views.occupation, name="occupation"),
+    path("occupation/export/", views.occupation_export_pdf, name="occupation_export_pdf"),
     path("annuaire/", views.annuaire, name="annuaire"),
     path("fusion-loges/", views.fusion_loges, name="fusion_loges"),
     path("rattachement-salles/", views.rattachement_salles, name="rattachement_salles"),

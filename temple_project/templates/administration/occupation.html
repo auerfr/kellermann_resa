@@ -1,150 +1,182 @@
 {% extends "base.html" %}
 {% block title %}Occupation / capacité{% endblock %}
+{% block extra_css %}
+{% include "_stx_styles.html" %}
+<style>
+  .occ-bar { height:7px; background:#EEF1F5; border-radius:99px; overflow:hidden; min-width:90px; }
+  .occ-fill { height:100%; border-radius:99px; }
+</style>
+{% endblock %}
 {% block content %}
-<div class="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
-  <div>
-    <h1 class="h3" style="color:#0F2137;">📊 Occupation des temples & capacité</h1>
-    <p class="text-muted mb-0">
-      Saison {{ annee }}-{{ annee|add:1 }} (1<sup>er</sup> sept. → 30 juin, hors juillet-août) ·
-      {{ nb_jours }} jours × 3 créneaux (matin / après-midi / soir).
-    </p>
+<div class="stx-wrap">
+
+  {# ── En-tête ── #}
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+    <div>
+      <h1 class="mb-1" style="font-size:22px;font-weight:600;letter-spacing:-.01em;color:#0F2137;">Occupation &amp; capacité</h1>
+      <div style="font-size:13px;color:#64748B;">Saison {{ annee }}–{{ annee|add:1 }} · {{ nb_jours }} jours × 3 créneaux (matin / après-midi / soir)</div>
+    </div>
+    <form method="get" class="d-flex gap-2 align-items-center">
+      <select name="annee" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
+        {% for a in annees %}<option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}–{{ a|add:1 }}</option>{% endfor %}
+      </select>
+      <a href="{% url 'administration:occupation_export_pdf' %}?annee={{ annee }}" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;border:none;padding:7px 14px;border-radius:9px;">⤓ Présentation (bureau / AG)</a>
+    </form>
   </div>
-  <form method="get" class="d-flex align-items-center gap-2">
-    <label class="small text-muted">Saison</label>
-    <select name="annee" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-      {% for a in annees %}<option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}-{{ a|add:1 }}</option>{% endfor %}
-    </select>
-  </form>
-</div>
 
-<div class="table-responsive mb-4">
-  <table class="table table-bordered align-middle bg-white">
-    <thead style="background:#0F2137;color:#fff;">
-      <tr><th>Temple</th><th>Occupation globale</th><th>Matin</th><th>Après-midi</th><th>Soir</th><th>Créneaux libres</th></tr>
-    </thead>
-    <tbody>
-      {% for t in temples %}
-      <tr>
-        <td class="fw-semibold" style="color:#0F2137;">{{ t.nom }}</td>
-        <td>
-          <div class="d-flex align-items-center gap-2">
-            <div class="flex-grow-1" style="background:#eee;height:8px;border-radius:4px;min-width:80px;">
-              <div style="width:{{ t.occ_pct }}%;background:{% if t.occ_pct < 20 %}#16a34a{% elif t.occ_pct < 50 %}#ca8a04{% else %}#dc2626{% endif %};height:8px;border-radius:4px;"></div>
-            </div>
-            <span class="small fw-semibold">{{ t.occ_pct }} %</span>
-          </div>
-        </td>
-        <td class="text-muted">{{ t.matin_pct }} %</td>
-        <td class="text-muted">{{ t.aprem_pct }} %</td>
-        <td class="{% if t.soir_pct >= 60 %}text-danger fw-semibold{% endif %}">{{ t.soir_pct }} %</td>
-        <td class="fw-semibold text-success">{{ t.libres }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-    <tfoot>
-      <tr class="table-light">
-        <td class="fw-semibold">GLOBAL</td>
-        <td class="fw-semibold">{{ occ_global }} % occupé</td>
-        <td colspan="3" class="text-muted">Soir : {{ soir_occ_pct }} % occupé</td>
-        <td class="fw-semibold text-success">{{ libres }} libres ({{ libres_pct }} %)</td>
-      </tr>
-    </tfoot>
-  </table>
-</div>
+  {# ── KPI hero ── #}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Occupation globale</div>
+        <div class="stx-kpi-num">{{ occ_global }}<span style="font-size:17px;color:#94A3B8;">%</span></div>
+        <div class="stx-kpi-sub">sur la saison, tous créneaux</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Occupation du soir</div>
+        <div class="stx-kpi-num" style="color:{% if soir_occ_pct >= 60 %}#B42318{% else %}#0F2137{% endif %};">{{ soir_occ_pct }}<span style="font-size:17px;color:#94A3B8;">%</span></div>
+        <div class="stx-kpi-sub">le créneau réellement demandé</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Créneaux du soir libres</div>
+        <div class="stx-kpi-num" style="color:#067647;">{{ soir_libres }}</div>
+        <div class="stx-kpi-sub">à proposer en priorité</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Accueil possible (soir)</div>
+        <div class="stx-kpi-num">~{{ cap_soir_bleues }}<span style="font-size:15px;color:#94A3B8;"> loges</span></div>
+        <div class="stx-kpi-sub">ou ~{{ cap_soir_hg }} hauts grades</div>
+      </div>
+    </div>
+  </div>
 
-<h2 class="h5" style="color:#0F2137;">Capacité d'accueil supplémentaire</h2>
-<p class="text-muted small">Loge bleue = 2 tenues/mois × 10 mois = 20 créneaux/an · Haut grade = 1/mois × 10 = 10/an.</p>
-<div class="row g-3">
-  <div class="col-md-6">
-    <div class="card h-100 border-0 shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted text-uppercase small">Le soir (créneau réellement demandé)</h6>
-        <div class="d-flex gap-4">
-          <div><div class="h3 mb-0" style="color:#0F2137;">~{{ cap_soir_bleues }}</div><div class="small text-muted">loges bleues</div></div>
-          <div><div class="h3 mb-0" style="color:#0F2137;">~{{ cap_soir_hg }}</div><div class="small text-muted">hauts grades</div></div>
+  {# ── Occupation par temple ── #}
+  <div class="stx-card mb-4" style="overflow:hidden;">
+    <div style="padding:14px 16px 4px;"><span class="stx-h">Occupation par temple</span></div>
+    <div class="table-responsive">
+      <table class="stx-tbl">
+        <thead><tr><th>Temple</th><th style="min-width:150px;">Occupation globale</th><th>Matin</th><th>Après-midi</th><th>Soir</th><th>Libres</th></tr></thead>
+        <tbody>
+          {% for t in temples %}
+          <tr>
+            <td data-label="Temple" style="font-weight:600;color:#0F2137;">{{ t.nom }}</td>
+            <td data-label="Occupation">
+              <div class="d-flex align-items-center gap-2">
+                <div class="occ-bar flex-grow-1"><div class="occ-fill" style="width:{{ t.occ_pct }}%;background:{% if t.occ_pct < 20 %}#16A34A{% elif t.occ_pct < 50 %}#C8A84B{% else %}#DC2626{% endif %};"></div></div>
+                <span style="font-weight:600;font-size:12px;min-width:34px;text-align:right;">{{ t.occ_pct }} %</span>
+              </div>
+            </td>
+            <td data-label="Matin" style="color:#64748B;">{{ t.matin_pct }} %</td>
+            <td data-label="Après-midi" style="color:#64748B;">{{ t.aprem_pct }} %</td>
+            <td data-label="Soir" style="{% if t.soir_pct >= 60 %}color:#B42318;font-weight:600;{% else %}color:#334155;{% endif %}">{{ t.soir_pct }} %</td>
+            <td data-label="Libres" style="color:#067647;font-weight:600;">{{ t.libres }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="background:#F8FAFC;">
+            <td style="font-weight:600;color:#0F2137;">Global</td>
+            <td style="font-weight:600;">{{ occ_global }} % occupé</td>
+            <td colspan="3" style="color:#64748B;">Soir : {{ soir_occ_pct }} % occupé</td>
+            <td style="color:#067647;font-weight:600;">{{ libres }} ({{ libres_pct }} %)</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  {# ── Capacité d'accueil ── #}
+  <div class="stx-sect">Capacité d'accueil supplémentaire</div>
+  <div class="row g-3 mb-2">
+    <div class="col-md-6">
+      <div class="stx-card h-100" style="padding:16px 18px;">
+        <div class="stx-kpi-lbl">Le soir — créneau réellement demandé</div>
+        <div class="d-flex gap-4 mt-2">
+          <div><div class="stx-kpi-num" style="margin-top:0;">~{{ cap_soir_bleues }}</div><div class="stx-kpi-sub" style="margin-top:2px;">loges bleues</div></div>
+          <div><div class="stx-kpi-num" style="margin-top:0;">~{{ cap_soir_hg }}</div><div class="stx-kpi-sub" style="margin-top:2px;">hauts grades</div></div>
         </div>
-        <p class="small text-muted mt-2 mb-0">{{ soir_libres }} créneaux du soir libres. À orienter surtout vers les temples les moins chargés.</p>
+        <div class="stx-kpi-sub" style="margin-top:10px;">{{ soir_libres }} créneaux du soir libres. À orienter vers les temples les moins chargés.</div>
       </div>
     </div>
-  </div>
-  <div class="col-md-6">
-    <div class="card h-100 border-0 shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted text-uppercase small">Tous créneaux (matin + après-midi + soir)</h6>
-        <div class="d-flex gap-4">
-          <div><div class="h3 mb-0 text-muted">~{{ cap_tous_bleues }}</div><div class="small text-muted">loges bleues</div></div>
-          <div><div class="h3 mb-0 text-muted">~{{ cap_tous_hg }}</div><div class="small text-muted">hauts grades</div></div>
+    <div class="col-md-6">
+      <div class="stx-card h-100" style="padding:16px 18px;">
+        <div class="stx-kpi-lbl">Tous créneaux (matin + après-midi + soir)</div>
+        <div class="d-flex gap-4 mt-2">
+          <div><div class="stx-kpi-num" style="margin-top:0;color:#64748B;">~{{ cap_tous_bleues }}</div><div class="stx-kpi-sub" style="margin-top:2px;">loges bleues</div></div>
+          <div><div class="stx-kpi-num" style="margin-top:0;color:#64748B;">~{{ cap_tous_hg }}</div><div class="stx-kpi-sub" style="margin-top:2px;">hauts grades</div></div>
         </div>
-        <p class="small text-muted mt-2 mb-0">Maximum théorique ({{ libres }} créneaux libres). Inclut les matins/après-midis de semaine, peu demandés — utile surtout pour les hauts grades en journée/week-end.</p>
+        <div class="stx-kpi-sub" style="margin-top:10px;">Maximum théorique ({{ libres }} créneaux). Inclut matins/après-midis de semaine — surtout utile aux hauts grades en journée/week-end.</div>
       </div>
     </div>
   </div>
-</div>
+  <div class="stx-kpi-sub mb-4">Loge bleue = 2 tenues/mois × 10 mois = 20 créneaux/an · Haut grade = 1/mois × 10 = 10/an.</div>
 
-<h2 class="h5 mt-4" style="color:#0F2137;">💶 Potentiel financier annuel</h2>
-<p class="text-muted small">Loge : {{ fin.t_loge }} €/membre · Haut grade : {{ fin.t_hg }} €/membre · {{ fin.mb_min }} à {{ fin.mb_max }} membres. Basé sur la capacité <strong>du soir</strong> (créneau réellement demandé) — les créneaux étant partagés, on remplit soit en loges, soit en hauts grades, soit un mix.</p>
-<div class="row g-3">
-  <div class="col-md-6">
-    <div class="card h-100 border-0 shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted text-uppercase small">Si on remplit en loges bleues</h6>
-        <div class="h3 mb-1" style="color:#0F2137;">{{ fin.pot_loges_min }} – {{ fin.pot_loges_max }} €<span class="text-muted h6">/an</span></div>
-        <div class="small text-muted">~{{ fin.cap_loges }} loges × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_loge }} €) = {{ fin.loge_min }}–{{ fin.loge_max }} €/loge</div>
+  {# ── Potentiel financier ── #}
+  <div class="stx-sect">Potentiel financier annuel</div>
+  <div class="row g-3 mb-2">
+    <div class="col-md-6">
+      <div class="stx-card h-100" style="padding:16px 18px;border-left:4px solid #C8A84B;">
+        <div class="stx-kpi-lbl">Si on remplit en loges bleues</div>
+        <div class="stx-kpi-num">{{ fin.pot_loges_min }} – {{ fin.pot_loges_max }} <span style="font-size:15px;color:#94A3B8;">€/an</span></div>
+        <div class="stx-kpi-sub">~{{ fin.cap_loges }} loges × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_loge }} €)</div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="stx-card h-100" style="padding:16px 18px;border-left:4px solid #0E7C7B;">
+        <div class="stx-kpi-lbl">Si on remplit en hauts grades</div>
+        <div class="stx-kpi-num">{{ fin.pot_hg_min }} – {{ fin.pot_hg_max }} <span style="font-size:15px;color:#94A3B8;">€/an</span></div>
+        <div class="stx-kpi-sub">~{{ fin.cap_hg }} hauts grades × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_hg }} €)</div>
       </div>
     </div>
   </div>
-  <div class="col-md-6">
-    <div class="card h-100 border-0 shadow-sm">
-      <div class="card-body">
-        <h6 class="text-muted text-uppercase small">Si on remplit en hauts grades</h6>
-        <div class="h3 mb-1" style="color:#0F2137;">{{ fin.pot_hg_min }} – {{ fin.pot_hg_max }} €<span class="text-muted h6">/an</span></div>
-        <div class="small text-muted">~{{ fin.cap_hg }} hauts grades × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_hg }} €) = {{ fin.hg_min }}–{{ fin.hg_max }} €/atelier</div>
-      </div>
+  <div class="stx-kpi-sub mb-4">Une loge bleue rapporte ~2× plus par créneau qu'un haut grade — à privilégier là où il y a de la place le soir. Les hauts grades peuvent en plus occuper les journées/week-ends (capacité quasi illimitée en sus). Tarifs paramétrables dans Facturation.</div>
+
+  {# ── Créneaux disponibles à proposer ── #}
+  <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
+    <div>
+      <div class="stx-sect" style="margin-bottom:2px;">Créneaux disponibles à proposer</div>
+      <div class="stx-kpi-sub" style="margin-top:0;">Créneaux récurrents 100 % libres. Loge bleue = 2 créneaux · haut grade = 1.</div>
+    </div>
+    <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+      <input type="hidden" name="annee" value="{{ annee }}">
+      <select name="temple" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
+        <option value="">Tous les temples</option>
+        {% for t in tous_temples %}<option value="{{ t.pk }}" {% if t.pk == temple_sel %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+      <select name="moment" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
+        <option value="">Tous moments</option>
+        <option value="soir" {% if moment_sel == 'soir' %}selected{% endif %}>🌙 Soir</option>
+        <option value="après-midi" {% if moment_sel == 'après-midi' %}selected{% endif %}>☀️ Après-midi</option>
+        <option value="matin" {% if moment_sel == 'matin' %}selected{% endif %}>🌅 Matin</option>
+      </select>
+    </form>
+  </div>
+  <div class="stx-card" style="overflow:hidden;">
+    <div class="table-responsive">
+      <table class="stx-tbl">
+        <thead><tr><th>Temple</th><th>Jour</th><th>Semaine du mois</th><th>Moment</th></tr></thead>
+        <tbody>
+          {% for c in creneaux_libres %}
+          <tr>
+            <td data-label="Temple" style="font-weight:600;color:#0F2137;">{{ c.temple }}</td>
+            <td data-label="Jour">{{ c.jour|capfirst }}</td>
+            <td data-label="Semaine"><span class="stx-pill" style="padding:2px 9px;font-size:12px;">{{ c.semaine }} semaine</span></td>
+            <td data-label="Moment">{% if c.creneau == 'soir' %}🌙 soir{% elif c.creneau == 'après-midi' %}☀️ après-midi{% else %}🌅 matin{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center text-muted py-4" style="font-size:13px;">Aucun créneau entièrement libre pour ce filtre.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
-</div>
-<p class="text-muted small mt-2">💡 Une loge bleue rapporte ~2× plus par créneau qu'un haut grade — à privilégier là où il y a de la place le soir (Lafayette, Égalité). Les hauts grades peuvent en plus occuper les journées/week-ends, capacité quasi illimitée en sus.</p>
+  <div class="stx-kpi-sub">{{ creneaux_libres|length }} créneau(x) libre(s){% if temple_sel %} sur ce temple{% endif %}.</div>
 
-<div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mt-4">
-  <div>
-    <h2 class="h5 mb-1" style="color:#0F2137;">Créneaux disponibles à proposer</h2>
-    <p class="text-muted small mb-0">Créneaux récurrents <strong>100 % libres</strong> sur la saison. Une <strong>loge bleue</strong> = 2 créneaux (mêmes ou <strong>différents temples/semaines</strong>) · un <strong>haut grade</strong> = 1 créneau.</p>
-  </div>
-  <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
-    <input type="hidden" name="annee" value="{{ annee }}">
-    <label class="small text-muted">Temple</label>
-    <select name="temple" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-      <option value="">Tous</option>
-      {% for t in tous_temples %}<option value="{{ t.pk }}" {% if t.pk == temple_sel %}selected{% endif %}>{{ t }}</option>{% endfor %}
-    </select>
-    <label class="small text-muted">Moment</label>
-    <select name="moment" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-      <option value="">Tous</option>
-      <option value="soir" {% if moment_sel == 'soir' %}selected{% endif %}>🌙 Soir</option>
-      <option value="après-midi" {% if moment_sel == 'après-midi' %}selected{% endif %}>☀️ Après-midi</option>
-      <option value="matin" {% if moment_sel == 'matin' %}selected{% endif %}>🌅 Matin</option>
-    </select>
-  </form>
 </div>
-
-<div class="table-responsive">
-  <table class="table table-sm table-hover bg-white align-middle">
-    <thead style="background:#0F2137;color:#fff;">
-      <tr><th>Temple</th><th>Jour</th><th>Semaine du mois</th><th>Moment</th></tr>
-    </thead>
-    <tbody>
-      {% for c in creneaux_libres %}
-      <tr>
-        <td class="fw-semibold" style="color:#0F2137;">{{ c.temple }}</td>
-        <td>{{ c.jour|capfirst }}</td>
-        <td><span class="badge bg-light text-dark">{{ c.semaine }} semaine</span></td>
-        <td>{% if c.creneau == 'soir' %}🌙 soir{% elif c.creneau == 'après-midi' %}☀️ après-midi{% else %}🌅 matin{% endif %}</td>
-      </tr>
-      {% empty %}
-      <tr><td colspan="4" class="text-center text-muted py-3">Aucun créneau entièrement libre pour ce filtre.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-<p class="text-muted small">{{ creneaux_libres|length }} créneau(x) libre(s){% if temple_sel %} sur ce temple{% endif %}. Exemple de loge bleue : « {{ creneaux_libres.0.temple }} {{ creneaux_libres.0.jour }} {{ creneaux_libres.0.semaine }} sem. » + un autre créneau de la liste (même ou autre temple).</p>
 {% endblock %}

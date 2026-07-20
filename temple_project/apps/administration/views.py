@@ -1111,23 +1111,13 @@ def _creneaux_libres(annee, temple_id=None):
     return out
 
 
-@staff_required
-def occupation(request):
-    defaut = date.today().year if date.today().month >= 7 else date.today().year - 1
-    try:
-        annee = int(request.GET.get('annee', defaut))
-    except (TypeError, ValueError):
-        annee = defaut
-    try:
-        temple_id = int(request.GET.get('temple') or 0) or None
-    except (TypeError, ValueError):
-        temple_id = None
-    moment = request.GET.get('moment') or ''
+def _occupation_full(annee, temple_id=None, moment=''):
+    """Contexte complet occupation/capacité/potentiel d'une saison, partagé par la
+    page et l'export PDF."""
     creneaux = _creneaux_libres(annee, temple_id)
     if moment in ('soir', 'après-midi', 'matin'):
         creneaux = [c for c in creneaux if c['creneau'] == moment]
     ctx = _occupation_temples(annee)
-    # Potentiel financier : tarifs/membre paramétrables (Facturation), 15-20 membres
     params = Parametres.get_instance()
     MB_MIN, MB_MAX = 15, 20
     T_LOGE, T_HG = float(params.tarif_membre_loge), float(params.tarif_membre_hg)
@@ -1142,11 +1132,140 @@ def occupation(request):
         'pot_hg_max': round(ctx['cap_soir_hg'] * MB_MAX * T_HG),
     }
     ctx['creneaux_libres'] = creneaux
+    return ctx
+
+
+@staff_required
+def occupation(request):
+    defaut = date.today().year if date.today().month >= 7 else date.today().year - 1
+    try:
+        annee = int(request.GET.get('annee', defaut))
+    except (TypeError, ValueError):
+        annee = defaut
+    try:
+        temple_id = int(request.GET.get('temple') or 0) or None
+    except (TypeError, ValueError):
+        temple_id = None
+    moment = request.GET.get('moment') or ''
+    ctx = _occupation_full(annee, temple_id, moment)
     ctx['annees'] = [defaut - 1, defaut, defaut + 1]
     ctx['tous_temples'] = Temple.objects.all().order_by('nom')
     ctx['temple_sel'] = temple_id
     ctx['moment_sel'] = moment
     return render(request, 'administration/occupation.html', ctx)
+
+
+@staff_required
+def occupation_export_pdf(request):
+    """Export PDF « présentation » (bureau / AG) : constat d'occupation + capacité
+    restante + potentiel financier + créneaux disponibles."""
+    defaut = date.today().year if date.today().month >= 7 else date.today().year - 1
+    try:
+        annee = int(request.GET.get('annee', defaut))
+    except (TypeError, ValueError):
+        annee = defaut
+    ctx = _occupation_full(annee)
+    log_evenement('export_occupation_pdf',
+                  f"Export présentation occupation saison {annee}-{annee + 1}",
+                  request=request, objet_type='systeme')
+    return _occupation_pdf(ctx, annee)
+
+
+def _occupation_pdf(ctx, annee):
+    import io
+    from django.utils import timezone
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+
+    navy = colors.HexColor('#0F2137'); gold = colors.HexColor('#C8A84B')
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle('h1', parent=styles['Title'], textColor=navy, fontSize=17, alignment=0)
+    h2 = ParagraphStyle('h2', parent=styles['Heading2'], textColor=navy, fontSize=12)
+    body = ParagraphStyle('body', parent=styles['Normal'], fontSize=9.5, leading=13)
+    small = ParagraphStyle('sm', parent=styles['Normal'], textColor=colors.HexColor('#64748B'), fontSize=9)
+
+    def tstyle():
+        return TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), navy), ('TEXTCOLOR', (0, 0), (-1, 0), gold),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6), ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ])
+
+    temples = ctx['temples']; fin = ctx['fin']
+
+    def chart_soir():
+        dr = Drawing(460, 150)
+        bc = VerticalBarChart()
+        bc.x, bc.y, bc.width, bc.height = 30, 24, 420, 108
+        bc.data = [[t['soir_pct'] for t in temples]]
+        bc.categoryAxis.categoryNames = [t['nom'].replace('Temple ', '') for t in temples]
+        bc.categoryAxis.labels.fontSize = 8
+        bc.categoryAxis.labels.fillColor = colors.HexColor('#64748B')
+        bc.valueAxis.valueMin = 0; bc.valueAxis.valueMax = 100
+        bc.valueAxis.labels.fontSize = 8
+        bc.valueAxis.labels.fillColor = colors.HexColor('#94A3B8')
+        bc.bars[0].fillColor = gold; bc.bars[0].strokeColor = None
+        bc.barWidth = 14
+        dr.add(bc)
+        return dr
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.4 * cm, bottomMargin=1.4 * cm,
+                            leftMargin=1.5 * cm, rightMargin=1.5 * cm,
+                            title=f"Occupation {annee}-{annee + 1}")
+    E = [Paragraph(f"Occupation des temples et capacité — saison {annee}–{annee + 1}", h1),
+         Paragraph(f"{ctx['nb_jours']} jours × 3 créneaux · édité le {timezone.localtime().strftime('%d/%m/%Y')}", small),
+         Spacer(1, 0.35 * cm),
+         Paragraph(f"Occupation globale : <b>{ctx['occ_global']} %</b> &nbsp;·&nbsp; occupation du soir : "
+                   f"<b>{ctx['soir_occ_pct']} %</b> &nbsp;·&nbsp; créneaux du soir libres : <b>{ctx['soir_libres']}</b>", body),
+         Spacer(1, 0.3 * cm),
+         Paragraph("Taux d'occupation du soir par temple", h2), chart_soir(), Spacer(1, 0.25 * cm),
+         Paragraph("Occupation par temple", h2), Spacer(1, 0.1 * cm)]
+
+    rows = [['Temple', 'Global', 'Matin', 'Après-midi', 'Soir', 'Libres']]
+    for t in temples:
+        rows.append([t['nom'], f"{t['occ_pct']} %", f"{t['matin_pct']} %",
+                     f"{t['aprem_pct']} %", f"{t['soir_pct']} %", t['libres']])
+    rows.append(['GLOBAL', f"{ctx['occ_global']} %", '', '', f"{ctx['soir_occ_pct']} %", ctx['libres']])
+    tt = Table(rows, hAlign='LEFT'); tt.setStyle(tstyle())
+    E += [tt, Spacer(1, 0.4 * cm),
+          Paragraph("Capacité d'accueil supplémentaire (le soir)", h2),
+          Paragraph(f"~<b>{ctx['cap_soir_bleues']}</b> loges bleues <b>ou</b> ~<b>{ctx['cap_soir_hg']}</b> hauts grades "
+                    f"peuvent encore être accueillis le soir ({ctx['soir_libres']} créneaux libres). "
+                    f"Loge bleue = 2 créneaux/mois · haut grade = 1.", body),
+          Spacer(1, 0.3 * cm),
+          Paragraph("Potentiel financier annuel", h2),
+          Paragraph(f"• En loges bleues : <b>{fin['pot_loges_min']} – {fin['pot_loges_max']} €/an</b> "
+                    f"(~{fin['cap_loges']} loges × {fin['mb_min']}–{fin['mb_max']} membres × {fin['t_loge']} €).", body),
+          Paragraph(f"• En hauts grades : <b>{fin['pot_hg_min']} – {fin['pot_hg_max']} €/an</b> "
+                    f"(~{fin['cap_hg']} ateliers × {fin['mb_min']}–{fin['mb_max']} membres × {fin['t_hg']} €).", body),
+          Paragraph("Une loge bleue rapporte ~2× plus par créneau qu'un haut grade. Tarifs paramétrables (Facturation).", small),
+          Spacer(1, 0.35 * cm)]
+
+    cl = ctx['creneaux_libres']
+    E += [Paragraph(f"Créneaux disponibles à proposer ({len(cl)})", h2), Spacer(1, 0.1 * cm)]
+    crows = [['Temple', 'Jour', 'Semaine', 'Moment']]
+    for c in cl[:40]:
+        crows.append([c['temple'], c['jour'].capitalize(), f"{c['semaine']} sem.", c['creneau']])
+    ct = Table(crows, repeatRows=1, hAlign='LEFT'); ct.setStyle(tstyle())
+    E += [ct]
+    if len(cl) > 40:
+        E += [Spacer(1, 0.1 * cm), Paragraph(f"… et {len(cl) - 40} autres créneaux (voir la page en ligne).", small)]
+
+    doc.build(E)
+    buf.seek(0)
+    resp = HttpResponse(buf.read(), content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="occupation_kellermann_{annee}-{annee + 1}.pdf"'
+    return resp
 
 
 @staff_required
