@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Reporting{% endblock %}
+{% block title %}Statistiques{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -37,8 +37,8 @@
 {# ── En-tête ──────────────────────────────────────────────────────────────── #}
 <div class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
   <div>
-    <h1 class="h3 mb-1" style="color:#0F2137;">Reporting</h1>
-    <p class="text-muted small mb-0">Saison {{ saison_label }}</p>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📈 Statistiques</h1>
+    <p class="text-muted small mb-0">Loges &amp; activité · saison {{ saison_label }}</p>
   </div>
   <form method="get" class="d-flex gap-2 align-items-center">
     <label class="text-muted small mb-0">Saison</label>
@@ -50,6 +50,58 @@
     </select>
   </form>
 </div>
+
+{# ── Les loges ─────────────────────────────────────────────────────────────── #}
+<div class="section-title mb-3">Les loges</div>
+<div class="row g-3 mb-3">
+  {% include "administration/_stat_tile.html" with val=loges.nb_total lbl="Structures actives" %}
+  {% include "administration/_stat_tile.html" with val=loges.nb_loges lbl="Loges bleues" %}
+  {% include "administration/_stat_tile.html" with val=loges.nb_hg lbl="Hauts grades" %}
+  {% include "administration/_stat_tile.html" with val=loges.nb_regles lbl="Règles actives" %}
+</div>
+<div class="row g-3 mb-4">
+  {% include "administration/_stat_tile.html" with val=loges.nb_active lbl="Actives confirmées" %}
+  {% include "administration/_stat_tile.html" with val=loges.nb_reconf lbl="À reconfirmer" %}
+  {% include "administration/_stat_tile.html" with val=loges.effectif_total lbl="Effectif total" %}
+  {% include "administration/_stat_tile.html" with val=loges.agapes_moy lbl="Moy. agapes / loge" %}
+</div>
+
+<div class="card shadow-sm border-0 mb-5 rounded-3">
+  <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
+    <span class="section-title" style="color:#C8A84B;">Loges par obédience</span>
+  </div>
+  <div class="card-body p-0" style="background:white;">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead style="background:#F8FAFC;">
+          <tr>
+            <th class="ps-4 py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Obédience</th>
+            <th class="text-center py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Total</th>
+            <th class="text-center py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Loges</th>
+            <th class="text-center py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Hauts grades</th>
+            <th class="text-center pe-4 py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Effectif</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in loges_par_obedience %}
+          <tr style="border-bottom:1px solid #F1F5F9;">
+            <td class="ps-4 py-2 fw-semibold" style="color:#0F2137;font-size:13px;" data-label="Obédience">{{ o.obedience__nom|default:"—" }}</td>
+            <td class="text-center py-2" data-label="Total">{{ o.n }}</td>
+            <td class="text-center py-2" data-label="Loges">{{ o.loges }}</td>
+            <td class="text-center py-2" data-label="Hauts grades">{{ o.hg }}</td>
+            <td class="text-center pe-4 py-2" data-label="Effectif">{{ o.eff|default:"—" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-4 small">Aucune donnée</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{# ── L'activité (réservations) ─────────────────────────────────────────────── #}
+<div class="section-title mb-3">L'activité — réservations</div>
 
 {# ── KPI principaux ───────────────────────────────────────────────────────── #}
 <div class="row g-3 mb-5">
@@ -265,11 +317,41 @@
   </div>
 </div>
 
-{# ── Exports ──────────────────────────────────────────────────────────────── #}
+{# ── Exporter l'analyse (sélectionnable) ──────────────────────────────────── #}
+<div class="card shadow-sm border-0 mb-4 rounded-3">
+  <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
+    <span class="section-title" style="color:#C8A84B;">Exporter l'analyse</span>
+  </div>
+  <div class="card-body px-4 py-4" style="background:white;">
+    <form method="get" action="{% url 'exports:statistiques_export' %}">
+      <input type="hidden" name="annee" value="{{ annee }}">
+      <p class="small text-muted mb-2">Sélectionnez les sections à inclure :</p>
+      <div class="row g-2 mb-3">
+        {% for key, label in sections_stats %}
+        <div class="col-6 col-md-4">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="sections" value="{{ key }}" id="sec-{{ key }}" checked>
+            <label class="form-check-label small" for="sec-{{ key }}">{{ label }}</label>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <span class="small text-muted me-1">Générer :</span>
+        <button type="submit" name="format" value="pdf" class="btn btn-sm fw-semibold"
+                style="background:#0F2137;color:#C8A84B;border:none;">📄 PDF</button>
+        <button type="submit" name="format" value="excel" class="btn btn-sm btn-outline-secondary">📊 Excel</button>
+        <span class="small text-muted ms-2">Saison {{ saison_label }}</span>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ── Exports (données brutes / planning) ───────────────────────────────────── #}
 <div class="card shadow-sm border-0 rounded-3">
   <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
     <span class="section-title" style="color:#C8A84B;">
-      Exports
+      Autres exports — données brutes &amp; planning
     </span>
   </div>
   <div class="card-body px-4 py-3" style="background:white;">

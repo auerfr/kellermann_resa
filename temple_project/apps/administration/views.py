@@ -1151,7 +1151,12 @@ def occupation(request):
 
 @staff_required
 def statistiques(request):
-    """Synthèse : loges par type/statut/obédience, effectifs, tenues de la saison."""
+    """Fusionnée dans la page unique Statistiques & reporting (exports:reporting)."""
+    return redirect('exports:reporting')
+
+
+def _statistiques_ancienne(request):
+    """(Conservée pour référence, non routée.) Synthèse loges par type/statut/obédience."""
     from django.db.models import Count, Sum, Avg, Q
     actives = Loge.objects.exclude(statut='inactive')
     today = date.today()

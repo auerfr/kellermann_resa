@@ -100,83 +100,244 @@ def export_excel(request):
     return response
 
 
-@login_required
-def reporting(request):
-    """Page de reporting et statistiques"""
-    from django.db.models import Count, Sum
-    from datetime import datetime
-
-    # Saison : sept. annee → juin annee+1
+def _saison_courante(request):
     current_year = date.today().year
-    # Déduire la saison courante : si on est avant septembre, la saison a démarré l'année précédente
     default_saison = current_year if date.today().month >= 9 else current_year - 1
-    annee_saison = int(request.GET.get("annee", default_saison))
+    try:
+        annee = int(request.GET.get("annee", default_saison))
+    except (ValueError, TypeError):
+        annee = default_saison
+    return annee, default_saison
 
-    saison_debut = date(annee_saison, 9, 1)
-    saison_fin   = date(annee_saison + 1, 6, 30)
 
-    reservations = Reservation.objects.filter(date__gte=saison_debut, date__lte=saison_fin)
+def _compute_stats(annee_saison):
+    """Données analytiques d'une saison : loges + réservations + séries pour graphiques.
+    Partagé par la page Statistiques et son export."""
+    from django.db.models import Count, Sum, Avg, Q
+    from temple_project.apps.loges.models import Loge
+    from temple_project.apps.reservations.models import RegleRecurrence
 
-    total      = reservations.count()
-    validees   = reservations.filter(statut="validee").count()
-    attente    = reservations.filter(statut="attente").count()
-    refusees   = reservations.filter(statut="refusee").count()
+    d1, d2 = date(annee_saison, 9, 1), date(annee_saison + 1, 6, 30)
+    reservations = Reservation.objects.filter(date__gte=d1, date__lte=d2)
+
+    total    = reservations.count()
+    validees = reservations.filter(statut="validee").count()
+    attente  = reservations.filter(statut="attente").count()
+    refusees = reservations.filter(statut="refusee").count()
     total_repas = reservations.filter(besoin_agapes=True, statut="validee").aggregate(
-        s=Sum("nombre_repas")
-    )["s"] or 0
-
+        s=Sum("nombre_repas"))["s"] or 0
     stats = {
-        "total": total,
-        "validees": validees,
-        "attente": attente,
-        "refusees": refusees,
+        "total": total, "validees": validees, "attente": attente, "refusees": refusees,
         "total_repas": total_repas,
-        "taux_validation": round(validees / total * 100, 1) if total > 0 else 0,
+        "taux_validation": round(validees / total * 100, 1) if total else 0,
     }
 
-    # Réservations par obédience (toute la saison, tous statuts)
-    reservations_par_obedience = reservations.values(
-        'loge__obedience__nom'
-    ).annotate(
-        nb_reservations=Count('id')
-    ).order_by('-nb_reservations')[:10]
+    resa_par_obedience = list(reservations.values('loge__obedience__nom')
+        .annotate(nb_reservations=Count('id')).order_by('-nb_reservations')[:15])
 
-    # Graphique mensuel : mois de la saison (sept → juin), tous statuts
-    reservations_par_mois = []
-    mois_saison = [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]
-    for m in mois_saison:
-        annee_mois = annee_saison if m >= 9 else annee_saison + 1
-        count = reservations.filter(date__year=annee_mois, date__month=m).count()
-        reservations_par_mois.append({
-            'mois': f'{annee_mois}-{m:02d}',
-            'count': count,
-        })
+    resa_par_mois = []
+    for m in [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]:
+        ya = annee_saison if m >= 9 else annee_saison + 1
+        resa_par_mois.append({'mois': f'{ya}-{m:02d}',
+                              'count': reservations.filter(date__year=ya, date__month=m).count()})
 
-    # Réservations par temple (tous statuts)
-    reservations_par_temple = reservations.values(
-        'temple__nom'
-    ).annotate(
-        nb_reservations=Count('id')
-    ).order_by('-nb_reservations')
+    resa_par_temple = list(reservations.values('temple__nom')
+        .annotate(nb_reservations=Count('id')).order_by('-nb_reservations'))
 
-    reservations_par_mois_json = json.dumps(reservations_par_mois)
-    reservations_par_temple_json = json.dumps([
-        {'nom': t['temple__nom'] or 'Non renseigné', 'nb_reservations': t['nb_reservations']}
-        for t in reservations_par_temple
-    ])
+    actives = Loge.objects.exclude(statut='inactive')
+    loges_par_obedience = list(actives.values('obedience__nom').annotate(
+        n=Count('id'),
+        loges=Count('id', filter=Q(type_loge='loge')),
+        hg=Count('id', filter=Q(type_loge='haut_grade')),
+        eff=Sum('effectif_total'),
+    ).order_by('-n'))
+    loges = {
+        'nb_total': actives.count(),
+        'nb_loges': actives.filter(type_loge='loge').count(),
+        'nb_hg': actives.filter(type_loge='haut_grade').count(),
+        'nb_active': actives.filter(statut='active').count(),
+        'nb_reconf': actives.filter(statut='a_reconfirmer').count(),
+        'nb_inactive': Loge.objects.filter(statut='inactive').count(),
+        'effectif_total': actives.aggregate(s=Sum('effectif_total'))['s'] or 0,
+        'agapes_moy': round(actives.filter(effectif_moyen_agapes__gt=0)
+                            .aggregate(a=Avg('effectif_moyen_agapes'))['a'] or 0),
+        'nb_avec_effectif': actives.filter(effectif_total__gt=0).count(),
+        'nb_regles': RegleRecurrence.objects.filter(actif=True).count(),
+    }
+    return {
+        'stats': stats, 'resa_par_obedience': resa_par_obedience,
+        'resa_par_mois': resa_par_mois, 'resa_par_temple': resa_par_temple,
+        'loges': loges, 'loges_par_obedience': loges_par_obedience,
+    }
 
+
+# Sections proposées à l'export (clé, libellé)
+SECTIONS_STATS = [
+    ('synthese',        'Chiffres clés'),
+    ('effectifs',       'Effectifs'),
+    ('loges_obedience', 'Loges par obédience'),
+    ('resa_statut',     'Réservations par statut'),
+    ('resa_mois',       'Réservations par mois'),
+    ('resa_temple',     'Réservations par temple'),
+    ('resa_obedience',  'Réservations par obédience'),
+]
+_MOIS_FR = {1:'Janvier',2:'Février',3:'Mars',4:'Avril',5:'Mai',6:'Juin',
+            7:'Juillet',8:'Août',9:'Septembre',10:'Octobre',11:'Novembre',12:'Décembre'}
+
+
+def _section_rows(key, d):
+    """(titre, entêtes, lignes) pour une section, ou None si clé inconnue."""
+    s, L = d['stats'], d['loges']
+    if key == 'synthese':
+        return ('Chiffres clés', ['Indicateur', 'Valeur'], [
+            ['Structures actives', L['nb_total']],
+            ['Loges bleues', L['nb_loges']],
+            ['Hauts grades', L['nb_hg']],
+            ['Actives confirmées', L['nb_active']],
+            ['À reconfirmer', L['nb_reconf']],
+            ['Inactives', L['nb_inactive']],
+            ['Règles de récurrence', L['nb_regles']],
+            ['Réservations (saison)', s['total']],
+            ['— validées', s['validees']],
+            ['— en attente', s['attente']],
+            ['— refusées', s['refusees']],
+            ['Taux de validation', f"{s['taux_validation']} %"],
+            ['Repas agapes (validés)', s['total_repas']],
+        ])
+    if key == 'effectifs':
+        return ('Effectifs', ['Indicateur', 'Valeur'], [
+            ['Effectif total (renseigné)', L['effectif_total']],
+            ['Loges avec effectif', L['nb_avec_effectif']],
+            ['Moyenne agapes / loge', L['agapes_moy']],
+        ])
+    if key == 'loges_obedience':
+        rows = [[o['obedience__nom'] or '—', o['n'], o['loges'], o['hg'], o['eff'] or 0]
+                for o in d['loges_par_obedience']]
+        return ('Loges par obédience', ['Obédience', 'Total', 'Loges', 'Hauts grades', 'Effectif'], rows)
+    if key == 'resa_statut':
+        return ('Réservations par statut', ['Statut', 'Nombre'], [
+            ['Validées', s['validees']], ['En attente', s['attente']],
+            ['Refusées', s['refusees']], ['Total', s['total']],
+        ])
+    if key == 'resa_mois':
+        rows = []
+        for it in d['resa_par_mois']:
+            y, m = it['mois'].split('-')
+            rows.append([f"{_MOIS_FR[int(m)]} {y}", it['count']])
+        return ('Réservations par mois', ['Mois', 'Nombre'], rows)
+    if key == 'resa_temple':
+        rows = [[t['temple__nom'] or 'Non renseigné', t['nb_reservations']] for t in d['resa_par_temple']]
+        return ('Réservations par temple', ['Temple', 'Nombre'], rows)
+    if key == 'resa_obedience':
+        rows = [[o['loge__obedience__nom'] or 'Non renseignée', o['nb_reservations']]
+                for o in d['resa_par_obedience']]
+        return ('Réservations par obédience', ['Obédience', 'Réservations'], rows)
+    return None
+
+
+@login_required
+def reporting(request):
+    """Page unique Statistiques : synthèse des loges + activité (réservations) + graphiques."""
+    annee_saison, default_saison = _saison_courante(request)
+    d = _compute_stats(annee_saison)
     context = {
-        "stats": stats,
         "annee": annee_saison,
         "annee_courante": default_saison,
         "saison_label": f"{annee_saison}–{annee_saison + 1}",
-        "reservations_par_obedience": reservations_par_obedience,
-        "reservations_par_mois": reservations_par_mois_json,
-        "reservations_par_temple": reservations_par_temple_json,
+        "stats": d['stats'],
+        "reservations_par_obedience": d['resa_par_obedience'],
+        "reservations_par_mois": json.dumps(d['resa_par_mois']),
+        "reservations_par_temple": json.dumps([
+            {'nom': t['temple__nom'] or 'Non renseigné', 'nb_reservations': t['nb_reservations']}
+            for t in d['resa_par_temple']]),
         "temples": Temple.objects.all().order_by('nom'),
+        "loges": d['loges'],
+        "loges_par_obedience": d['loges_par_obedience'],
+        "sections_stats": SECTIONS_STATS,
     }
-
     return render(request, "exports/reporting.html", context)
+
+
+@login_required
+def statistiques_export(request):
+    """Export sélectionnable (PDF ou Excel) des sections cochées, pour la saison."""
+    annee, _ = _saison_courante(request)
+    fmt = request.GET.get('format', 'pdf')
+    sections = request.GET.getlist('sections') or [k for k, _ in SECTIONS_STATS]
+    d = _compute_stats(annee)
+    blocs = [b for b in (_section_rows(k, d) for k in sections) if b]
+    label = f"{annee}-{annee + 1}"
+    if fmt == 'excel':
+        return _stats_export_excel(blocs, label)
+    return _stats_export_pdf(blocs, label)
+
+
+def _stats_export_excel(blocs, label):
+    from openpyxl.utils import get_column_letter
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Statistiques"
+    hf = Font(bold=True, color="FFFFFF"); hfill = PatternFill("solid", fgColor="0F2137")
+    r = 1
+    ws.cell(r, 1, f"Statistiques — saison {label}").font = Font(bold=True, color="0F2137", size=14)
+    r += 2
+    for titre, headers, rows in blocs:
+        ws.cell(r, 1, titre).font = Font(bold=True, color="0F2137", size=11); r += 1
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(r, c, h); cell.font = hf; cell.fill = hfill
+        r += 1
+        for row in rows:
+            for c, v in enumerate(row, 1):
+                ws.cell(r, c, v)
+            r += 1
+        r += 1
+    for col in range(1, 7):
+        ws.column_dimensions[get_column_letter(col)].width = 26
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    resp = HttpResponse(buf.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resp['Content-Disposition'] = f'attachment; filename="statistiques_kellermann_{label}.xlsx"'
+    return resp
+
+
+def _stats_export_pdf(blocs, label):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    navy = colors.HexColor('#0F2137'); gold = colors.HexColor('#C8A84B')
+    styles = getSampleStyleSheet()
+    h1 = ParagraphStyle('h1', parent=styles['Title'], textColor=navy, fontSize=18, alignment=0)
+    h2 = ParagraphStyle('h2', parent=styles['Heading2'], textColor=navy, fontSize=12)
+    small = ParagraphStyle('sm', parent=styles['Normal'], textColor=colors.HexColor('#64748B'), fontSize=9)
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.4*cm, bottomMargin=1.4*cm,
+                            leftMargin=1.5*cm, rightMargin=1.5*cm, title=f"Statistiques {label}")
+    elems = [Paragraph(f"Statistiques — saison {label}", h1),
+             Paragraph(f"Édité le {timezone.localtime().strftime('%d/%m/%Y à %H:%M')}", small),
+             Spacer(1, 0.5 * cm)]
+    for titre, headers, rows in blocs:
+        elems.append(Paragraph(titre, h2)); elems.append(Spacer(1, 0.15 * cm))
+        data = [headers] + [[str(x) for x in row] for row in rows]
+        t = Table(data, repeatRows=1, hAlign='LEFT')
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), navy),
+            ('TEXTCOLOR', (0, 0), (-1, 0), gold),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6), ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elems.append(t); elems.append(Spacer(1, 0.5 * cm))
+    doc.build(elems)
+    buf.seek(0)
+    resp = HttpResponse(buf.read(), content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="statistiques_kellermann_{label}.pdf"'
+    return resp
 
 
 def _get_queryset_from_request(request):

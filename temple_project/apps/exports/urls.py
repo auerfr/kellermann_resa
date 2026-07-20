@@ -7,6 +7,7 @@ urlpatterns = [
     path("csv/", views.export_csv, name="csv"),
     path("excel/", views.export_excel, name="excel"),
     path("reporting/", views.reporting, name="reporting"),
+    path("statistiques/export/", views.statistiques_export, name="statistiques_export"),
     path("planning/pdf/", views.planning_pdf, name="planning_pdf"),
     path("planning/grille-mensuelle/", views.planning_pdf_grille_mensuelle, name="planning_pdf_grille_mensuelle"),
     path("planning/annuel-a3/", views.planning_pdf_annuel_a3, name="planning_pdf_annuel_a3"),
