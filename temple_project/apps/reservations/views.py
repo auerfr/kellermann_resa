@@ -820,7 +820,8 @@ def contact_portail(request):
             )
             return redirect('reservations:confirmation_contact')
 
-    return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': 'acces'})
+    onglet = 'acces' if request.GET.get('onglet') == 'acces' else 'message'
+    return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': onglet})
 
 
 def confirmation_contact(request):
