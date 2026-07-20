@@ -14,13 +14,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opts):
         cles = (RegleRecurrence.objects
-                .values('loge', 'temple', 'jour_semaine', 'numero_semaine')
+                .values('loge', 'temple', 'jour_semaine', 'numero_semaine',
+                        'heure_debut', 'heure_fin')
                 .annotate(n=Count('id')).filter(n__gt=1))
         total = 0
         for c in cles:
             regles = RegleRecurrence.objects.filter(
                 loge=c['loge'], temple=c['temple'],
                 jour_semaine=c['jour_semaine'], numero_semaine=c['numero_semaine'],
+                heure_debut=c['heure_debut'], heure_fin=c['heure_fin'],
             ).select_related('loge', 'temple').order_by('id')
             garder = regles.first()
             extras = regles.exclude(pk=garder.pk)

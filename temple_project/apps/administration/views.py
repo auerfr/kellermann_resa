@@ -1281,7 +1281,8 @@ def sante_donnees(request):
     orph_temple = Reservation.objects.filter(loge__isnull=True, type_reservation='reguliere').count()
     orph_salle = ReservationSalle.objects.filter(loge__isnull=True).count()
     doublons_regles = (RegleRecurrence.objects
-                       .values('loge', 'temple', 'jour_semaine', 'numero_semaine')
+                       .values('loge', 'temple', 'jour_semaine', 'numero_semaine',
+                               'heure_debut', 'heure_fin')
                        .annotate(n=Count('id')).filter(n__gt=1).count())
     actives = Loge.objects.exclude(statut='inactive')
     sans_email = actives.filter(Q(email='') | Q(email__isnull=True)).count()
@@ -1402,7 +1403,7 @@ def _fusionner_loges(garder, suppr, appliquer):
         # Dédoublonnage des règles après réaffectation
         vues, doublons = set(), 0
         for r in RegleRecurrence.objects.filter(loge=garder).order_by('pk'):
-            key = (r.temple_id, r.jour_semaine, r.numero_semaine)
+            key = (r.temple_id, r.jour_semaine, r.numero_semaine, r.heure_debut, r.heure_fin)
             if key in vues:
                 r.delete(); doublons += 1
             else:
@@ -1512,14 +1513,19 @@ def doublons_regles(request):
     from django.db.models import Count
 
     def _groupes():
+        # Vrai doublon = tout identique, HORAIRES COMPRIS. Deux règles le même
+        # jour/semaine mais à des heures différentes sont deux tenues distinctes
+        # (ex. une le matin, une l'après-midi) — pas des doublons.
         cles = (RegleRecurrence.objects
-                .values('loge', 'temple', 'jour_semaine', 'numero_semaine')
+                .values('loge', 'temple', 'jour_semaine', 'numero_semaine',
+                        'heure_debut', 'heure_fin')
                 .annotate(n=Count('id')).filter(n__gt=1))
         out = []
         for c in cles:
             regles = list(RegleRecurrence.objects.filter(
                 loge=c['loge'], temple=c['temple'],
                 jour_semaine=c['jour_semaine'], numero_semaine=c['numero_semaine'],
+                heure_debut=c['heure_debut'], heure_fin=c['heure_fin'],
             ).select_related('loge', 'temple').order_by('id'))
             out.append(regles)
         return out

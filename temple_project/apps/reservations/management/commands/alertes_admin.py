@@ -25,7 +25,8 @@ class Command(BaseCommand):
             ('Tenues orphelines (sans loge)',
              Reservation.objects.filter(loge__isnull=True, type_reservation='reguliere').count()),
             ('Doublons de regles',
-             RegleRecurrence.objects.values('loge', 'temple', 'jour_semaine', 'numero_semaine')
+             RegleRecurrence.objects.values('loge', 'temple', 'jour_semaine', 'numero_semaine',
+                                            'heure_debut', 'heure_fin')
              .annotate(n=Count('id')).filter(n__gt=1).count()),
             ('Loges sans email',
              actives.filter(Q(email='') | Q(email__isnull=True)).count()),
