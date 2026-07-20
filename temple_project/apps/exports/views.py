@@ -253,6 +253,12 @@ def reporting(request):
         "temples": Temple.objects.all().order_by('nom'),
         "loges": d['loges'],
         "loges_par_obedience": d['loges_par_obedience'],
+        "loges_tiles": [
+            (d['loges']['nb_loges'],        "Loges bleues"),
+            (d['loges']['nb_hg'],           "Hauts grades"),
+            (d['loges']['nb_regles'],       "Règles actives"),
+            (d['loges']['effectif_total'],  "Effectif total"),
+        ],
         "sections_stats": SECTIONS_STATS,
     }
     return render(request, "exports/reporting.html", context)

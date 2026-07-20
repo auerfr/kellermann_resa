@@ -3,401 +3,186 @@
 
 {% block extra_css %}
 <style>
-  .rp-wrap {
-    background: #F8FAFC;
-    margin: -1.5rem;
-    padding: 1.75rem 1.5rem 2.5rem;
-    min-height: calc(100vh - 60px);
-  }
-  .kpi-card {
-    border: 1px solid #EAECEF !important;
-    box-shadow: none !important;
-    border-radius: 12px !important;
-    transition: border-color .15s;
-  }
-  .kpi-card:hover {
-    border-color: #C8A84B !important;
-  }
-  .trend-up   { color: #16A34A; font-size: 11px; font-weight: 600; }
-  .trend-down { color: #DC2626; font-size: 11px; font-weight: 600; }
-  .trend-neu  { color: #94A3B8; font-size: 11px; font-weight: 500; }
-  .section-title {
-    color: #0F2137;
-    font-size: 11px;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    font-weight: 600;
-  }
+  .stx-wrap { background:#F4F6F9; margin:-1.5rem; padding:1.6rem 1.5rem 2.5rem; min-height:calc(100vh - 60px); }
+  .stx-card { background:#fff; border:1px solid #E6E9EE; border-radius:14px; }
+  .stx-kpi-lbl { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#94A3B8; font-weight:600; }
+  .stx-kpi-num { font-size:29px; font-weight:600; letter-spacing:-.02em; margin-top:4px; color:#0F2137; line-height:1.05; }
+  .stx-kpi-sub { font-size:11px; color:#64748B; margin-top:6px; }
+  .stx-chip { display:inline-flex; align-items:center; gap:3px; margin-top:6px; font-size:11px; font-weight:600; padding:2px 8px; border-radius:99px; background:#ECFDF3; color:#067647; }
+  .stx-sect { font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:#94A3B8; font-weight:600; margin:0 0 12px; }
+  .stx-h { font-size:14px; font-weight:600; color:#0F2137; }
+  .stx-track { height:5px; background:#EEF1F5; border-radius:99px; overflow:hidden; margin-top:10px; }
+  .stx-fill { height:100%; background:#C8A84B; border-radius:99px; }
+  .stx-pill { background:#fff; border:1px solid #E6E9EE; border-radius:9px; padding:6px 12px; font-size:13px; color:#0F2137; }
+  .stx-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+  .stx-tbl th { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#94A3B8; font-weight:600; text-align:left; padding:10px 14px; border-bottom:1px solid #EEF1F5; }
+  .stx-tbl td { padding:10px 14px; border-bottom:1px solid #F3F5F8; color:#334155; }
+  .stx-tbl tr:last-child td { border-bottom:none; }
+  @media (max-width:768px){ .stx-wrap { margin:-1rem; padding:1rem .75rem 2rem; } .stx-kpi-num { font-size:26px; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="rp-wrap">
+<div class="stx-wrap">
 
-{# ── En-tête ──────────────────────────────────────────────────────────────── #}
-<div class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
-  <div>
-    <h1 class="h3 mb-1" style="color:#0F2137;">📈 Statistiques</h1>
-    <p class="text-muted small mb-0">Loges &amp; activité · saison {{ saison_label }}</p>
-  </div>
-  <form method="get" class="d-flex gap-2 align-items-center">
-    <label class="text-muted small mb-0">Saison</label>
-    <select name="annee" class="form-select form-select-sm" style="width:auto;" onchange="this.form.submit()">
-      <option value="2023" {% if annee == 2023 %}selected{% endif %}>2023–2024</option>
-      <option value="2024" {% if annee == 2024 %}selected{% endif %}>2024–2025</option>
-      <option value="2025" {% if annee == 2025 %}selected{% endif %}>2025–2026</option>
-      <option value="2026" {% if annee == 2026 %}selected{% endif %}>2026–2027</option>
-    </select>
-  </form>
-</div>
-
-{# ── Les loges ─────────────────────────────────────────────────────────────── #}
-<div class="section-title mb-3">Les loges</div>
-<div class="row g-3 mb-3">
-  {% include "administration/_stat_tile.html" with val=loges.nb_total lbl="Structures actives" %}
-  {% include "administration/_stat_tile.html" with val=loges.nb_loges lbl="Loges bleues" %}
-  {% include "administration/_stat_tile.html" with val=loges.nb_hg lbl="Hauts grades" %}
-  {% include "administration/_stat_tile.html" with val=loges.nb_regles lbl="Règles actives" %}
-</div>
-<div class="row g-3 mb-4">
-  {% include "administration/_stat_tile.html" with val=loges.nb_active lbl="Actives confirmées" %}
-  {% include "administration/_stat_tile.html" with val=loges.nb_reconf lbl="À reconfirmer" %}
-  {% include "administration/_stat_tile.html" with val=loges.effectif_total lbl="Effectif total" %}
-  {% include "administration/_stat_tile.html" with val=loges.agapes_moy lbl="Moy. agapes / loge" %}
-</div>
-
-<div class="card shadow-sm border-0 mb-5 rounded-3">
-  <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
-    <span class="section-title" style="color:#C8A84B;">Loges par obédience</span>
-  </div>
-  <div class="card-body p-0" style="background:white;">
-    <div class="table-responsive">
-      <table class="table table-hover mb-0">
-        <thead style="background:#F8FAFC;">
-          <tr>
-            <th class="ps-4 py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Obédience</th>
-            <th class="text-center py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Total</th>
-            <th class="text-center py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Loges</th>
-            <th class="text-center py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Hauts grades</th>
-            <th class="text-center pe-4 py-2" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Effectif</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for o in loges_par_obedience %}
-          <tr style="border-bottom:1px solid #F1F5F9;">
-            <td class="ps-4 py-2 fw-semibold" style="color:#0F2137;font-size:13px;" data-label="Obédience">{{ o.obedience__nom|default:"—" }}</td>
-            <td class="text-center py-2" data-label="Total">{{ o.n }}</td>
-            <td class="text-center py-2" data-label="Loges">{{ o.loges }}</td>
-            <td class="text-center py-2" data-label="Hauts grades">{{ o.hg }}</td>
-            <td class="text-center pe-4 py-2" data-label="Effectif">{{ o.eff|default:"—" }}</td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="5" class="text-center text-muted py-4 small">Aucune donnée</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  {# ── En-tête ── #}
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+    <div>
+      <h1 class="mb-1" style="font-size:22px;font-weight:600;letter-spacing:-.01em;color:#0F2137;">Statistiques</h1>
+      <div style="font-size:13px;color:#64748B;">Loges &amp; activité · saison {{ saison_label }}</div>
     </div>
+    <form method="get" class="d-flex gap-2 align-items-center">
+      <select name="annee" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
+        <option value="{{ annee_courante }}" {% if annee == annee_courante %}selected{% endif %}>{{ annee_courante }}–{{ annee_courante|add:1 }}</option>
+        <option value="{{ annee_courante|add:-1 }}" {% if annee == annee_courante|add:-1 %}selected{% endif %}>{{ annee_courante|add:-1 }}–{{ annee_courante }}</option>
+        <option value="{{ annee_courante|add:-2 }}" {% if annee == annee_courante|add:-2 %}selected{% endif %}>{{ annee_courante|add:-2 }}–{{ annee_courante|add:-1 }}</option>
+        <option value="{{ annee_courante|add:1 }}" {% if annee == annee_courante|add:1 %}selected{% endif %}>{{ annee_courante|add:1 }}–{{ annee_courante|add:2 }}</option>
+      </select>
+      <a href="#export" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;border:none;padding:7px 14px;border-radius:9px;">
+        <i class="bi"></i>⤓ Exporter
+      </a>
+    </form>
   </div>
-</div>
 
-{# ── L'activité (réservations) ─────────────────────────────────────────────── #}
-<div class="section-title mb-3">L'activité — réservations</div>
-
-{# ── KPI principaux ───────────────────────────────────────────────────────── #}
-<div class="row g-3 mb-5">
-
-  <div class="col-6 col-md-3">
-    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
-      <div class="card-body text-center py-4 px-3">
-        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#0F2137;">{{ stats.total }}</div>
-        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Réservations totales</div>
-        {% if stats.total > 0 %}
-        <div class="trend-up">↑ saison en cours</div>
-        {% else %}
-        <div class="trend-neu">— aucune donnée</div>
-        {% endif %}
+  {# ── KPI hero ── #}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Réservations</div>
+        <div class="stx-kpi-num">{{ stats.total }}</div>
+        <div class="stx-chip">▲ saison en cours</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Taux de validation</div>
+        <div class="stx-kpi-num">{{ stats.taux_validation }}<span style="font-size:17px;color:#94A3B8;">%</span></div>
+        <div class="stx-track"><div class="stx-fill" style="width:{{ stats.taux_validation }}%;"></div></div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Loges actives</div>
+        <div class="stx-kpi-num">{{ loges.nb_total }}</div>
+        <div class="stx-kpi-sub">{{ loges.nb_active }} confirmées · {{ loges.nb_reconf }} à reconfirmer</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Repas agapes</div>
+        <div class="stx-kpi-num">{{ stats.total_repas }}</div>
+        <div class="stx-kpi-sub">sur tenues validées</div>
       </div>
     </div>
   </div>
 
-  <div class="col-6 col-md-3">
-    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
-      <div class="card-body text-center py-4 px-3">
-        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#16A34A;">{{ stats.validees }}</div>
-        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Validées</div>
-        {% if stats.total > 0 %}
-          {% if stats.taux_validation >= 75 %}
-          <div class="trend-up">↑ {{ stats.taux_validation }}% validation</div>
-          {% else %}
-          <div class="trend-down">↓ {{ stats.taux_validation }}% validation</div>
-          {% endif %}
-        {% else %}
-        <div class="trend-neu">—</div>
-        {% endif %}
-      </div>
+  {# ── Graphique mensuel ── #}
+  <div class="stx-card mb-4" style="padding:18px 18px 12px;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <span class="stx-h">Réservations par mois</span>
+      <span style="font-size:12px;color:#94A3B8;">validées · sept → juin</span>
     </div>
+    <div style="position:relative;height:210px;"><canvas id="chartMois"></canvas></div>
   </div>
 
-  <div class="col-6 col-md-3">
-    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
-      <div class="card-body text-center py-4 px-3">
-        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#F59E0B;">{{ stats.attente }}</div>
-        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">En attente</div>
-        {% if stats.attente > 0 %}
-        <div class="trend-down">↓ à traiter</div>
-        {% else %}
-        <div class="trend-up">↑ tout traité</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="col-6 col-md-3">
-    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
-      <div class="card-body text-center py-4 px-3">
-        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#DC2626;">{{ stats.refusees }}</div>
-        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Refusées</div>
-        {% if stats.total > 0 %}
-          {% if stats.refusees == 0 %}
-          <div class="trend-up">↑ aucun refus</div>
-          {% else %}
-          <div class="trend-down">↓ {{ stats.refusees }} refus</div>
-          {% endif %}
-        {% else %}
-        <div class="trend-neu">—</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-</div>
-
-{# ── KPI secondaires ──────────────────────────────────────────────────────── #}
-<div class="row g-3 mb-5">
-
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
-      <div class="card-body text-center py-4 px-3">
-        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#C8A84B;">{{ stats.taux_validation }}%</div>
-        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Taux de validation</div>
-        {% if stats.taux_validation >= 75 %}
-        <div class="trend-up">↑ bon taux</div>
-        {% elif stats.taux_validation >= 50 %}
-        <div class="trend-neu">→ taux moyen</div>
-        {% else %}
-        <div class="trend-down">↓ taux faible</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
-      <div class="card-body text-center py-4 px-3">
-        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#7C3AED;">{{ stats.total_repas }}</div>
-        <div class="mb-1" style="font-size:12px;color:#94A3B8;font-weight:500;">Repas agapes</div>
-        {% if stats.total_repas > 0 %}
-        <div class="trend-up">↑ agapes actives</div>
-        {% else %}
-        <div class="trend-neu">— aucun repas</div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100 kpi-card rounded-3">
-      <div class="card-body text-center py-4 px-3">
-        <div class="fw-bold mb-1" style="font-size:2.2rem;line-height:1;color:#0891B2;">
-          {{ stats.total_personnes|default:"—" }}
-        </div>
-        <div style="font-size:12px;color:#94A3B8;font-weight:500;">Total personnes</div>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-{# ── Graphiques ───────────────────────────────────────────────────────────── #}
-<div class="row g-4 mb-5">
-
-  {# Bar chart #}
-  <div class="col-12 col-lg-8">
-    <div class="card shadow-sm border-0 h-100 rounded-3">
-      <div class="card-header px-4 py-3 rounded-top"
-           style="background:#0F2137;border-bottom:none;">
-        <span class="section-title" style="color:#C8A84B;">
-          Évolution mensuelle — réservations validées
-        </span>
-      </div>
-      <div class="card-body px-4 py-4" style="background:white;">
-        <div style="position:relative;height:200px;">
-          <canvas id="reservationsChart"
-                  style="height:200px !important;max-height:200px;"></canvas>
+  {# ── Temple (donut) + Obédiences (barres) ── #}
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-lg-5">
+      <div class="stx-card h-100" style="padding:18px;">
+        <div class="stx-h mb-3">Répartition par temple</div>
+        <div class="d-flex align-items-center gap-3">
+          <div style="position:relative;width:130px;height:130px;flex-shrink:0;"><canvas id="chartTemples"></canvas></div>
+          <div id="templesLegend" style="font-size:12.5px;flex:1;min-width:0;"></div>
         </div>
       </div>
     </div>
-  </div>
-
-  {# Donut chart #}
-  <div class="col-12 col-lg-4">
-    <div class="card shadow-sm border-0 h-100 rounded-3">
-      <div class="card-header px-4 py-3 rounded-top"
-           style="background:#0F2137;border-bottom:none;">
-        <span class="section-title" style="color:#C8A84B;">
-          Répartition par temple
-        </span>
-      </div>
-      <div class="card-body py-4 px-3" style="background:white;">
-        <div class="row align-items-center g-0">
-          <div class="col-7 d-flex justify-content-center align-items-center">
-            <div style="position:relative;width:100%;max-width:180px;">
-              <canvas id="templesChart"
-                      style="max-height:220px;"></canvas>
+    <div class="col-12 col-lg-7">
+      <div class="stx-card h-100" style="padding:18px;">
+        <div class="stx-h mb-3">Top obédiences — réservations</div>
+        {% with maxo=reservations_par_obedience.0.nb_reservations %}
+        <div style="display:flex;flex-direction:column;gap:11px;font-size:12.5px;">
+          {% for o in reservations_par_obedience|slice:":6" %}
+          <div>
+            <div class="d-flex justify-content-between mb-1">
+              <span style="color:#334155;">{{ o.loge__obedience__nom|default:"Non renseignée" }}</span>
+              <span style="color:#64748B;font-weight:600;">{{ o.nb_reservations }}</span>
+            </div>
+            <div class="stx-track" style="margin-top:0;">
+              <div class="stx-fill" style="width:{% widthratio o.nb_reservations maxo 100 %}%;{% if forloop.first %}background:#0F2137;{% endif %}"></div>
             </div>
           </div>
-          <div class="col-5">
-            <div id="temples-legend" style="font-size:12px;line-height:1.6;"></div>
-          </div>
+          {% empty %}<div class="text-muted small">Aucune donnée</div>{% endfor %}
         </div>
+        {% endwith %}
       </div>
     </div>
   </div>
 
-</div>
-
-{# ── Tableau par obédience ────────────────────────────────────────────────── #}
-<div class="card shadow-sm border-0 mb-5 rounded-3">
-  <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
-    <span class="section-title" style="color:#C8A84B;">
-      Réservations par obédience
-    </span>
+  {# ── Les loges ── #}
+  <div class="stx-sect">Les loges</div>
+  <div class="row g-3 mb-3">
+    {% for v, l in loges_tiles %}
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:14px 16px;">
+        <div class="stx-kpi-lbl">{{ l }}</div>
+        <div class="stx-kpi-num" style="font-size:24px;">{{ v }}</div>
+      </div>
+    </div>
+    {% endfor %}
   </div>
-  <div class="card-body p-0" style="background:white;">
+
+  <div class="stx-card mb-4" style="overflow:hidden;">
+    <div style="padding:14px 16px 4px;"><span class="stx-h">Loges par obédience</span></div>
     <div class="table-responsive">
-      <table class="table table-hover mb-0">
-        <thead style="background:#F8FAFC;">
-          <tr>
-            <th class="ps-4 py-3" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;font-weight:600;">Obédience</th>
-            <th class="text-center py-3" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;font-weight:600;">Réservations</th>
-            <th class="pe-4 py-3" style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;font-weight:600;min-width:160px;">Part</th>
-          </tr>
-        </thead>
+      <table class="stx-tbl">
+        <thead><tr><th>Obédience</th><th>Total</th><th>Loges</th><th>Hauts grades</th><th>Effectif</th></tr></thead>
         <tbody>
-          {% for obedience in reservations_par_obedience %}
-          <tr style="border-bottom:1px solid #F1F5F9;">
-            <td class="ps-4 py-3 fw-semibold" style="color:#0F2137;font-size:13px;">
-              {{ obedience.loge__obedience__nom|default:"Non renseignée" }}
-            </td>
-            <td class="text-center py-3">
-              <span class="badge rounded-pill px-3"
-                    style="background:#0F2137;color:#C8A84B;font-size:13px;">
-                {{ obedience.nb_reservations }}
-              </span>
-            </td>
-            <td class="pe-4 py-3">
-              {% if stats.total %}
-              <div class="d-flex align-items-center gap-2">
-                <div style="flex:1;background:#F1F5F9;border-radius:99px;height:8px;overflow:hidden;">
-                  <div style="width:{% widthratio obedience.nb_reservations stats.total 100 %}%;height:8px;border-radius:99px;background:linear-gradient(90deg,#C8A84B,#F5D98A);"></div>
-                </div>
-                <small class="text-muted fw-semibold" style="min-width:30px;font-size:12px;">
-                  {% widthratio obedience.nb_reservations stats.total 100 %}%
-                </small>
-              </div>
-              {% endif %}
-            </td>
+          {% for o in loges_par_obedience %}
+          <tr>
+            <td data-label="Obédience" style="font-weight:500;color:#0F2137;">{{ o.obedience__nom|default:"—" }}</td>
+            <td data-label="Total">{{ o.n }}</td>
+            <td data-label="Loges">{{ o.loges }}</td>
+            <td data-label="Hauts grades">{{ o.hg }}</td>
+            <td data-label="Effectif">{{ o.eff|default:"—" }}</td>
           </tr>
-          {% empty %}
-          <tr><td colspan="3" class="text-center text-muted py-4 small">Aucune donnée</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
-</div>
 
-{# ── Exporter l'analyse (sélectionnable) ──────────────────────────────────── #}
-<div class="card shadow-sm border-0 mb-4 rounded-3">
-  <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
-    <span class="section-title" style="color:#C8A84B;">Exporter l'analyse</span>
-  </div>
-  <div class="card-body px-4 py-4" style="background:white;">
+  {# ── Export sélectionnable ── #}
+  <div class="stx-card mb-3" id="export" style="padding:18px;">
+    <div class="stx-h mb-1">Exporter l'analyse</div>
+    <div style="font-size:12.5px;color:#64748B;margin-bottom:14px;">Choisissez les sections, puis le format — un document soignné prêt à présenter.</div>
     <form method="get" action="{% url 'exports:statistiques_export' %}">
       <input type="hidden" name="annee" value="{{ annee }}">
-      <p class="small text-muted mb-2">Sélectionnez les sections à inclure :</p>
       <div class="row g-2 mb-3">
         {% for key, label in sections_stats %}
         <div class="col-6 col-md-4">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="sections" value="{{ key }}" id="sec-{{ key }}" checked>
-            <label class="form-check-label small" for="sec-{{ key }}">{{ label }}</label>
-          </div>
+          <label class="d-flex align-items-center gap-2" style="font-size:13px;color:#334155;cursor:pointer;">
+            <input class="form-check-input mt-0" type="checkbox" name="sections" value="{{ key }}" checked> {{ label }}
+          </label>
         </div>
         {% endfor %}
       </div>
       <div class="d-flex gap-2 flex-wrap align-items-center">
-        <span class="small text-muted me-1">Générer :</span>
-        <button type="submit" name="format" value="pdf" class="btn btn-sm fw-semibold"
-                style="background:#0F2137;color:#C8A84B;border:none;">📄 PDF</button>
-        <button type="submit" name="format" value="excel" class="btn btn-sm btn-outline-secondary">📊 Excel</button>
-        <span class="small text-muted ms-2">Saison {{ saison_label }}</span>
+        <button type="submit" name="format" value="pdf" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;border:none;padding:7px 16px;border-radius:9px;">⤓ PDF</button>
+        <button type="submit" name="format" value="excel" class="btn btn-sm" style="background:#fff;border:1px solid #E6E9EE;color:#0F2137;padding:7px 16px;border-radius:9px;">⤓ Excel</button>
+        <span style="font-size:12px;color:#94A3B8;margin-left:4px;">saison {{ saison_label }}</span>
       </div>
     </form>
   </div>
-</div>
 
-{# ── Exports (données brutes / planning) ───────────────────────────────────── #}
-<div class="card shadow-sm border-0 rounded-3">
-  <div class="card-header px-4 py-3" style="background:#0F2137;border-bottom:none;">
-    <span class="section-title" style="color:#C8A84B;">
-      Autres exports — données brutes &amp; planning
-    </span>
+  {# ── Autres exports ── #}
+  <div class="d-flex gap-2 flex-wrap align-items-center" style="font-size:12.5px;color:#64748B;">
+    <span>Autres :</span>
+    <a href="{% url 'exports:csv' %}?annee={{ annee }}" class="stx-pill" style="text-decoration:none;">CSV réservations</a>
+    <a href="{% url 'exports:excel' %}?annee={{ annee }}" class="stx-pill" style="text-decoration:none;">Excel réservations</a>
+    <a href="{% url 'exports:bilan_saison' %}?annee={{ annee }}" class="stx-pill" style="text-decoration:none;">Bilan saison</a>
   </div>
-  <div class="card-body px-4 py-3" style="background:white;">
-    <div class="d-flex gap-2 flex-wrap align-items-center">
-      <a href="{% url 'exports:csv' %}?annee={{ annee }}" class="btn btn-sm btn-outline-secondary">
-        CSV
-      </a>
-      <a href="{% url 'exports:excel' %}?annee={{ annee }}" class="btn btn-sm"
-         style="background:#0F2137;color:#C8A84B;border:none;">
-        Excel
-      </a>
-      <div class="vr mx-1"></div>
-      <select id="pdf-temple" class="form-select form-select-sm" style="width:auto;">
-        <option value="">Tous les temples</option>
-        {% for t in temples %}
-        <option value="{{ t.pk }}">{{ t }}</option>
-        {% endfor %}
-      </select>
-      <select id="pdf-mois" class="form-select form-select-sm" style="width:auto;">
-        <option value="9">Septembre</option>
-        <option value="10">Octobre</option>
-        <option value="11">Novembre</option>
-        <option value="12">Décembre</option>
-        <option value="1">Janvier</option>
-        <option value="2">Février</option>
-        <option value="3">Mars</option>
-        <option value="4">Avril</option>
-        <option value="5">Mai</option>
-        <option value="6">Juin</option>
-      </select>
-      <button class="btn btn-sm btn-outline-danger"
-        onclick="(function(){
-          var t=document.getElementById('pdf-temple').value;
-          var m=document.getElementById('pdf-mois').value;
-          var a={{ annee }};
-          var yr=(m>=9)?a:a+1;
-          var url='{% url 'exports:planning_pdf' %}?mois='+m+'&annee='+yr+(t?'&temple='+t:'');
-          window.location=url;
-        })()">
-        📄 Planning PDF mensuel
-      </button>
-    </div>
-  </div>
-</div>
 
-</div>{# /rp-wrap #}
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -406,129 +191,48 @@
 const dataMois    = {{ reservations_par_mois|safe }};
 const dataTemples = {{ reservations_par_temple|safe }};
 
-// ── Bar chart ──────────────────────────────────────────────────────────────
-var ctx1 = document.getElementById('reservationsChart');
-if (ctx1) {
-    var labelsMois = dataMois.map(function(item) {
-        var parts = item.mois.split('-');
-        var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1);
-        return d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
-    });
-    var valuesMois = dataMois.map(function(item) { return item.count; });
-
-    new Chart(ctx1, {
-        type: 'bar',
-        data: {
-            labels: labelsMois,
-            datasets: [{
-                label: 'Réservations validées',
-                data: valuesMois,
-                backgroundColor: 'rgba(200, 168, 75, 0.85)',
-                borderWidth: 0,
-                borderRadius: 5,
-                borderSkipped: false,
-                barPercentage: 0.35,
-                categoryPercentage: 0.5,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: { duration: 900, easing: 'easeOutQuart' },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#0F2137',
-                    titleColor: '#C8A84B',
-                    bodyColor: '#ffffff',
-                    padding: 10,
-                    cornerRadius: 8,
-                    callbacks: {
-                        label: function(ctx) {
-                            return '  ' + ctx.parsed.y + ' réservation' + (ctx.parsed.y > 1 ? 's' : '');
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { stepSize: 1, color: '#94A3B8', font: { size: 10 } },
-                    grid: { color: 'rgba(0,0,0,0.04)', drawBorder: false }
-                },
-                x: {
-                    ticks: { color: '#94A3B8', font: { size: 10 } },
-                    grid: { display: false }
-                }
-            }
-        }
-    });
+var c1 = document.getElementById('chartMois');
+if (c1 && window.Chart) {
+  var labels = dataMois.map(function(it){ var p=it.mois.split('-'); return new Date(+p[0], +p[1]-1).toLocaleDateString('fr-FR',{month:'short'}); });
+  var vals = dataMois.map(function(it){ return it.count; });
+  var mx = Math.max.apply(null, vals.concat([1]));
+  new Chart(c1, {
+    type:'bar',
+    data:{ labels:labels, datasets:[{ data:vals,
+      backgroundColor: vals.map(function(v){ return v===mx ? '#0F2137' : '#C8A84B'; }),
+      borderRadius:5, borderSkipped:false, barPercentage:0.6, categoryPercentage:0.7 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ backgroundColor:'#0F2137', titleColor:'#C8A84B', bodyColor:'#fff', padding:10, cornerRadius:8, displayColors:false,
+        callbacks:{ label:function(x){ return '  '+x.parsed.y+' réservation'+(x.parsed.y>1?'s':''); } } } },
+      scales:{ y:{ beginAtZero:true, border:{display:false}, ticks:{ color:'#94A3B8', font:{size:10} }, grid:{ color:'#F1F4F7' } },
+               x:{ border:{display:false}, ticks:{ color:'#94A3B8', font:{size:11} }, grid:{ display:false } } } }
+  });
 }
 
-// ── Donut chart ────────────────────────────────────────────────────────────
-var ctx2 = document.getElementById('templesChart');
-if (ctx2) {
-    var labelsTemples = dataTemples.map(function(item) { return item.nom; });
-    var valuesTemples = dataTemples.map(function(item) { return item.nb_reservations; });
-    var palette = ['#0F2137', '#C8A84B', '#2563EB', '#7C3AED', '#059669', '#DC2626'];
-
-    new Chart(ctx2, {
-        type: 'doughnut',
-        data: {
-            labels: labelsTemples,
-            datasets: [{
-                data: valuesTemples,
-                backgroundColor: palette.slice(0, labelsTemples.length),
-                borderWidth: 3,
-                borderColor: '#ffffff',
-                hoverOffset: 5,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            cutout: '65%',
-            animation: { duration: 900, easing: 'easeOutQuart' },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#0F2137',
-                    titleColor: '#C8A84B',
-                    bodyColor: '#ffffff',
-                    padding: 10,
-                    cornerRadius: 8,
-                    callbacks: {
-                        label: function(ctx) {
-                            var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
-                            var pct = total > 0 ? Math.round(ctx.parsed * 100 / total) : 0;
-                            return '  ' + ctx.parsed + ' (' + pct + '%)';
-                        }
-                    }
-                }
-            }
-        }
+var c2 = document.getElementById('chartTemples');
+if (c2 && window.Chart) {
+  var tl = dataTemples.map(function(it){ return it.nom.replace('Temple ',''); });
+  var tv = dataTemples.map(function(it){ return it.nb_reservations; });
+  var pal = ['#0F2137','#0E7C7B','#C8A84B','#7C5CBF','#B4531F','#2563EB'];
+  new Chart(c2, {
+    type:'doughnut',
+    data:{ labels:tl, datasets:[{ data:tv, backgroundColor:pal.slice(0,tl.length), borderWidth:3, borderColor:'#fff', hoverOffset:4 }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'66%',
+      plugins:{ legend:{display:false}, tooltip:{ backgroundColor:'#0F2137', titleColor:'#C8A84B', bodyColor:'#fff', padding:10, cornerRadius:8,
+        callbacks:{ label:function(x){ var t=x.dataset.data.reduce(function(a,b){return a+b;},0); return '  '+x.parsed+' ('+(t?Math.round(x.parsed*100/t):0)+'%)'; } } } } }
+  });
+  var leg = document.getElementById('templesLegend');
+  if (leg) {
+    var tot = tv.reduce(function(a,b){return a+b;},0), html='';
+    tl.forEach(function(lab,i){
+      var pct = tot?Math.round(tv[i]*100/tot):0;
+      html += '<div class="d-flex align-items-center justify-content-between" style="padding:3px 0;">'
+        + '<span class="d-flex align-items-center gap-2" style="min-width:0;"><span style="width:9px;height:9px;border-radius:3px;background:'+pal[i%pal.length]+';flex-shrink:0;"></span>'
+        + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+lab+'</span></span>'
+        + '<span style="color:#94A3B8;flex-shrink:0;margin-left:8px;">'+pct+'%</span></div>';
     });
-
-    // Légende personnalisée dans la colonne droite
-    var legendEl = document.getElementById('temples-legend');
-    if (legendEl) {
-        var total = valuesTemples.reduce(function(a, b) { return a + b; }, 0);
-        var html = '';
-        labelsTemples.forEach(function(label, i) {
-            var pct = total > 0 ? Math.round(valuesTemples[i] * 100 / total) : 0;
-            html += '<div class="d-flex align-items-start gap-2 mb-2">';
-            html += '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'
-                  + palette[i % palette.length]
-                  + ';flex-shrink:0;margin-top:2px;"></span>';
-            html += '<div style="min-width:0;">';
-            html += '<div style="color:#374151;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
-                  + label + '</div>';
-            html += '<div style="color:#94A3B8;">'
-                  + valuesTemples[i] + ' <span style="font-size:11px;">(' + pct + '%)</span></div>';
-            html += '</div></div>';
-        });
-        legendEl.innerHTML = html;
-    }
+    leg.innerHTML = html;
+  }
 }
 </script>
 {% endblock %}
