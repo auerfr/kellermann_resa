@@ -411,3 +411,34 @@ class ValidationSaisonLigne(models.Model):
 
     def __str__(self):
         return f"{self.validation.loge} – {self.date} [{self.get_avis_display()}]"
+
+
+class MessageContact(models.Model):
+    """Message reçu via le formulaire de contact « Message libre » — alimente la
+    messagerie admin (lu / traité / répondu)."""
+    STATUT_CHOICES = [
+        ('nouveau', 'Nouveau'),
+        ('lu',      'Lu'),
+        ('traite',  'Traité'),
+    ]
+    nom          = models.CharField(max_length=200)
+    email        = models.EmailField()
+    sujet        = models.CharField(max_length=200, blank=True)
+    message      = models.TextField()
+    created_at   = models.DateTimeField(auto_now_add=True)
+    statut       = models.CharField(max_length=10, choices=STATUT_CHOICES, default='nouveau')
+    reponse      = models.TextField(blank=True)
+    date_reponse = models.DateTimeField(null=True, blank=True)
+    repondu_par  = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        verbose_name = "Message de contact"
+        verbose_name_plural = "Messages de contact"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.nom} — {self.sujet or '(sans objet)'} ({self.get_statut_display()})"
+
+    @property
+    def repondu(self):
+        return bool(self.reponse)

@@ -87,7 +87,7 @@
   </div>
 </div>
 
-{% if not attente and not attente_salles and not demandes_portail %}
+{% if not attente and not attente_salles and not demandes_portail and not messages_nouveaux %}
 <div class="d-flex align-items-center gap-2 mb-4 px-4 py-3" style="background:#fff;border:1px solid #E6E9EE;border-left:4px solid #16A34A;border-radius:12px;">
   <span style="font-size:18px;">✅</span>
   <span class="fw-semibold" style="color:#166534;font-size:14px;">Aucune demande en attente — tout est à jour.</span>
@@ -95,6 +95,30 @@
 {% endif %}
 
 {# ── Cartes « action requise » ─────────────────────────────────────────────── #}
+{% if messages_nouveaux %}
+<div class="stx-card mb-4" style="border-left:4px solid #2563EB;overflow:hidden;">
+  <div class="d-flex justify-content-between align-items-center" style="padding:13px 16px;border-bottom:1px solid #F3F5F8;">
+    <span class="stx-h" style="color:#1E40AF;">📨 Nouveaux messages <span class="ms-1" style="background:#DBEAFE;color:#1E40AF;font-size:12px;font-weight:600;padding:3px 9px;border-radius:7px;">{{ nb_messages_nx }}</span></span>
+    <a href="{% url 'administration:messagerie' %}" style="font-size:11px;color:#1D4ED8;font-weight:600;text-decoration:none;text-transform:uppercase;letter-spacing:.04em;">Ouvrir la messagerie →</a>
+  </div>
+  <div class="table-responsive">
+    <table class="stx-tbl">
+      <thead><tr><th>De</th><th>Sujet</th><th>Reçu le</th><th></th></tr></thead>
+      <tbody>
+        {% for msg in messages_nouveaux %}
+        <tr>
+          <td data-label="De" style="font-weight:600;color:#0F2137;">{{ msg.nom }}</td>
+          <td data-label="Sujet">{{ msg.sujet|default:"(sans objet)" }}</td>
+          <td data-label="Reçu le" style="color:#64748B;">{{ msg.created_at|date:"d/m à H:i" }}</td>
+          <td class="text-end"><a href="{% url 'administration:message_detail' msg.pk %}" class="btn btn-sm btn-outline-primary fw-semibold" style="font-size:12px;">Lire →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {% if attente %}
 <div class="stx-card mb-4" style="border-left:4px solid #F59E0B;overflow:hidden;">
   <div class="d-flex justify-content-between align-items-center" style="padding:13px 16px;border-bottom:1px solid #F3F5F8;">

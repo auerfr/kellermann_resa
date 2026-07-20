@@ -8,7 +8,7 @@ from .emails import envoyer_email_nouvelle_demande
 from .models import (
     Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence,
     RegleRecurrence, Temple, DemandeAccesPortail,
-    ValidationSaison, ValidationSaisonLigne,
+    ValidationSaison, ValidationSaisonLigne, MessageContact,
 )
 from temple_project.apps.loges.models import Loge
 from .forms import DemandeReservationForm, DemandeReservationSalleForm, DemandeCabinetsForm, DemandeBanquetForm
@@ -807,14 +807,19 @@ def contact_portail(request):
                 messages.error(request, "Nom, email et message sont obligatoires.")
                 return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': 'message'})
 
+            # Enregistre le message (consultable + répondable dans la messagerie admin)
+            MessageContact.objects.create(nom=nom, email=email, sujet=sujet, message=message)
+
+            # Notification à l'admin
             send_mail_kellermann(
-                subject=f"[Kellermann] Message libre – {sujet or nom}",
+                subject=f"[Kellermann] Nouveau message – {sujet or nom}",
                 message=(
-                    f"Message via le formulaire de contact.\n\n"
+                    f"Nouveau message reçu via le formulaire de contact.\n\n"
                     f"Nom    : {nom}\n"
                     f"Email  : {email}\n"
                     f"Sujet  : {sujet or '(non précisé)'}\n\n"
-                    f"Message :\n{message}"
+                    f"Message :\n{message}\n\n"
+                    f"À consulter et répondre dans la messagerie de l'administration."
                 ),
                 recipient_list=[get_email_admin()],
             )

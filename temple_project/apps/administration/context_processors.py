@@ -23,3 +23,15 @@ def annonce_active(request):
         # La table n'existe pas encore (avant migration) : ne rien casser
         annonce = None
     return {'annonce_popup': annonce}
+
+
+def messagerie(request):
+    """Nombre de messages non lus, pour le badge navbar (staff uniquement)."""
+    try:
+        user = getattr(request, 'user', None)
+        if user and user.is_authenticated and user.is_staff:
+            from temple_project.apps.reservations.models import MessageContact
+            return {'nb_messages_nouveaux': MessageContact.objects.filter(statut='nouveau').count()}
+    except Exception:
+        pass
+    return {'nb_messages_nouveaux': 0}

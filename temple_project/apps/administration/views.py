@@ -48,6 +48,8 @@ def tableau_de_bord(request):
         statut='attente'
     ).select_related('salle').order_by('date')
     demandes_portail_attente = DemandeAccesPortail.objects.filter(statut='attente').order_by('created_at')
+    from temple_project.apps.reservations.models import MessageContact
+    messages_nouveaux = MessageContact.objects.filter(statut='nouveau').order_by('-created_at')
     context = {
         'attente':                  reservations_attente,
         'recentes':                 reservations_recentes,
@@ -59,6 +61,8 @@ def tableau_de_bord(request):
         'nb_attente_salles':        reservations_salle_attente.count(),
         'demandes_portail':         demandes_portail_attente,
         'nb_demandes_portail':      demandes_portail_attente.count(),
+        'messages_nouveaux':        messages_nouveaux,
+        'nb_messages_nx':           messages_nouveaux.count(),
     }
     return render(request, 'administration/tableau_de_bord.html', context)
 
@@ -1685,6 +1689,76 @@ def doublons_regles(request):
             'garder': regles[0], 'extras': regles[1:],
         })
     return render(request, 'administration/doublons_regles.html', {'groupes': groupes})
+
+
+@staff_required
+def messagerie(request):
+    """Boîte de réception des messages du formulaire de contact."""
+    from temple_project.apps.reservations.models import MessageContact
+    f = request.GET.get('statut', '')
+    qs = MessageContact.objects.all()
+    if f in ('nouveau', 'lu', 'traite'):
+        qs = qs.filter(statut=f)
+    counts = {
+        'tous':    MessageContact.objects.count(),
+        'nouveau': MessageContact.objects.filter(statut='nouveau').count(),
+        'lu':      MessageContact.objects.filter(statut='lu').count(),
+        'traite':  MessageContact.objects.filter(statut='traite').count(),
+    }
+    return render(request, 'administration/messagerie.html',
+                  {'messages_list': list(qs[:300]), 'counts': counts, 'f': f})
+
+
+@staff_required
+def message_detail(request, pk):
+    """Détail d'un message + réponse par email (enregistrée)."""
+    from temple_project.apps.reservations.models import MessageContact
+    m = get_object_or_404(MessageContact, pk=pk)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'repondre':
+            reponse = request.POST.get('reponse', '').strip()
+            if not reponse:
+                messages.error(request, "Le message de réponse est vide.")
+            else:
+                send_mail_kellermann(
+                    subject=f"Re : {m.sujet or 'votre message'} — Temples Kellermann",
+                    message=(
+                        f"Bonjour {m.nom},\n\n{reponse}\n\n"
+                        f"— — —\n"
+                        f"En réponse à votre message du {m.created_at:%d/%m/%Y} :\n"
+                        f"« {m.message} »"
+                    ),
+                    recipient_list=[m.email],
+                )
+                m.reponse = reponse
+                m.date_reponse = timezone.now()
+                m.repondu_par = request.user.get_username()
+                m.statut = 'traite'
+                m.save()
+                log_evenement('reponse_message',
+                              f"Réponse envoyée à {m.email} (message #{m.pk})",
+                              request=request, objet=m)
+                messages.success(request, f"Réponse envoyée à {m.email}.")
+            return redirect('administration:message_detail', pk=m.pk)
+        elif action == 'traite':
+            m.statut = 'traite'; m.save(update_fields=['statut'])
+            messages.success(request, "Message marqué comme traité.")
+            return redirect('administration:messagerie')
+        elif action == 'rouvrir':
+            m.statut = 'lu'; m.save(update_fields=['statut'])
+            return redirect('administration:message_detail', pk=m.pk)
+        elif action == 'supprimer':
+            m.delete()
+            messages.success(request, "Message supprimé.")
+            return redirect('administration:messagerie')
+
+    # Marque comme lu à la première ouverture
+    if m.statut == 'nouveau':
+        m.statut = 'lu'
+        m.save(update_fields=['statut'])
+    return render(request, 'administration/message_detail.html', {'m': m})
 
 
 @staff_required

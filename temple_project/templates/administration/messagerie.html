@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Messagerie{% endblock %}
+{% block extra_css %}{% include "_stx_styles.html" %}{% endblock %}
+{% block content %}
+<div class="stx-wrap">
+
+  <div class="mb-4">
+    <h1 class="mb-1" style="font-size:22px;font-weight:600;letter-spacing:-.01em;color:#0F2137;">Messagerie</h1>
+    <div style="font-size:13px;color:#64748B;">Messages reçus via le formulaire de contact du site.</div>
+  </div>
+
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <a href="?statut=" class="stx-pill text-decoration-none" style="{% if not f %}background:#0F2137;color:#fff;border-color:#0F2137;{% endif %}">Tous <span style="opacity:.6;">{{ counts.tous }}</span></a>
+    <a href="?statut=nouveau" class="stx-pill text-decoration-none" style="{% if f == 'nouveau' %}background:#0F2137;color:#fff;border-color:#0F2137;{% endif %}">Nouveaux <span style="opacity:.6;">{{ counts.nouveau }}</span></a>
+    <a href="?statut=lu" class="stx-pill text-decoration-none" style="{% if f == 'lu' %}background:#0F2137;color:#fff;border-color:#0F2137;{% endif %}">Lus <span style="opacity:.6;">{{ counts.lu }}</span></a>
+    <a href="?statut=traite" class="stx-pill text-decoration-none" style="{% if f == 'traite' %}background:#0F2137;color:#fff;border-color:#0F2137;{% endif %}">Traités <span style="opacity:.6;">{{ counts.traite }}</span></a>
+  </div>
+
+  <div class="stx-card" style="overflow:hidden;">
+    {% for m in messages_list %}
+    <a href="{% url 'administration:message_detail' m.pk %}" class="text-decoration-none d-block" style="border-bottom:1px solid #F3F5F8;">
+      <div class="d-flex align-items-center gap-3" style="padding:12px 16px;{% if m.statut == 'nouveau' %}background:#FBFCFF;{% endif %}">
+        <span style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:{% if m.statut == 'nouveau' %}#2563EB{% elif m.statut == 'traite' %}#16A34A{% else %}#CBD5E1{% endif %};"></span>
+        <div style="min-width:0;flex:1;">
+          <div class="d-flex align-items-center gap-2">
+            <span style="color:#0F2137;{% if m.statut == 'nouveau' %}font-weight:600;{% endif %}">{{ m.nom }}</span>
+            {% if m.repondu %}<span class="stx-badge-ok" style="font-size:11px;">Répondu</span>{% endif %}
+          </div>
+          <div style="font-size:13px;color:#334155;{% if m.statut == 'nouveau' %}font-weight:500;{% endif %}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {{ m.sujet|default:"(sans objet)" }} <span style="color:#94A3B8;">— {{ m.message|truncatechars:70 }}</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#94A3B8;flex-shrink:0;white-space:nowrap;">{{ m.created_at|date:"d/m/Y" }}</div>
+      </div>
+    </a>
+    {% empty %}
+    <div class="text-center text-muted py-5" style="font-size:14px;">Aucun message{% if f %} dans cette catégorie{% endif %}.</div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
