@@ -275,7 +275,7 @@ def statistiques_export(request):
     label = f"{annee}-{annee + 1}"
     if fmt == 'excel':
         return _stats_export_excel(blocs, label)
-    return _stats_export_pdf(blocs, label)
+    return _stats_export_pdf(blocs, label, d)
 
 
 def _stats_export_excel(blocs, label):
@@ -304,41 +304,103 @@ def _stats_export_excel(blocs, label):
     return resp
 
 
-def _stats_export_pdf(blocs, label):
+_PDF_PALETTE = ['#0F2137', '#0E7C7B', '#C8A84B', '#7C5CBF', '#B4531F', '#2563EB', '#0E9F6E', '#9CA3AF']
+
+
+def _pdf_table_style(navy, gold):
+    from reportlab.lib import colors
+    from reportlab.platypus import TableStyle
+    return TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), navy),
+        ('TEXTCOLOR', (0, 0), (-1, 0), gold),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6), ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ])
+
+
+def _stats_export_pdf(blocs, label, d):
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.units import cm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.graphics.charts.piecharts import Pie
+    from reportlab.graphics.charts.legends import Legend
 
     navy = colors.HexColor('#0F2137'); gold = colors.HexColor('#C8A84B')
+    pal = [colors.HexColor(c) for c in _PDF_PALETTE]
     styles = getSampleStyleSheet()
     h1 = ParagraphStyle('h1', parent=styles['Title'], textColor=navy, fontSize=18, alignment=0)
     h2 = ParagraphStyle('h2', parent=styles['Heading2'], textColor=navy, fontSize=12)
     small = ParagraphStyle('sm', parent=styles['Normal'], textColor=colors.HexColor('#64748B'), fontSize=9)
 
+    def _chart_mois():
+        dr = Drawing(460, 155)
+        bc = VerticalBarChart()
+        bc.x, bc.y, bc.width, bc.height = 22, 24, 430, 116
+        bc.data = [[it['count'] for it in d['resa_par_mois']]]
+        bc.categoryAxis.categoryNames = [_MOIS_FR[int(it['mois'].split('-')[1])][:4].lower() for it in d['resa_par_mois']]
+        bc.categoryAxis.labels.fontSize = 8
+        bc.categoryAxis.labels.fillColor = colors.HexColor('#64748B')
+        bc.valueAxis.valueMin = 0
+        bc.valueAxis.labels.fontSize = 8
+        bc.valueAxis.labels.fillColor = colors.HexColor('#94A3B8')
+        bc.valueAxis.strokeColor = colors.HexColor('#E2E8F0')
+        bc.categoryAxis.strokeColor = colors.HexColor('#E2E8F0')
+        bc.bars[0].fillColor = gold
+        bc.bars[0].strokeColor = None
+        bc.barWidth = 6
+        dr.add(bc)
+        return dr
+
+    def _chart_temples():
+        vals = [t['nb_reservations'] for t in d['resa_par_temple']]
+        labs = [(t['temple__nom'] or '—').replace('Temple ', '') for t in d['resa_par_temple']]
+        dr = Drawing(460, 150)
+        pie = Pie()
+        pie.x, pie.y, pie.width, pie.height = 15, 15, 120, 120
+        pie.data = vals or [1]
+        pie.labels = None
+        pie.slices.strokeColor = colors.white
+        pie.slices.strokeWidth = 1.5
+        for i in range(len(vals)):
+            pie.slices[i].fillColor = pal[i % len(pal)]
+        dr.add(pie)
+        leg = Legend()
+        leg.x, leg.y = 175, 120
+        leg.dx, leg.dy, leg.dxTextSpace = 8, 8, 6
+        leg.fontName, leg.fontSize, leg.deltay = 'Helvetica', 9, 15
+        leg.colorNamePairs = [(pal[i % len(pal)], f"{labs[i]}  ({vals[i]})") for i in range(len(vals))]
+        dr.add(leg)
+        return dr
+
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.4*cm, bottomMargin=1.4*cm,
-                            leftMargin=1.5*cm, rightMargin=1.5*cm, title=f"Statistiques {label}")
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.4 * cm, bottomMargin=1.4 * cm,
+                            leftMargin=1.5 * cm, rightMargin=1.5 * cm, title=f"Statistiques {label}")
     elems = [Paragraph(f"Statistiques — saison {label}", h1),
              Paragraph(f"Édité le {timezone.localtime().strftime('%d/%m/%Y à %H:%M')}", small),
-             Spacer(1, 0.5 * cm)]
+             Spacer(1, 0.4 * cm)]
+
+    # Graphiques en tête (option 1)
+    if any(it['count'] for it in d['resa_par_mois']):
+        elems += [Paragraph("Réservations par mois", h2), _chart_mois(), Spacer(1, 0.3 * cm)]
+    if d['resa_par_temple']:
+        elems += [Paragraph("Répartition par temple", h2), _chart_temples(), Spacer(1, 0.35 * cm)]
+
+    table_style = _pdf_table_style(navy, gold)
     for titre, headers, rows in blocs:
-        elems.append(Paragraph(titre, h2)); elems.append(Spacer(1, 0.15 * cm))
+        elems.append(Paragraph(titre, h2)); elems.append(Spacer(1, 0.12 * cm))
         data = [headers] + [[str(x) for x in row] for row in rows]
         t = Table(data, repeatRows=1, hAlign='LEFT')
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), navy),
-            ('TEXTCOLOR', (0, 0), (-1, 0), gold),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6), ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ]))
-        elems.append(t); elems.append(Spacer(1, 0.5 * cm))
+        t.setStyle(table_style)
+        elems.append(t); elems.append(Spacer(1, 0.4 * cm))
     doc.build(elems)
     buf.seek(0)
     resp = HttpResponse(buf.read(), content_type='application/pdf')
