@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Doublons de règles{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">Doublons de règles de récurrence</h1>
+    <p class="text-muted small mb-0" style="max-width:760px;">
+      Deux règles (ou plus) pour la même loge, le même temple, le même jour et la même
+      semaine du mois. On conserve la plus ancienne ; les autres peuvent être supprimées
+      sans risque (elles génèrent les mêmes tenues).
+    </p>
+  </div>
+  {% if groupes %}
+  <form method="post" onsubmit="return confirm('Supprimer tous les doublons (en gardant la règle la plus ancienne de chaque groupe) ?');">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="tout">
+    <button type="submit" class="btn btn-sm fw-semibold px-3" style="background:#0F2137;color:#fff;">
+      Tout dédupliquer
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+{% if not groupes %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body text-center text-muted py-5">
+    <div style="font-size:2rem;">✅</div>
+    Aucun doublon de règle. Tout est propre.
+  </div>
+</div>
+{% else %}
+
+{% for g in groupes %}
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    <div class="fw-semibold mb-1" style="color:#0F2137;">
+      {{ g.loge }} <span class="text-muted fw-normal">·</span> {{ g.temple }}
+    </div>
+    <div class="small text-muted mb-3">{{ g.semaine }} · {{ g.jour }}</div>
+
+    <div class="d-flex align-items-center gap-2 mb-2 p-2 rounded" style="background:#F0FDF4;border:1px solid #BBF7D0;">
+      <span class="badge bg-success">Conservée</span>
+      <span class="small">
+        id {{ g.garder.pk }} · {{ g.garder.heure_debut|time:"H:i" }}–{{ g.garder.heure_fin|time:"H:i" }}
+        {% if not g.garder.actif %}· <span class="text-muted">inactive</span>{% endif %}
+      </span>
+    </div>
+
+    {% for e in g.extras %}
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-2 p-2 rounded" style="background:#FEF2F2;border:1px solid #FECACA;">
+      <span class="small">
+        <span class="badge bg-danger">Doublon</span>
+        id {{ e.pk }} · {{ e.heure_debut|time:"H:i" }}–{{ e.heure_fin|time:"H:i" }}
+        {% if not e.actif %}· <span class="text-muted">inactive</span>{% endif %}
+      </span>
+      <form method="post" onsubmit="return confirm('Supprimer cette règle en double (id {{ e.pk }}) ?');">
+        {% csrf_token %}
+        <input type="hidden" name="supprimer" value="{{ e.pk }}">
+        <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer ce doublon</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+
+{% endif %}
+{% endblock %}

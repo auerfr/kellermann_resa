@@ -1300,7 +1300,8 @@ def sante_donnees(request):
          'url': 'administration:rattachement_salles', 'icone': '🪑',
          'aide': 'Salles non rattachées — cliquez pour les relier à une loge.'},
         {'label': 'Doublons de règles de récurrence', 'valeur': doublons_regles,
-         'icone': '🔁', 'aide': 'Commande : dedup_regles.'},
+         'url': 'administration:doublons_regles', 'icone': '🔁',
+         'aide': 'Cliquez pour voir et supprimer les règles en double.'},
         {'label': 'Loges actives sans email', 'valeur': sans_email,
          'url': 'administration:annuaire', 'icone': '✉️',
          'aide': 'Impossible de les contacter / leur envoyer la validation.'},
@@ -1501,6 +1502,59 @@ def recherche_globale(request):
         'q': q, 'loges': loges, 'tenues': tenues, 'salles': salles,
         'date_detectee': date_detectee,
     })
+
+
+@staff_required
+def doublons_regles(request):
+    """Liste les règles de récurrence en double (même loge/temple/jour/numéro de
+    semaine) et permet de supprimer les surnuméraires en un clic (on garde la plus
+    ancienne). Remplace la commande shell dedup_regles."""
+    from django.db.models import Count
+
+    def _groupes():
+        cles = (RegleRecurrence.objects
+                .values('loge', 'temple', 'jour_semaine', 'numero_semaine')
+                .annotate(n=Count('id')).filter(n__gt=1))
+        out = []
+        for c in cles:
+            regles = list(RegleRecurrence.objects.filter(
+                loge=c['loge'], temple=c['temple'],
+                jour_semaine=c['jour_semaine'], numero_semaine=c['numero_semaine'],
+            ).select_related('loge', 'temple').order_by('id'))
+            out.append(regles)
+        return out
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'tout':
+            total = 0
+            for regles in _groupes():
+                garder = regles[0]
+                for extra in regles[1:]:
+                    extra.delete(); total += 1
+            log_evenement('dedup_regles', f"{total} doublon(s) de règle supprimé(s) (dédup globale)",
+                          request=request)
+            messages.success(request, f"{total} doublon(s) de règle supprimé(s).")
+        else:
+            r = RegleRecurrence.objects.filter(pk=request.POST.get('supprimer') or 0).select_related('loge').first()
+            if r:
+                nom = str(r)
+                r.delete()
+                log_evenement('dedup_regles', f"Règle en double supprimée : {nom} (id={r.pk})",
+                              request=request, objet=None)
+                messages.success(request, "Règle en double supprimée.")
+        return redirect('administration:doublons_regles')
+
+    JOUR = dict(RegleRecurrence.JOUR_CHOICES)
+    SEM  = dict(RegleRecurrence.SEMAINE_CHOICES)
+    groupes = []
+    for regles in _groupes():
+        groupes.append({
+            'loge': regles[0].loge, 'temple': regles[0].temple,
+            'jour': JOUR.get(regles[0].jour_semaine), 'semaine': SEM.get(regles[0].numero_semaine),
+            'garder': regles[0], 'extras': regles[1:],
+        })
+    return render(request, 'administration/doublons_regles.html', {'groupes': groupes})
 
 
 @staff_required
