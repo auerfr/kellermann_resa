@@ -52,7 +52,7 @@ def tableau_de_bord(request):
         'attente':                  reservations_attente,
         'recentes':                 reservations_recentes,
         'nb_attente':               reservations_attente.count(),
-        'nb_loges':                 Loge.objects.count(),
+        'nb_loges':                 Loge.objects.filter(actif=True).count(),
         'nb_reservations':          Reservation.objects.count(),
         'nb_regles':                RegleRecurrence.objects.filter(actif=True).count(),
         'attente_salles':           reservations_salle_attente,
