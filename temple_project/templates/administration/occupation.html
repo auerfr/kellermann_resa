@@ -35,23 +35,23 @@
     </div>
     <div class="col-6 col-lg-3">
       <div class="stx-card h-100" style="padding:15px 16px;">
-        <div class="stx-kpi-lbl">Occupation du soir</div>
-        <div class="stx-kpi-num" style="color:{% if soir_occ_pct >= 60 %}#B42318{% else %}#0F2137{% endif %};">{{ soir_occ_pct }}<span style="font-size:17px;color:#94A3B8;">%</span></div>
+        <div class="stx-kpi-lbl">Occupation soir en semaine</div>
+        <div class="stx-kpi-num" style="color:{% if soir_sem_occ_pct >= 60 %}#B42318{% else %}#0F2137{% endif %};">{{ soir_sem_occ_pct }}<span style="font-size:17px;color:#94A3B8;">%</span></div>
+        <div class="stx-kpi-sub">Lun-Ven, hors été</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="stx-card h-100" style="padding:15px 16px;">
+        <div class="stx-kpi-lbl">Soirées en semaine libres</div>
+        <div class="stx-kpi-num" style="color:#067647;">{{ soir_sem_libres }}</div>
         <div class="stx-kpi-sub">le créneau réellement demandé</div>
       </div>
     </div>
     <div class="col-6 col-lg-3">
-      <div class="stx-card h-100" style="padding:15px 16px;">
-        <div class="stx-kpi-lbl">Créneaux du soir libres</div>
-        <div class="stx-kpi-num" style="color:#067647;">{{ soir_libres }}</div>
-        <div class="stx-kpi-sub">à proposer en priorité</div>
-      </div>
-    </div>
-    <div class="col-6 col-lg-3">
-      <div class="stx-card h-100" style="padding:15px 16px;">
-        <div class="stx-kpi-lbl">Accueil possible (soir)</div>
-        <div class="stx-kpi-num">~{{ cap_soir_bleues }}<span style="font-size:15px;color:#94A3B8;"> loges</span></div>
-        <div class="stx-kpi-sub">ou ~{{ cap_soir_hg }} hauts grades</div>
+      <div class="stx-card h-100" style="padding:15px 16px;border-left:4px solid #C8A84B;">
+        <div class="stx-kpi-lbl">Accueil — soir en semaine</div>
+        <div class="stx-kpi-num">~{{ cap_sem_bleues }}<span style="font-size:15px;color:#94A3B8;"> loges</span></div>
+        <div class="stx-kpi-sub">Lun-Ven · ou ~{{ cap_sem_hg }} hauts grades</div>
       </div>
     </div>
   </div>
@@ -95,13 +95,13 @@
   <div class="stx-sect">Capacité d'accueil supplémentaire</div>
   <div class="row g-3 mb-2">
     <div class="col-md-6">
-      <div class="stx-card h-100" style="padding:16px 18px;">
-        <div class="stx-kpi-lbl">Le soir — créneau réellement demandé</div>
+      <div class="stx-card h-100" style="padding:16px 18px;border-left:4px solid #C8A84B;">
+        <div class="stx-kpi-lbl">Le soir en semaine (Lun-Ven) — créneau réellement demandé</div>
         <div class="d-flex gap-4 mt-2">
-          <div><div class="stx-kpi-num" style="margin-top:0;">~{{ cap_soir_bleues }}</div><div class="stx-kpi-sub" style="margin-top:2px;">loges bleues</div></div>
-          <div><div class="stx-kpi-num" style="margin-top:0;">~{{ cap_soir_hg }}</div><div class="stx-kpi-sub" style="margin-top:2px;">hauts grades</div></div>
+          <div><div class="stx-kpi-num" style="margin-top:0;">~{{ cap_sem_bleues }}</div><div class="stx-kpi-sub" style="margin-top:2px;">loges bleues</div></div>
+          <div><div class="stx-kpi-num" style="margin-top:0;">~{{ cap_sem_hg }}</div><div class="stx-kpi-sub" style="margin-top:2px;">hauts grades</div></div>
         </div>
-        <div class="stx-kpi-sub" style="margin-top:10px;">{{ soir_libres }} créneaux du soir libres. À orienter vers les temples les moins chargés.</div>
+        <div class="stx-kpi-sub" style="margin-top:10px;">{{ soir_sem_libres }} soirées de semaine libres (hors vacances d'été). C'est la capacité d'accueil réaliste pour les loges — à orienter vers les temples les moins chargés.</div>
       </div>
     </div>
     <div class="col-md-6">

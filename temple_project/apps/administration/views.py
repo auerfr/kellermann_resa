@@ -1055,14 +1055,25 @@ def _occupation_temples(annee):
     soir_occ = sum(1 for tid in occ for (x, y) in occ[tid] if y == 'soir')
     soir_tot = (len(temples) or 1) * n
     soir_libre = soir_tot - soir_occ
+
+    # ── Soir EN SEMAINE (lundi→vendredi) : le créneau réellement demandé par les loges
+    dates_sem = {dd for dd in dates if dd.weekday() < 5}
+    n_sem = len(dates_sem) or 1
+    soir_sem_occ = sum(1 for tid in occ for (x, y) in occ[tid] if y == 'soir' and x in dates_sem)
+    soir_sem_tot = (len(temples) or 1) * n_sem
+    soir_sem_libre = soir_sem_tot - soir_sem_occ
+
     return {
-        'annee': annee, 'nb_jours': len(dates), 'par_temple_max': n * 3,
+        'annee': annee, 'nb_jours': len(dates), 'nb_jours_sem': len(dates_sem), 'par_temple_max': n * 3,
         'temples': lignes,
         'occ_global': round(100 * tot / grand), 'libres': libre,
         'libres_pct': round(100 * libre / grand),
         'soir_occ_pct': round(100 * soir_occ / soir_tot), 'soir_libres': soir_libre,
         'cap_tous_bleues': libre // 20, 'cap_tous_hg': libre // 10,
         'cap_soir_bleues': soir_libre // 20, 'cap_soir_hg': soir_libre // 10,
+        # Soir en semaine (Lun-Ven) — capacité réaliste pour les loges
+        'soir_sem_occ_pct': round(100 * soir_sem_occ / soir_sem_tot), 'soir_sem_libres': soir_sem_libre,
+        'cap_sem_bleues': soir_sem_libre // 20, 'cap_sem_hg': soir_sem_libre // 10,
     }
 
 
@@ -1129,11 +1140,11 @@ def _occupation_full(annee, temple_id=None, moment=''):
         't_loge': T_LOGE, 't_hg': T_HG, 'mb_min': MB_MIN, 'mb_max': MB_MAX,
         'loge_min': MB_MIN * T_LOGE, 'loge_max': MB_MAX * T_LOGE,
         'hg_min': round(MB_MIN * T_HG, 2), 'hg_max': round(MB_MAX * T_HG, 2),
-        'cap_loges': ctx['cap_soir_bleues'], 'cap_hg': ctx['cap_soir_hg'],
-        'pot_loges_min': round(ctx['cap_soir_bleues'] * MB_MIN * T_LOGE),
-        'pot_loges_max': round(ctx['cap_soir_bleues'] * MB_MAX * T_LOGE),
-        'pot_hg_min': round(ctx['cap_soir_hg'] * MB_MIN * T_HG),
-        'pot_hg_max': round(ctx['cap_soir_hg'] * MB_MAX * T_HG),
+        'cap_loges': ctx['cap_sem_bleues'], 'cap_hg': ctx['cap_sem_hg'],
+        'pot_loges_min': round(ctx['cap_sem_bleues'] * MB_MIN * T_LOGE),
+        'pot_loges_max': round(ctx['cap_sem_bleues'] * MB_MAX * T_LOGE),
+        'pot_hg_min': round(ctx['cap_sem_hg'] * MB_MIN * T_HG),
+        'pot_hg_max': round(ctx['cap_sem_hg'] * MB_MAX * T_HG),
     }
     ctx['creneaux_libres'] = creneaux
     return ctx
@@ -1229,8 +1240,9 @@ def _occupation_pdf(ctx, annee):
     E = [Paragraph(f"Occupation des temples et capacité — saison {annee}–{annee + 1}", h1),
          Paragraph(f"{ctx['nb_jours']} jours × 3 créneaux · édité le {timezone.localtime().strftime('%d/%m/%Y')}", small),
          Spacer(1, 0.35 * cm),
-         Paragraph(f"Occupation globale : <b>{ctx['occ_global']} %</b> &nbsp;·&nbsp; occupation du soir : "
-                   f"<b>{ctx['soir_occ_pct']} %</b> &nbsp;·&nbsp; créneaux du soir libres : <b>{ctx['soir_libres']}</b>", body),
+         Paragraph(f"Occupation globale : <b>{ctx['occ_global']} %</b> &nbsp;·&nbsp; occupation soir en semaine : "
+                   f"<b>{ctx['soir_sem_occ_pct']} %</b> &nbsp;·&nbsp; soirées de semaine libres (Lun-Ven) : "
+                   f"<b>{ctx['soir_sem_libres']}</b>", body),
          Spacer(1, 0.3 * cm),
          Paragraph("Taux d'occupation du soir par temple", h2), chart_soir(), Spacer(1, 0.25 * cm),
          Paragraph("Occupation par temple", h2), Spacer(1, 0.1 * cm)]
@@ -1242,10 +1254,11 @@ def _occupation_pdf(ctx, annee):
     rows.append(['GLOBAL', f"{ctx['occ_global']} %", '', '', f"{ctx['soir_occ_pct']} %", ctx['libres']])
     tt = Table(rows, hAlign='LEFT'); tt.setStyle(tstyle())
     E += [tt, Spacer(1, 0.4 * cm),
-          Paragraph("Capacité d'accueil supplémentaire (le soir)", h2),
-          Paragraph(f"~<b>{ctx['cap_soir_bleues']}</b> loges bleues <b>ou</b> ~<b>{ctx['cap_soir_hg']}</b> hauts grades "
-                    f"peuvent encore être accueillis le soir ({ctx['soir_libres']} créneaux libres). "
-                    f"Loge bleue = 2 créneaux/mois · haut grade = 1.", body),
+          Paragraph("Capacité d'accueil — le soir en semaine (Lun-Ven)", h2),
+          Paragraph(f"~<b>{ctx['cap_sem_bleues']}</b> loges bleues <b>ou</b> ~<b>{ctx['cap_sem_hg']}</b> hauts grades "
+                    f"peuvent encore être accueillis en soirée de semaine ({ctx['soir_sem_libres']} soirées libres, "
+                    f"hors vacances d'été) — c'est la capacité réaliste, les loges se réunissant surtout du lundi au "
+                    f"vendredi en soirée. Loge bleue = 2 tenues/mois · haut grade = 1.", body),
           Spacer(1, 0.3 * cm),
           Paragraph("Potentiel financier annuel", h2),
           Paragraph(f"• En loges bleues : <b>{fin['pot_loges_min']} – {fin['pot_loges_max']} €/an</b> "
