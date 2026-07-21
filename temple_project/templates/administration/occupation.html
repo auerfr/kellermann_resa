@@ -20,7 +20,7 @@
       <select name="annee" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
         {% for a in annees %}<option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}–{{ a|add:1 }}</option>{% endfor %}
       </select>
-      <a href="{% url 'administration:occupation_export_pdf' %}?annee={{ annee }}" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;border:none;padding:7px 14px;border-radius:9px;">⤓ Présentation (bureau / AG)</a>
+      <a href="{% url 'administration:occupation_export_pdf' %}?annee={{ annee }}{% if weekend_sel == '1' %}&weekend=1{% endif %}" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;border:none;padding:7px 14px;border-radius:9px;">⤓ Présentation (bureau / AG)</a>
     </form>
   </div>
 
@@ -145,6 +145,10 @@
     </div>
     <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
       <input type="hidden" name="annee" value="{{ annee }}">
+      <select name="weekend" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
+        <option value="">Semaine (Lun-Ven)</option>
+        <option value="1" {% if weekend_sel == '1' %}selected{% endif %}>Avec week-end</option>
+      </select>
       <select name="temple" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
         <option value="">Tous les temples</option>
         {% for t in tous_temples %}<option value="{{ t.pk }}" {% if t.pk == temple_sel %}selected{% endif %}>{{ t }}</option>{% endfor %}
@@ -176,7 +180,7 @@
       </table>
     </div>
   </div>
-  <div class="stx-kpi-sub">{{ creneaux_libres|length }} créneau(x) libre(s){% if temple_sel %} sur ce temple{% endif %}.</div>
+  <div class="stx-kpi-sub">{{ creneaux_libres|length }} créneau(x) libre(s){% if temple_sel %} sur ce temple{% endif %} · {% if weekend_sel == '1' %}week-end inclus{% else %}soir en semaine (Lun-Ven){% endif %}.</div>
 
 </div>
 {% endblock %}

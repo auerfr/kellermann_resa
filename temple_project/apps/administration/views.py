@@ -1126,12 +1126,15 @@ def _creneaux_libres(annee, temple_id=None):
     return out
 
 
-def _occupation_full(annee, temple_id=None, moment=''):
+def _occupation_full(annee, temple_id=None, moment='', inclure_weekend=False):
     """Contexte complet occupation/capacité/potentiel d'une saison, partagé par la
-    page et l'export PDF."""
+    page et l'export PDF. Par défaut, les créneaux listés excluent le week-end
+    (les loges se réunissent surtout en soirée du lundi au vendredi)."""
     creneaux = _creneaux_libres(annee, temple_id)
     if moment in ('soir', 'après-midi', 'matin'):
         creneaux = [c for c in creneaux if c['creneau'] == moment]
+    if not inclure_weekend:
+        creneaux = [c for c in creneaux if c['jour_idx'] < 5]
     ctx = _occupation_temples(annee)
     params = Parametres.get_instance()
     MB_MIN, MB_MAX = 15, 20
@@ -1162,11 +1165,13 @@ def occupation(request):
     except (TypeError, ValueError):
         temple_id = None
     moment = request.GET.get('moment') or ''
-    ctx = _occupation_full(annee, temple_id, moment)
+    weekend = request.GET.get('weekend')  # '1' = inclure le week-end
+    ctx = _occupation_full(annee, temple_id, moment, inclure_weekend=(weekend == '1'))
     ctx['annees'] = [defaut - 1, defaut, defaut + 1]
     ctx['tous_temples'] = Temple.objects.all().order_by('nom')
     ctx['temple_sel'] = temple_id
     ctx['moment_sel'] = moment
+    ctx['weekend_sel'] = weekend
     return render(request, 'administration/occupation.html', ctx)
 
 
@@ -1179,14 +1184,15 @@ def occupation_export_pdf(request):
         annee = int(request.GET.get('annee', defaut))
     except (TypeError, ValueError):
         annee = defaut
-    ctx = _occupation_full(annee)
+    inclure_weekend = request.GET.get('weekend') == '1'
+    ctx = _occupation_full(annee, inclure_weekend=inclure_weekend)
     log_evenement('export_occupation_pdf',
                   f"Export présentation occupation saison {annee}-{annee + 1}",
                   request=request, objet_type='systeme')
-    return _occupation_pdf(ctx, annee)
+    return _occupation_pdf(ctx, annee, inclure_weekend)
 
 
-def _occupation_pdf(ctx, annee):
+def _occupation_pdf(ctx, annee, inclure_weekend=False):
     import io
     from django.utils import timezone
     from reportlab.lib.pagesizes import A4
@@ -1269,7 +1275,8 @@ def _occupation_pdf(ctx, annee):
           Spacer(1, 0.35 * cm)]
 
     cl = ctx['creneaux_libres']
-    E += [Paragraph(f"Créneaux disponibles à proposer ({len(cl)})", h2), Spacer(1, 0.1 * cm)]
+    _porte = "week-end inclus" if inclure_weekend else "soir en semaine, Lun-Ven"
+    E += [Paragraph(f"Créneaux disponibles à proposer — {_porte} ({len(cl)})", h2), Spacer(1, 0.1 * cm)]
     crows = [['Temple', 'Jour', 'Semaine', 'Moment']]
     for c in cl[:40]:
         crows.append([c['temple'], c['jour'].capitalize(), f"{c['semaine']} sem.", c['creneau']])
