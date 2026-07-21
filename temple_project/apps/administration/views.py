@@ -1083,10 +1083,12 @@ def _creneaux_libres(annee, temple_id=None):
     ou différents temples/semaines), un haut grade en prend 1."""
     import calendar
     from datetime import time
-    # (moment, début, fin, jours concernés)
-    DP = [('soir', time(18, 0), time(23, 59), range(0, 6)),        # lun→sam
-          ('après-midi', time(13, 0), time(18, 0), (5, 6)),        # week-end
-          ('matin', time(8, 0), time(13, 0), (5, 6))]              # week-end
+    # (moment, début, fin, jours concernés) — tous les moments, tous les jours :
+    # le soir en semaine reste le cas principal, mais la journée (matin/après-midi)
+    # est proposable aussi, à la marge (personnes âgées, professions particulières).
+    DP = [('soir', time(18, 0), time(23, 59), range(0, 7)),
+          ('après-midi', time(13, 0), time(18, 0), range(0, 7)),
+          ('matin', time(8, 0), time(13, 0), range(0, 7))]
     JF = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
     POS = {1: '1re', 2: '2e', 3: '3e', 4: '4e'}
     MOIS = [(annee, m) for m in (9, 10, 11, 12)] + [(annee + 1, m) for m in (1, 2, 3, 4, 5, 6)]
@@ -1164,7 +1166,7 @@ def occupation(request):
         temple_id = int(request.GET.get('temple') or 0) or None
     except (TypeError, ValueError):
         temple_id = None
-    moment = request.GET.get('moment') or ''
+    moment = request.GET.get('moment', 'soir')  # défaut : le soir (cas principal)
     weekend = request.GET.get('weekend')  # '1' = inclure le week-end
     ctx = _occupation_full(annee, temple_id, moment, inclure_weekend=(weekend == '1'))
     ctx['annees'] = [defaut - 1, defaut, defaut + 1]
@@ -1185,7 +1187,7 @@ def occupation_export_pdf(request):
     except (TypeError, ValueError):
         annee = defaut
     inclure_weekend = request.GET.get('weekend') == '1'
-    ctx = _occupation_full(annee, inclure_weekend=inclure_weekend)
+    ctx = _occupation_full(annee, moment='soir', inclure_weekend=inclure_weekend)
     log_evenement('export_occupation_pdf',
                   f"Export présentation occupation saison {annee}-{annee + 1}",
                   request=request, objet_type='systeme')

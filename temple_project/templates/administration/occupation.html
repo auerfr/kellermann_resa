@@ -174,46 +174,13 @@
             <td data-label="Moment">{% if c.creneau == 'soir' %}🌙 soir{% elif c.creneau == 'après-midi' %}☀️ après-midi{% else %}🌅 matin{% endif %}</td>
           </tr>
           {% empty %}
-          <tr><td colspan="4" class="text-center text-muted py-4" style="font-size:13px;">
-            {% if weekend_sel != '1' and moment_sel and moment_sel != 'soir' %}
-              En semaine, les temples ne sont proposés que <strong>le soir</strong> (pas de créneau en matinée / après-midi du lundi au vendredi).
-              Choisissez « 🌙 Soir », ou passez en « Avec week-end » pour voir les matins et après-midis.
-            {% else %}
-              Aucun créneau entièrement libre pour ce filtre.
-            {% endif %}
-          </td></tr>
+          <tr><td colspan="4" class="text-center text-muted py-4" style="font-size:13px;">Aucun créneau entièrement libre pour ce filtre.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
-  <div class="stx-kpi-sub">{{ creneaux_libres|length }} créneau(x) libre(s){% if temple_sel %} sur ce temple{% endif %} · {% if weekend_sel == '1' %}week-end inclus{% else %}soir en semaine (Lun-Ven){% endif %}.</div>
+  <div class="stx-kpi-sub">{{ creneaux_libres|length }} créneau(x) libre(s){% if temple_sel %} sur ce temple{% endif %} · {% if weekend_sel == '1' %}week-end inclus{% else %}en semaine (Lun-Ven){% endif %} · {{ moment_sel|default:"tous moments"|capfirst }}. <span style="opacity:.8;">Le soir en semaine est le cas principal ; matin / après-midi restent proposables à la marge (loges se réunissant en journée).</span></div>
 
 </div>
-
-<script>
-(function () {
-  var wk = document.querySelector('select[name="weekend"]');
-  var mo = document.querySelector('select[name="moment"]');
-  if (!wk || !mo) return;
-  function sync(reset) {
-    var semaine = wk.value !== '1';
-    Array.prototype.forEach.call(mo.options, function (o) {
-      if (o.value === 'matin' || o.value === 'après-midi') {
-        o.disabled = semaine;
-        var base = o.value === 'matin' ? '🌅 Matin' : '☀️ Après-midi';
-        o.text = base + (semaine ? ' — week-end' : '');
-      }
-    });
-    // Sur changement utilisateur du filtre : si on repasse en semaine avec matin/après-midi,
-    // on bascule sur « Tous moments » (= soir en semaine) et on rafraîchit.
-    if (reset && semaine && (mo.value === 'matin' || mo.value === 'après-midi')) {
-      mo.value = '';
-      mo.form.submit();
-    }
-  }
-  wk.addEventListener('change', function () { sync(true); });
-  sync(false);
-})();
-</script>
 {% endblock %}
