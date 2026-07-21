@@ -1128,16 +1128,67 @@ def _creneaux_libres(annee, temple_id=None):
     return out
 
 
+def _creneaux_fenetre(annee, deb, fin, jours):
+    """Nombre de créneaux récurrents (temple × jour × position 1-4) où la fenêtre
+    horaire [deb, fin[ est 100 % libre sur la saison — pour les jours donnés."""
+    import calendar
+    MOIS = [(annee, m) for m in (9, 10, 11, 12)] + [(annee + 1, m) for m in (1, 2, 3, 4, 5, 6)]
+    occ = set()
+    for tid, dd in Reservation.objects.filter(
+        date__gte=date(annee, 9, 1), date__lte=date(annee + 1, 6, 30),
+        statut__in=['validee', 'attente'], heure_debut__lt=fin, heure_fin__gt=deb,
+    ).values_list('temple_id', 'date'):
+        occ.add((tid, dd))
+
+    def dates_motif(wd, pos):
+        out = []
+        for an, mois in MOIS:
+            js = [d for d in range(1, calendar.monthrange(an, mois)[1] + 1)
+                  if date(an, mois, d).weekday() == wd]
+            if pos <= len(js):
+                out.append(date(an, mois, js[pos - 1]))
+        return out
+
+    n = 0
+    for t in Temple.objects.all():
+        for wd in jours:
+            for pos in (1, 2, 3, 4):
+                dm = dates_motif(wd, pos)
+                if len(dm) >= 6 and all((t.id, d) not in occ for d in dm):
+                    n += 1
+    return n
+
+
 def _occupation_full(annee, temple_id=None, moment='', inclure_weekend=False):
     """Contexte complet occupation/capacité/potentiel d'une saison, partagé par la
     page et l'export PDF. Par défaut, les créneaux listés excluent le week-end
     (les loges se réunissent surtout en soirée du lundi au vendredi)."""
-    creneaux = _creneaux_libres(annee, temple_id)
+    tous_creneaux = _creneaux_libres(annee, temple_id)
+    creneaux = tous_creneaux
     if moment in ('soir', 'après-midi', 'matin'):
         creneaux = [c for c in creneaux if c['creneau'] == moment]
     if not inclure_weekend:
         creneaux = [c for c in creneaux if c['jour_idx'] < 5]
     ctx = _occupation_temples(annee)
+
+    # Capacité RÉELLE = créneaux récurrents 100 % libres le soir en semaine (cohérent
+    # avec la liste des créneaux disponibles). Une loge bleue = 2 créneaux, un haut
+    # grade = 1. Bien plus fiable que le décompte de soirées de calendrier isolées.
+    all_slots = _creneaux_libres(annee)
+    nb_slots = sum(1 for c in all_slots if c['creneau'] == 'soir' and c['jour_idx'] < 5)
+    ctx['nb_slots_soir_sem'] = nb_slots
+    ctx['cap_sem_bleues'] = nb_slots // 2
+    ctx['cap_sem_hg'] = nb_slots
+    # Maximum en créneaux récurrents, tous moments/jours confondus (même modèle)
+    ctx['nb_slots_tous'] = len(all_slots)
+    ctx['cap_tous_bleues'] = len(all_slots) // 2
+    ctx['cap_tous_hg'] = len(all_slots)
+
+    # Info : fenêtre spécifique 16h-19h en semaine (tenue courte de fin d'après-midi,
+    # possible avant les tenues du soir de 20h) — capacité "cachée".
+    from datetime import time as _t
+    nb_16_19 = _creneaux_fenetre(annee, _t(16, 0), _t(19, 0), range(5))
+    ctx['fin_aprem'] = {'slots': nb_16_19, 'cap_loges': nb_16_19 // 2, 'cap_hg': nb_16_19}
     params = Parametres.get_instance()
     MB_MIN, MB_MAX = 15, 20
     T_LOGE, T_HG = float(params.tarif_membre_loge), float(params.tarif_membre_hg)
@@ -1249,8 +1300,8 @@ def _occupation_pdf(ctx, annee, inclure_weekend=False):
          Paragraph(f"{ctx['nb_jours']} jours × 3 créneaux · édité le {timezone.localtime().strftime('%d/%m/%Y')}", small),
          Spacer(1, 0.35 * cm),
          Paragraph(f"Occupation globale : <b>{ctx['occ_global']} %</b> &nbsp;·&nbsp; occupation soir en semaine : "
-                   f"<b>{ctx['soir_sem_occ_pct']} %</b> &nbsp;·&nbsp; soirées de semaine libres (Lun-Ven) : "
-                   f"<b>{ctx['soir_sem_libres']}</b>", body),
+                   f"<b>{ctx['soir_sem_occ_pct']} %</b> &nbsp;·&nbsp; créneaux récurrents soir en semaine libres (Lun-Ven) : "
+                   f"<b>{ctx['nb_slots_soir_sem']}</b>", body),
          Spacer(1, 0.3 * cm),
          Paragraph("Taux d'occupation du soir par temple", h2), chart_soir(), Spacer(1, 0.25 * cm),
          Paragraph("Occupation par temple", h2), Spacer(1, 0.1 * cm)]
@@ -1263,10 +1314,11 @@ def _occupation_pdf(ctx, annee, inclure_weekend=False):
     tt = Table(rows, hAlign='LEFT'); tt.setStyle(tstyle())
     E += [tt, Spacer(1, 0.4 * cm),
           Paragraph("Capacité d'accueil — le soir en semaine (Lun-Ven)", h2),
-          Paragraph(f"~<b>{ctx['cap_sem_bleues']}</b> loges bleues <b>ou</b> ~<b>{ctx['cap_sem_hg']}</b> hauts grades "
-                    f"peuvent encore être accueillis en soirée de semaine ({ctx['soir_sem_libres']} soirées libres, "
-                    f"hors vacances d'été) — c'est la capacité réaliste, les loges se réunissant surtout du lundi au "
-                    f"vendredi en soirée. Loge bleue = 2 tenues/mois · haut grade = 1.", body),
+          Paragraph(f"Il reste <b>{ctx['nb_slots_soir_sem']}</b> créneaux récurrents 100 % libres le soir en semaine "
+                    f"(hors vacances d'été). Une loge bleue en occupe 2, un haut grade 1 : on peut donc encore "
+                    f"accueillir ~<b>{ctx['cap_sem_bleues']}</b> loges bleues <b>ou</b> ~<b>{ctx['cap_sem_hg']}</b> "
+                    f"hauts grades. C'est la capacité réaliste, les loges se réunissant surtout du lundi au "
+                    f"vendredi en soirée.", body),
           Spacer(1, 0.3 * cm),
           Paragraph("Potentiel financier annuel", h2),
           Paragraph(f"• En loges bleues : <b>{fin['pot_loges_min']} – {fin['pot_loges_max']} €/an</b> "

@@ -42,9 +42,9 @@
     </div>
     <div class="col-6 col-lg-3">
       <div class="stx-card h-100" style="padding:15px 16px;">
-        <div class="stx-kpi-lbl">Soirées en semaine libres</div>
-        <div class="stx-kpi-num" style="color:#067647;">{{ soir_sem_libres }}</div>
-        <div class="stx-kpi-sub">le créneau réellement demandé</div>
+        <div class="stx-kpi-lbl">Créneaux soir en semaine libres</div>
+        <div class="stx-kpi-num" style="color:#067647;">{{ nb_slots_soir_sem }}</div>
+        <div class="stx-kpi-sub">créneaux récurrents 100 % libres</div>
       </div>
     </div>
     <div class="col-6 col-lg-3">
@@ -101,7 +101,7 @@
           <div><div class="stx-kpi-num" style="margin-top:0;">~{{ cap_sem_bleues }}</div><div class="stx-kpi-sub" style="margin-top:2px;">loges bleues</div></div>
           <div><div class="stx-kpi-num" style="margin-top:0;">~{{ cap_sem_hg }}</div><div class="stx-kpi-sub" style="margin-top:2px;">hauts grades</div></div>
         </div>
-        <div class="stx-kpi-sub" style="margin-top:10px;">{{ soir_sem_libres }} soirées de semaine libres (hors vacances d'été). C'est la capacité d'accueil réaliste pour les loges — à orienter vers les temples les moins chargés.</div>
+        <div class="stx-kpi-sub" style="margin-top:10px;">{{ nb_slots_soir_sem }} créneaux récurrents 100 % libres le soir en semaine (hors été) — une loge bleue en prend 2, un haut grade 1. C'est la capacité d'accueil réaliste, à orienter vers les temples les moins chargés.</div>
       </div>
     </div>
     <div class="col-md-6">
@@ -111,11 +111,26 @@
           <div><div class="stx-kpi-num" style="margin-top:0;color:#64748B;">~{{ cap_tous_bleues }}</div><div class="stx-kpi-sub" style="margin-top:2px;">loges bleues</div></div>
           <div><div class="stx-kpi-num" style="margin-top:0;color:#64748B;">~{{ cap_tous_hg }}</div><div class="stx-kpi-sub" style="margin-top:2px;">hauts grades</div></div>
         </div>
-        <div class="stx-kpi-sub" style="margin-top:10px;">Maximum théorique ({{ libres }} créneaux). Inclut matins/après-midis de semaine — surtout utile aux hauts grades en journée/week-end.</div>
+        <div class="stx-kpi-sub" style="margin-top:10px;">Maximum théorique ({{ nb_slots_tous }} créneaux récurrents, tous jours/moments). Inclut matins/après-midis — surtout utile aux hauts grades en journée/week-end.</div>
       </div>
     </div>
   </div>
-  <div class="stx-kpi-sub mb-4">Loge bleue = 2 tenues/mois × 10 mois = 20 créneaux/an · Haut grade = 1/mois × 10 = 10/an.</div>
+  <div class="stx-kpi-sub mb-3">Loge bleue = 2 tenues/mois × 10 mois = 20 créneaux/an · Haut grade = 1/mois × 10 = 10/an.</div>
+
+  {# Piste informative : créneau 16h-19h #}
+  <div class="stx-card mb-4" style="padding:14px 18px;border-left:4px solid #0EA5E9;background:#F7FBFF;">
+    <div class="d-flex align-items-start gap-2">
+      <span style="font-size:16px;line-height:1.2;">💡</span>
+      <div>
+        <div class="stx-h" style="font-size:13px;">Piste (info) — exploiter le créneau 16h-19h en fin d'après-midi</div>
+        <div class="stx-kpi-sub" style="margin-top:4px;">
+          Une tenue dure 2-3h : un créneau <strong>16h-19h</strong> tiendrait <em>avant</em> les tenues du soir (qui démarrent vers 20h). En semaine,
+          <strong>{{ fin_aprem.slots }}</strong> créneaux récurrents ont cette fenêtre 16h-19h totalement libre — soit ~<strong>{{ fin_aprem.cap_loges }}</strong> loges bleues
+          ou ~<strong>{{ fin_aprem.cap_hg }}</strong> hauts grades <em>en plus</em> de la capacité du soir. Créneau spécifique (horaire inhabituel), à réserver aux ateliers pouvant se réunir en fin d'après-midi.
+        </div>
+      </div>
+    </div>
+  </div>
 
   {# ── Potentiel financier ── #}
   <div class="stx-sect">Potentiel financier annuel</div>
