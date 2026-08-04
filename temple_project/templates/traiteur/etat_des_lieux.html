@@ -207,10 +207,10 @@
           </thead>
           <tbody>
             {% for r in groupe.repas %}
-            <tr {% if r.agapes_status == 'confirme' %}style="background:#F0FDF4;"
+            <tr {% if r.type == 'Salle' %}style="background:#FFFBEB;"
+                {% elif r.agapes_status == 'confirme' %}style="background:#F0FDF4;"
                 {% elif r.agapes_status == 'probable_classique' %}style="background:#F5F3FF;"
-                {% elif r.agapes_status == 'probable' %}style="background:#FEFCE8;"
-                {% elif r.type == 'Salle' %}style="background:#FFFBEB;"{% endif %}>
+                {% elif r.agapes_status == 'probable' %}style="background:#FEFCE8;"{% endif %}>
               <td><strong>{{ r.date|date:"D d/m" }}</strong></td>
               <td class="small text-muted">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</td>
               <td>
@@ -266,7 +266,7 @@
       </thead>
       <tbody>
         {% for r in groupe.repas %}
-        <tr class="{% if r.agapes_status == 'confirme' %}row-agapes{% elif r.agapes_status == 'probable_classique' %}row-classique{% elif r.agapes_status == 'probable' %}row-probable{% elif r.type == 'Salle' %}row-banquet{% endif %}">
+        <tr class="{% if r.type == 'Salle' %}row-banquet{% elif r.agapes_status == 'confirme' %}row-agapes{% elif r.agapes_status == 'probable_classique' %}row-classique{% elif r.agapes_status == 'probable' %}row-probable{% endif %}">
           <td><strong>{{ r.date|date:"D d/m" }}</strong></td>
           <td>{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</td>
           <td>{{ r.organisation }}{% if r.statut == 'attente' %} ⏳{% endif %}</td>
