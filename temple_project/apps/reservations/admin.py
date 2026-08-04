@@ -280,7 +280,8 @@ class ReservationAdmin(admin.ModelAdmin):
 @admin.register(ReservationSalle)
 class ReservationSalleAdmin(admin.ModelAdmin):
     list_display  = ["salle", "date", "heure_debut", "heure_fin",
-                     "nom_demandeur", "organisation", "nombre_participants", "statut"]
-    list_filter   = ["statut", "salle"]
+                     "nom_demandeur", "organisation", "nombre_participants", "statut", "facturable"]
+    list_filter   = ["statut", "salle", "facturable"]
     search_fields = ["nom_demandeur", "email_demandeur", "organisation", "objet"]
+    list_editable = ["facturable"]
     date_hierarchy = "date"
