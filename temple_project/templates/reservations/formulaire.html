@@ -10,18 +10,23 @@
 
     {# ── Information facturation ───────────────────────────────────────────── #}
     <div class="alert alert-warning" id="info-facturation">
-      <strong>💶 Occupation exceptionnelle facturée</strong>
+      <strong>💶 Qu'est-ce qu'une tenue exceptionnelle ?</strong>
       <div class="small mt-1">
-        Une demande via ce formulaire correspond à une occupation <strong>exceptionnelle</strong>
-        (week-end ou hors période d'ouverture), facturée à la loge pour couvrir les charges
-        du bâtiment (fluides, etc.). Tarif <strong>à la journée</strong>, quel que soit le nombre de temples :
+        <p class="mb-2">
+          On appelle <strong>tenue exceptionnelle</strong> toute utilisation du temple qui sort du calendrier
+          récurrent habituel de la loge (tenues ordinaires), <strong>lorsque l'ensemble des temples est
+          par ailleurs inoccupé</strong>. Elle est facturée pour couvrir les charges du bâtiment (fluides, etc.).
+        </p>
+        <p class="mb-2">
+          À ne pas confondre avec les tenues ordinaires (récurrentes), qui ne donnent lieu à aucune facturation.
+        </p>
+        Tarif <strong>à la journée</strong>, quel que soit le nombre de temples utilisés :
         <ul class="mb-1 mt-1">
           <li>Sans agapes : <strong>{{ tarifs.tarif_exc_sans_agapes|floatformat:0 }} €</strong></li>
           <li>Avec agapes : <strong>{{ tarifs.tarif_exc_avec_agapes|floatformat:0 }} €</strong></li>
           <li>Congrès / session régionale : <strong>{{ tarifs.tarif_congres_jour|floatformat:0 }} € / jour</strong></li>
         </ul>
-        <span class="text-muted">Les tenues régulières (récurrentes) ne sont pas facturées.</span>
-        <div class="mt-1"><em>Ces tarifs s'entendent hors prestation traiteur (agapes facturées à part par le traiteur).</em></div>
+        <em class="text-muted">Ces tarifs s'entendent hors prestation traiteur (agapes facturées à part).</em>
         <div id="note-weekend" class="mt-2 fw-semibold" style="display:none;color:#92400E;"></div>
       </div>
     </div>

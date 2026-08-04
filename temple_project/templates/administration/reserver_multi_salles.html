@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Réservation multi-salles{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="mb-4">
+      <h1 class="h3 mb-1">🏛 Réservation multi-salles</h1>
+      <p class="text-muted small">
+        Permet de réserver simultanément plusieurs salles de réunion pour une loge, le même créneau horaire
+        (ex : chantier d'initiation nécessitant une salle principale + cabinets de réflexion).
+        La réservation est validée immédiatement sans workflow d'approbation.
+      </p>
+    </div>
+
+    {% if messages %}
+    {% for msg in messages %}
+    <div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %}">{{ msg }}</div>
+    {% endfor %}
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">
+          Loge concernée
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-7">
+              <label class="form-label fw-semibold">Loge</label>
+              <select name="loge_pk" class="form-select">
+                <option value="">— Aucune loge (organisation libre) —</option>
+                {% for loge in loges %}
+                <option value="{{ loge.pk }}">{{ loge.nom }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label fw-semibold">Organisation (si hors liste)</label>
+              <input type="text" name="organisation" class="form-control" placeholder="Nom libre si pas de loge">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">
+          Salles à réserver
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">Cochez toutes les salles nécessaires pour le même créneau.</p>
+          {% for type_label, salles_list in salles_par_type.items %}
+          <div class="mb-3">
+            <p class="fw-semibold text-muted small text-uppercase mb-2" style="letter-spacing:.06em;">{{ type_label }}</p>
+            <div class="d-flex flex-wrap gap-2">
+              {% for salle in salles_list %}
+              <div class="form-check form-check-inline border rounded px-3 py-2">
+                <input class="form-check-input" type="checkbox"
+                       name="salles" value="{{ salle.pk }}"
+                       id="salle_{{ salle.pk }}">
+                <label class="form-check-label" for="salle_{{ salle.pk }}">
+                  {{ salle.nom }}
+                  <span class="text-muted small">({{ salle.capacite }} pers.)</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">
+          Créneau horaire
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Date</label>
+              <input type="date" name="date" class="form-control" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Heure de début</label>
+              <select name="heure_debut" class="form-select" required>
+                <optgroup label="Matin">
+                  <option value="08:00">08h00</option>
+                  <option value="09:00">09h00</option>
+                  <option value="10:00">10h00</option>
+                </optgroup>
+                <optgroup label="Après-midi">
+                  <option value="14:00">14h00</option>
+                  <option value="15:00">15h00</option>
+                </optgroup>
+                <optgroup label="Soir">
+                  <option value="18:00">18h00</option>
+                  <option value="19:00">19h00</option>
+                  <option value="19:30" selected>19h30</option>
+                  <option value="20:00">20h00</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Heure de fin</label>
+              <select name="heure_fin" class="form-select" required>
+                <optgroup label="Matin">
+                  <option value="10:00">10h00</option>
+                  <option value="11:00">11h00</option>
+                  <option value="12:00">12h00</option>
+                </optgroup>
+                <optgroup label="Après-midi">
+                  <option value="16:00">16h00</option>
+                  <option value="17:00">17h00</option>
+                  <option value="18:00">18h00</option>
+                </optgroup>
+                <optgroup label="Soir">
+                  <option value="21:00">21h00</option>
+                  <option value="22:00">22h00</option>
+                  <option value="22:30" selected>22h30</option>
+                  <option value="23:00">23h00</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Participants</label>
+              <input type="number" name="nombre_participants" class="form-control" min="0" value="0">
+            </div>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">Objet / motif</label>
+              <input type="text" name="objet" class="form-control" placeholder="Ex : Initiation — chantier + cabinets" value="Réservation groupée">
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" name="facturable" id="facturable" checked>
+                <label class="form-check-label fw-semibold" for="facturable">
+                  Facturable
+                </label>
+                <div class="text-muted small">À décocher pour les réunions internes (chantiers, conseils…)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-3">
+        <button type="submit" class="btn fw-semibold px-4" style="background:#0F2137;color:#C8A84B;"
+                onclick="return confirm('Créer ces réservations (validées immédiatement) ?')">
+          ✓ Créer les réservations
+        </button>
+        <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">← Annuler</a>
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

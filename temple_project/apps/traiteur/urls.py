@@ -9,7 +9,6 @@ urlpatterns = [
     path("calendrier/",          views.calendrier,               name="calendrier"),
     path("planning/",            views.planning,                 name="planning"),
     path("reserver/",            views.reserver,                 name="reserver"),
-    path("reserver-multi/",      views.reserver_multi,           name="reserver_multi"),
     path("loges-couverts/",      views.loges_couverts,           name="loges_couverts"),
     path("bloquer/",             views.bloquer,                  name="bloquer"),
     path("bloquer/<int:pk>/supprimer/", views.supprimer_blocage, name="supprimer_blocage"),

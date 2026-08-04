@@ -303,6 +303,10 @@ class ReservationSalle(models.Model):
         related_name='reservations_preferees',
     )
     commentaire     = models.TextField(blank=True)
+    facturable      = models.BooleanField(
+        default=True,
+        help_text="Cocher si cette réservation doit être facturée (à décocher pour les réunions internes non facturées)"
+    )
     group_uuid      = models.UUIDField(
         null=True, blank=True, db_index=True,
         help_text="UUID partagé pour les réservations multi-salles créées en une seule opération"

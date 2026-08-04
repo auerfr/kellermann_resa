@@ -10,7 +10,7 @@ from temple_project.apps.reservations.models import (
 from temple_project.apps.loges.models import Loge
 from .forms import (
     ReservationDirecteForm, TraiteurReservationDirecteForm,
-    TraiteurMultiSalleForm, BlocageCreneauxForm, NotificationCouvertsForm,
+    BlocageCreneauxForm, NotificationCouvertsForm,
 )
 from .models import NotificationCouverts
 
@@ -387,57 +387,6 @@ def reserver(request):
         return redirect("traiteur:planning")
 
     return render(request, "traiteur/reserver.html", {"form": form})
-
-
-# ── Réservation multi-salles directe ─────────────────────────────────────────
-
-@traiteur_required
-def reserver_multi(request):
-    """Réservation directe sur plusieurs salles simultanées le même jour."""
-    import uuid as uuid_module
-
-    form = TraiteurMultiSalleForm(request.POST or None)
-
-    if request.method == "POST" and form.is_valid():
-        cd       = form.cleaned_data
-        loge     = cd.get("loge")
-        org      = cd.get("organisation") or ""
-        date_r   = cd["date"]
-        hd, hf   = cd["heure_debut"], cd["heure_fin"]
-        couverts = cd.get("nombre_participants") or 0
-        note     = cd.get("commentaire") or ""
-        salles   = cd["salles"]
-
-        nom      = loge.nom if loge else org
-        group_id = uuid_module.uuid4()
-
-        for salle in salles:
-            ReservationSalle.objects.create(
-                loge=loge, salle=salle, date=date_r,
-                heure_debut=hd, heure_fin=hf, statut="validee",
-                nom_demandeur=nom,
-                email_demandeur="traiteur@kellermann.local",
-                organisation=nom,
-                objet=note or "Réservation groupée",
-                nombre_participants=couverts,
-                commentaire=note,
-                group_uuid=group_id,
-            )
-
-        noms = ", ".join(s.nom for s in salles)
-        messages.success(request, f"{len(salles)} salle(s) réservée(s) ({noms}) le {date_r:%d/%m/%Y}.")
-        return redirect("traiteur:planning")
-
-    # Grouper les salles par type pour l'affichage
-    salles_par_type = {}
-    for salle in SalleReunion.objects.filter(actif=True).order_by("type_salle", "nom"):
-        label = salle.get_type_salle_display()
-        salles_par_type.setdefault(label, []).append(salle)
-
-    return render(request, "traiteur/reserver_multi.html", {
-        "form": form,
-        "salles_par_type": salles_par_type,
-    })
 
 
 # ── Couverts habituels par loge ───────────────────────────────────────────────

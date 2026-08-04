@@ -269,6 +269,8 @@ def valider_reservation_salle(request, pk):
                     pass
 
         resa.statut = 'validee' if action == 'valider' else 'refusee'
+        if 'facturable' in request.POST:
+            resa.facturable = request.POST.get('facturable') == 'on'
         resa.save()
 
         _envoyer_email_decision_salle(resa, action, commentaire_admin)
@@ -5443,6 +5445,7 @@ def regenerer_salles(request):
                     organisation=nom,
                     objet=regle.objet or 'Réunion',
                     nombre_participants=regle.nombre_participants or 0,
+                    facturable=False,
                     group_uuid=group_id,
                     regle_source=regle,
                 )
@@ -5450,3 +5453,90 @@ def regenerer_salles(request):
 
     messages.success(request, f"{cree} réservation(s) salle créée(s) pour la saison {annee}/{annee+1}.")
     return redirect('administration:regles_salle_liste')
+
+
+# ── Réservation multi-salles (depuis l'admin) ─────────────────────────────────
+
+@staff_required
+def reserver_multi_salles(request):
+    """Réservation directe de plusieurs salles simultanées pour une loge (ex : temple + salles complémentaires)."""
+    import uuid as uuid_module
+
+    loges = Loge.objects.filter(actif=True).order_by('nom')
+    salles_par_type = {}
+    for salle in SalleReunion.objects.filter(actif=True).order_by('type_salle', 'nom'):
+        label = salle.get_type_salle_display()
+        salles_par_type.setdefault(label, []).append(salle)
+
+    if request.method == 'POST':
+        loge_pk  = request.POST.get('loge_pk', '').strip()
+        org      = request.POST.get('organisation', '').strip()
+        salle_pks = request.POST.getlist('salles')
+        date_str  = request.POST.get('date', '').strip()
+        hd_str    = request.POST.get('heure_debut', '').strip()
+        hf_str    = request.POST.get('heure_fin', '').strip()
+        objet     = request.POST.get('objet', '').strip() or 'Réservation groupée'
+        participants = request.POST.get('nombre_participants', '0').strip()
+        facturable_val = request.POST.get('facturable') == 'on'
+
+        errors = []
+        loge = None
+        if loge_pk:
+            try:
+                loge = Loge.objects.get(pk=int(loge_pk))
+            except (Loge.DoesNotExist, ValueError):
+                errors.append("Loge introuvable.")
+        if not loge and not org:
+            errors.append("Indiquez une loge ou un nom d'organisation.")
+        if not salle_pks:
+            errors.append("Sélectionnez au moins une salle.")
+        try:
+            from datetime import date as date_cls, time as time_cls
+            date_r = date_cls.fromisoformat(date_str)
+        except (ValueError, TypeError):
+            date_r = None
+            errors.append("Date invalide.")
+        try:
+            hd = time_cls.fromisoformat(hd_str)
+            hf = time_cls.fromisoformat(hf_str)
+            if hf <= hd:
+                errors.append("L'heure de fin doit être après l'heure de début.")
+        except (ValueError, TypeError):
+            hd = hf = None
+            errors.append("Horaires invalides.")
+
+        salles_sel = list(SalleReunion.objects.filter(pk__in=salle_pks, actif=True))
+
+        if not errors and date_r and hd and hf and salles_sel:
+            nom      = loge.nom if loge else org
+            try:
+                nb_part = int(participants)
+            except ValueError:
+                nb_part = 0
+            group_id = uuid_module.uuid4()
+            for salle in salles_sel:
+                ReservationSalle.objects.create(
+                    loge=loge, salle=salle, date=date_r,
+                    heure_debut=hd, heure_fin=hf, statut='validee',
+                    nom_demandeur=nom,
+                    email_demandeur='admin@kellermann.local',
+                    organisation=nom,
+                    objet=objet,
+                    nombre_participants=nb_part,
+                    facturable=facturable_val,
+                    group_uuid=group_id,
+                )
+            noms = ', '.join(s.nom for s in salles_sel)
+            messages.success(request, f"{len(salles_sel)} salle(s) réservée(s) ({noms}) le {date_r:%d/%m/%Y}.")
+            log_evenement('reservation_directe',
+                f"Multi-salles : {nom} — {date_r:%d/%m/%Y} {hd:%H:%M}–{hf:%H:%M} — {noms}",
+                request=request)
+            return redirect('administration:tableau_de_bord')
+
+        for err in errors:
+            messages.error(request, err)
+
+    return render(request, 'administration/reserver_multi_salles.html', {
+        'loges': loges,
+        'salles_par_type': salles_par_type,
+    })

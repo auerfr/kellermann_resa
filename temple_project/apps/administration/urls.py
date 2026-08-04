@@ -67,4 +67,5 @@ urlpatterns = [
     path("regles-salles/<int:pk>/modifier/", views.regle_salle_form, name="regle_salle_modifier"),
     path("regles-salles/<int:pk>/supprimer/", views.regle_salle_supprimer, name="regle_salle_supprimer"),
     path("regles-salles/regenerer/", views.regenerer_salles, name="regenerer_salles"),
+    path("salles/reserver-multi/", views.reserver_multi_salles, name="reserver_multi_salles"),
 ]
