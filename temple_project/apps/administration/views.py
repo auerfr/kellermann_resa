@@ -12,7 +12,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from temple_project.apps.reservations.models import (
     Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle,
     DemandeAccesPortail, ValidationSaison, ValidationSaisonLigne,
-    Indisponibilite, BlocageCreneaux,
+    Indisponibilite, BlocageCreneaux, RegleRecurrenceSalle,
 )
 from temple_project.apps.loges.models import Loge, Obedience
 from .models import Parametres, JournalEvenement, Annonce
@@ -5291,3 +5291,162 @@ def loges_saison(request):
         'nb_sans': nb_sans, 'nb_a_reconfirmer': nb_a_reconfirmer,
         'nb_inactives': inactives.count(),
     })
+
+
+# ── Règles de récurrence — Salles ─────────────────────────────────────────────
+
+def _regle_salle_form_class():
+    """Retourne la classe Form pour une RegleRecurrenceSalle (définie ici pour éviter un forms.py séparé)."""
+    from django import forms as _forms
+
+    class RegleSalleForm(_forms.ModelForm):
+        class Meta:
+            model  = RegleRecurrenceSalle
+            fields = [
+                'loge', 'salles', 'jour_semaine', 'numero_semaine',
+                'heure_debut', 'heure_fin', 'mois_actifs',
+                'actif', 'date_debut', 'date_fin',
+                'objet', 'nombre_participants',
+            ]
+            widgets = {
+                'loge':           _forms.Select(attrs={'class': 'form-select'}),
+                'salles':         _forms.CheckboxSelectMultiple(),
+                'jour_semaine':   _forms.Select(attrs={'class': 'form-select no-select2'}),
+                'numero_semaine': _forms.Select(attrs={'class': 'form-select no-select2'}),
+                'heure_debut':    _forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
+                'heure_fin':      _forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
+                'mois_actifs':    _forms.CheckboxSelectMultiple(
+                    choices=[
+                        (1,'Janvier'),(2,'Février'),(3,'Mars'),(4,'Avril'),
+                        (5,'Mai'),(6,'Juin'),(7,'Juillet'),(8,'Août'),
+                        (9,'Septembre'),(10,'Octobre'),(11,'Novembre'),(12,'Décembre'),
+                    ]
+                ),
+                'date_debut':     _forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+                'date_fin':       _forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+                'objet':          _forms.TextInput(attrs={'class': 'form-control'}),
+                'nombre_participants': _forms.NumberInput(attrs={'class': 'form-control'}),
+            }
+
+        def clean(self):
+            cleaned = super().clean()
+            hd = cleaned.get('heure_debut')
+            hf = cleaned.get('heure_fin')
+            if hd and hf and hf <= hd:
+                self.add_error('heure_fin', "L'heure de fin doit être après l'heure de début.")
+            return cleaned
+
+    return RegleSalleForm
+
+
+@staff_required
+def regles_salle_liste(request):
+    """Liste de toutes les règles de récurrence pour les salles."""
+    regles = (
+        RegleRecurrenceSalle.objects
+        .select_related('loge')
+        .prefetch_related('salles')
+        .order_by('loge__nom', 'jour_semaine', 'numero_semaine')
+    )
+    return render(request, 'administration/regles_salle_liste.html', {'regles': regles})
+
+
+@staff_required
+def regle_salle_form(request, pk=None):
+    """Créer ou modifier une règle de récurrence salle."""
+    RegleSalleForm = _regle_salle_form_class()
+    instance = get_object_or_404(RegleRecurrenceSalle, pk=pk) if pk else None
+    form = RegleSalleForm(request.POST or None, instance=instance)
+
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        verb = "modifiée" if pk else "créée"
+        messages.success(request, f"Règle {verb} avec succès.")
+        return redirect('administration:regles_salle_liste')
+
+    return render(request, 'administration/regle_salle_form.html', {
+        'form': form, 'instance': instance,
+    })
+
+
+@staff_required
+def regle_salle_supprimer(request, pk):
+    """Supprimer une règle de récurrence salle."""
+    regle = get_object_or_404(RegleRecurrenceSalle, pk=pk)
+    if request.method == 'POST':
+        nom = str(regle)
+        regle.delete()
+        messages.success(request, f"Règle supprimée : {nom}.")
+        return redirect('administration:regles_salle_liste')
+    return render(request, 'administration/regle_salle_supprimer.html', {'regle': regle})
+
+
+@staff_required
+def regenerer_salles(request):
+    """Génère les ReservationSalle depuis les RegleRecurrenceSalle actives."""
+    if request.method != 'POST':
+        annee_def = date.today().year if date.today().month >= 9 else date.today().year - 1
+        return render(request, 'administration/regenerer_salles.html', {
+            'annees': list(range(annee_def - 1, annee_def + 3)),
+            'annee_def': annee_def,
+            'regles': RegleRecurrenceSalle.objects.filter(actif=True).select_related('loge').prefetch_related('salles'),
+        })
+
+    import uuid as uuid_module
+    annee  = int(request.POST.get('annee', date.today().year))
+    mode   = request.POST.get('mode', 'ajouter')  # ajouter | remplacer
+    d1, d2 = date(annee, 9, 1), date(annee + 1, 6, 30)
+
+    regles = RegleRecurrenceSalle.objects.filter(actif=True).prefetch_related('salles')
+
+    cree = 0
+    for regle in regles:
+        salles_list = list(regle.salles.all())
+        if not salles_list:
+            continue
+
+        dates_saison = [
+            d for d in (
+                _calculer_dates_regle(regle, annee) +
+                _calculer_dates_regle(regle, annee + 1)
+            )
+            if d1 <= d <= d2 and d.month not in [7, 8]
+            and not (regle.date_fin and d > regle.date_fin)
+            and not (regle.date_debut and d < regle.date_debut)
+        ]
+
+        if mode == 'remplacer':
+            ReservationSalle.objects.filter(
+                regle_source=regle,
+                date__gte=d1, date__lte=d2,
+            ).delete()
+
+        exclues = set(regle.dates_exclues or [])
+        for d in dates_saison:
+            if d.isoformat() in exclues:
+                continue
+            if ReservationSalle.objects.filter(regle_source=regle, date=d).exists():
+                continue
+
+            group_id = uuid_module.uuid4()
+            nom = regle.loge.nom if regle.loge else "—"
+            for salle in salles_list:
+                ReservationSalle.objects.create(
+                    loge=regle.loge,
+                    salle=salle,
+                    date=d,
+                    heure_debut=regle.heure_debut,
+                    heure_fin=regle.heure_fin,
+                    statut='validee',
+                    nom_demandeur=nom,
+                    email_demandeur='admin@kellermann.local',
+                    organisation=nom,
+                    objet=regle.objet or 'Réunion',
+                    nombre_participants=regle.nombre_participants or 0,
+                    group_uuid=group_id,
+                    regle_source=regle,
+                )
+                cree += 1
+
+    messages.success(request, f"{cree} réservation(s) salle créée(s) pour la saison {annee}/{annee+1}.")
+    return redirect('administration:regles_salle_liste')

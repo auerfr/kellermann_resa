@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Traiteur — Réservation multi-salles{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="mb-4">
+      <h1 class="h3 mb-1">➕ Réservation multi-salles</h1>
+      <p class="text-muted small">Réserve plusieurs salles simultanément le même jour, validées immédiatement.</p>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+          Qui réserve ?
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Loge</label>
+            {{ form.loge }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Organisation (si hors liste)</label>
+            {{ form.organisation }}
+            {% if form.organisation.errors %}<div class="text-danger small mt-1">{{ form.organisation.errors.0 }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+          Quelles salles ?
+        </div>
+        <div class="card-body">
+          {% if form.salles.errors %}
+          <div class="text-danger small mb-2">{{ form.salles.errors.0 }}</div>
+          {% endif %}
+          {% for type_label, salles_list in salles_par_type.items %}
+          <div class="mb-3">
+            <p class="fw-semibold text-muted small text-uppercase mb-2" style="letter-spacing:.06em;">{{ type_label }}</p>
+            <div class="d-flex flex-wrap gap-2">
+              {% for salle in salles_list %}
+              <div class="form-check form-check-inline border rounded px-3 py-2">
+                <input class="form-check-input" type="checkbox"
+                       name="salles" value="{{ salle.pk }}"
+                       id="salle_{{ salle.pk }}"
+                       {% if form.salles.value and salle.pk|stringformat:"s" in form.salles.value %}checked{% endif %}>
+                <label class="form-check-label" for="salle_{{ salle.pk }}">
+                  {{ salle.nom }}
+                  <span class="text-muted small">({{ salle.capacite }} pers.)</span>
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">
+          Quand ?
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Date</label>
+              {{ form.date }}
+              {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Heure de début</label>
+              {{ form.heure_debut }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Heure de fin</label>
+              {{ form.heure_fin }}
+              {% if form.heure_fin.errors %}<div class="text-danger small">{{ form.heure_fin.errors.0 }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Nombre de participants</label>
+              {{ form.nombre_participants }}
+            </div>
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">Commentaire</label>
+              {{ form.commentaire }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-3">
+        <button type="submit" class="btn fw-semibold px-4" style="background:#0F2137;color:#C8A84B;"
+                onclick="return confirm('Créer ces réservations (validées immédiatement) ?')">
+          ✓ Créer les réservations
+        </button>
+        <a href="{% url 'traiteur:planning' %}" class="btn btn-outline-secondary">← Annuler</a>
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

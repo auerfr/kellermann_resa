@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Supprimer règle salle{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card shadow-sm border-danger">
+      <div class="card-header bg-danger text-white">
+        <strong>🗑 Supprimer la règle de récurrence salle</strong>
+      </div>
+      <div class="card-body">
+        <p>Confirmer la suppression de la règle :</p>
+        <ul>
+          <li><strong>Loge :</strong> {{ regle.loge }}</li>
+          <li><strong>Récurrence :</strong> {{ regle.get_numero_semaine_display }} {{ regle.get_jour_semaine_display }}</li>
+          <li><strong>Salles :</strong> {% for s in regle.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</li>
+        </ul>
+        <p class="text-warning small">
+          ⚠️ Les réservations déjà générées depuis cette règle ne seront pas supprimées.
+          Seule la règle elle-même est supprimée.
+        </p>
+        <div class="d-flex gap-3">
+          <form method="post">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">✓ Supprimer</button>
+          </form>
+          <a href="{% url 'administration:regles_salle_liste' %}" class="btn btn-outline-secondary">← Annuler</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

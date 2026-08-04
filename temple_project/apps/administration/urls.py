@@ -62,4 +62,9 @@ urlpatterns = [
     path("facturation/export/", views.facturation_export_excel, name="facturation_export"),
     path("facturation/pdf/", views.facturation_pdf, name="facturation_pdf"),
     path("reservation/<int:pk>/modifier/", views.modifier_reservation, name="modifier_reservation"),
+    path("regles-salles/", views.regles_salle_liste, name="regles_salle_liste"),
+    path("regles-salles/ajouter/", views.regle_salle_form, name="regle_salle_ajouter"),
+    path("regles-salles/<int:pk>/modifier/", views.regle_salle_form, name="regle_salle_modifier"),
+    path("regles-salles/<int:pk>/supprimer/", views.regle_salle_supprimer, name="regle_salle_supprimer"),
+    path("regles-salles/regenerer/", views.regenerer_salles, name="regenerer_salles"),
 ]

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Règles de récurrence — Salles{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-1">🔁 Règles de récurrence — Salles</h1>
+    <p class="text-muted small mb-0">
+      Chaque règle génère automatiquement des réservations de salle pour la saison.
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'administration:regle_salle_ajouter' %}" class="btn btn-sm btn-success">+ Ajouter une règle</a>
+    <form method="post" action="{% url 'administration:regenerer_salles' %}"
+          onsubmit="return confirm('Générer les réservations salles pour la saison sélectionnée ?');">
+      {% csrf_token %}
+      <select name="annee" class="form-select form-select-sm d-inline-block no-select2" style="width:auto;">
+        <option value="2024">2024/2025</option>
+        <option value="2025" selected>2025/2026</option>
+        <option value="2026">2026/2027</option>
+        <option value="2027">2027/2028</option>
+      </select>
+      <select name="mode" class="form-select form-select-sm d-inline-block no-select2" style="width:auto;">
+        <option value="ajouter">Ajouter seulement</option>
+        <option value="remplacer">Remplacer</option>
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-primary">⚡ Générer</button>
+    </form>
+  </div>
+</div>
+
+{% if regles %}
+<div class="card shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.06em;text-transform:uppercase;">
+        <tr>
+          <th class="ps-3">Loge</th>
+          <th>Jour / Semaine</th>
+          <th>Horaires</th>
+          <th>Salles</th>
+          <th>Mois actifs</th>
+          <th>Objet</th>
+          <th>Statut</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in regles %}
+        <tr {% if not r.actif %}class="text-muted"{% endif %}>
+          <td class="ps-3 fw-semibold">{{ r.loge }}</td>
+          <td class="small">
+            {{ r.get_numero_semaine_display }}<br>
+            <span class="text-muted">{{ r.get_jour_semaine_display }}</span>
+          </td>
+          <td class="small text-muted">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</td>
+          <td class="small">
+            {% for s in r.salles.all %}
+              <span class="badge bg-secondary me-1" style="font-size:9px;">{{ s.nom }}</span>
+            {% endfor %}
+          </td>
+          <td class="small text-muted">
+            {% if r.mois_actifs %}
+              {{ r.mois_actifs|join:", " }}
+            {% else %}
+              <em>Tous (sauf juil/août)</em>
+            {% endif %}
+          </td>
+          <td class="small">{{ r.objet|default:"—" }}</td>
+          <td>
+            {% if r.actif %}
+              <span class="badge bg-success">Active</span>
+            {% else %}
+              <span class="badge bg-secondary">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="text-end pe-3">
+            <a href="{% url 'administration:regle_salle_modifier' r.pk %}"
+               class="btn btn-sm btn-outline-secondary py-0">✏️ Modifier</a>
+            <a href="{% url 'administration:regle_salle_supprimer' r.pk %}"
+               class="btn btn-sm btn-outline-danger py-0 ms-1">🗑</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+  Aucune règle de récurrence salle définie.
+  <a href="{% url 'administration:regle_salle_ajouter' %}">Créer la première</a>.
+</div>
+{% endif %}
+
+<div class="mt-3">
+  <a href="{% url 'administration:regles_liste' %}" class="btn btn-outline-secondary btn-sm">
+    ← Règles temples
+  </a>
+</div>
+{% endblock %}

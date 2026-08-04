@@ -303,6 +303,14 @@ class ReservationSalle(models.Model):
         related_name='reservations_preferees',
     )
     commentaire     = models.TextField(blank=True)
+    group_uuid      = models.UUIDField(
+        null=True, blank=True, db_index=True,
+        help_text="UUID partagé pour les réservations multi-salles créées en une seule opération"
+    )
+    regle_source    = models.ForeignKey(
+        'RegleRecurrenceSalle', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='reservations_generees'
+    )
     created_at      = models.DateTimeField(auto_now_add=True)
     updated_at      = models.DateTimeField(auto_now=True)
 
@@ -313,6 +321,56 @@ class ReservationSalle(models.Model):
 
     def __str__(self):
         return f"{self.salle} – {self.date} {self.heure_debut} ({self.nom_demandeur})"
+
+
+class RegleRecurrenceSalle(models.Model):
+    """Règle de récurrence pour les salles de réunion/cabinets/agapes."""
+    JOUR_CHOICES = [
+        (0, "Lundi"), (1, "Mardi"), (2, "Mercredi"),
+        (3, "Jeudi"), (4, "Vendredi"), (5, "Samedi"), (6, "Dimanche"),
+    ]
+    SEMAINE_CHOICES = [
+        (1, "1re semaine"), (2, "2e semaine"),
+        (3, "3e semaine"), (4, "4e semaine"), (-1, "Dernière semaine"),
+    ]
+
+    loge            = models.ForeignKey(
+        Loge, on_delete=models.CASCADE, related_name="regles_salle"
+    )
+    salles          = models.ManyToManyField(
+        SalleReunion, blank=False, related_name="regles_recurrence",
+        help_text="Salles réservées à chaque occurrence (peut en inclure plusieurs)"
+    )
+    jour_semaine    = models.PositiveSmallIntegerField(choices=JOUR_CHOICES)
+    numero_semaine  = models.SmallIntegerField(choices=SEMAINE_CHOICES)
+    heure_debut     = models.TimeField(default="19:30")
+    heure_fin       = models.TimeField(default="22:30")
+    mois_actifs     = models.JSONField(
+        default=list, blank=True,
+        help_text="Mois actifs (1=Jan…12=Déc). Laisser vide = tous sauf juillet-août."
+    )
+    actif           = models.BooleanField(default=True)
+    date_debut      = models.DateField(null=True, blank=True)
+    date_fin        = models.DateField(null=True, blank=True)
+    dates_exclues   = models.JSONField(
+        default=list, blank=True,
+        help_text="Dates ISO exclues (annulées/déplacées) — pas recréées à la régénération."
+    )
+    objet           = models.CharField(max_length=300, blank=True, default="Réunion")
+    nombre_participants = models.PositiveSmallIntegerField(
+        default=0, help_text="0 = non renseigné"
+    )
+
+    class Meta:
+        verbose_name = "Règle de récurrence salle"
+        verbose_name_plural = "Règles de récurrence salles"
+
+    def __str__(self):
+        return (
+            f"{self.loge} – "
+            f"{self.get_numero_semaine_display()} "
+            f"{self.get_jour_semaine_display()}"
+        )
 
 
 class BlocageCreneaux(models.Model):

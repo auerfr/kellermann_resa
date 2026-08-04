@@ -55,6 +55,10 @@ class Loge(models.Model):
     telephone             = models.CharField(max_length=30, blank=True, default="")
     effectif_total        = models.PositiveIntegerField(default=0)
     effectif_moyen_agapes = models.PositiveIntegerField(default=0)
+    couverts_habituels    = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Nombre de couverts habituels renseigné par le traiteur (prioritaire sur effectif_moyen_agapes)"
+    )
     actif                 = models.BooleanField(default=True)
     statut                = models.CharField(
         max_length=15, choices=STATUT_CHOICES, default="active",

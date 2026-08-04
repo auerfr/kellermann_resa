@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from datetime import date, timedelta
+from datetime import date, timedelta, time
+from django.db.models import Q
 import calendar
 
 from temple_project.apps.reservations.models import (
@@ -9,15 +10,17 @@ from temple_project.apps.reservations.models import (
 from temple_project.apps.loges.models import Loge
 from .forms import (
     ReservationDirecteForm, TraiteurReservationDirecteForm,
-    BlocageCreneauxForm, NotificationCouvertsForm,
+    TraiteurMultiSalleForm, BlocageCreneauxForm, NotificationCouvertsForm,
 )
 from .models import NotificationCouverts
+
+# Horaire à partir duquel une tenue sans agapes confirmées est considérée "probable"
+HEURE_SOIR = time(18, 0)
 
 
 # ── Décorateurs d'accès ───────────────────────────────────────────────────────
 
 def traiteur_required(view_func):
-    """Décorateur : autorise uniquement les membres du groupe Traiteur (et les admins)."""
     from functools import wraps
 
     @wraps(view_func)
@@ -33,7 +36,6 @@ def traiteur_required(view_func):
 
 
 def membre_ou_traiteur_required(view_func):
-    """Décorateur : autorise les membres (cookie), traiteur et admins."""
     from functools import wraps
 
     @wraps(view_func)
@@ -51,7 +53,6 @@ def membre_ou_traiteur_required(view_func):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _nav_mois(annee, mois):
-    """Retourne (mois_prec, annee_prec, mois_suiv, annee_suiv)."""
     if mois == 1:
         mp, ap = 12, annee - 1
     else:
@@ -63,60 +64,138 @@ def _nav_mois(annee, mois):
     return mp, ap, ms, as_
 
 
-def _couverts_effectifs(r, loge=None):
-    """Retourne (couverts, est_estimation) pour une réservation."""
+def _couverts_effectifs(r):
+    """Retourne (couverts_ou_None, est_estimation).
+    couverts=None signifie "inconnu" — le template affiche '?'.
+    Hiérarchie : nombre_repas/participants > couverts_habituels > effectif_moyen_agapes.
+    """
     if hasattr(r, "nombre_repas"):
         couverts = r.nombre_repas
         loge_obj = r.loge
     else:
         couverts = r.nombre_participants
-        loge_obj = None
+        loge_obj = r.loge if hasattr(r, "loge") else None
 
     if couverts and couverts > 0:
         return couverts, False
 
-    # Pas de couverts renseignés → essayer l'effectif moyen de la loge
-    l = loge_obj or loge
-    if l and hasattr(l, "effectif_moyen_agapes") and l.effectif_moyen_agapes:
-        return l.effectif_moyen_agapes, True
-    return 0, False
+    if loge_obj:
+        if getattr(loge_obj, 'couverts_habituels', None):
+            return loge_obj.couverts_habituels, True
+        if getattr(loge_obj, 'effectif_moyen_agapes', None):
+            return loge_obj.effectif_moyen_agapes, True
+    return None, False
+
+
+def _contact_loge(loge):
+    if not loge:
+        return "", "", ""
+    return loge.nom_contact or "", loge.email or "", loge.telephone or ""
+
+
+def _agapes_status(r):
+    """'confirme' | 'probable' | 'aucune' pour une Reservation temple."""
+    if r.besoin_agapes:
+        return "confirme"
+    if r.heure_debut >= HEURE_SOIR:
+        return "probable"
+    return "aucune"
+
+
+def _build_repas(r, type_label):
+    """Construit un dict unifié pour la vue planning (temple ou salle agapes)."""
+    couverts, estimation = _couverts_effectifs(r)
+    if type_label == "Temple":
+        loge = r.loge
+        lieu = str(r.temple) if r.temple else "—"
+        org  = loge.nom if loge else (r.nom_organisation or r.nom_demandeur or "—")
+        status = _agapes_status(r)
+    else:
+        loge = r.loge
+        lieu = str(r.salle) if r.salle else "—"
+        org  = loge.nom if loge else (r.organisation or r.nom_demandeur or "—")
+        status = "confirme"
+
+    nom_c, email_c, tel_c = _contact_loge(loge)
+    return {
+        "date":          r.date,
+        "heure_debut":   r.heure_debut,
+        "heure_fin":     r.heure_fin,
+        "lieu":          lieu,
+        "organisation":  org,
+        "couverts":      couverts,
+        "estimation":    estimation,
+        "agapes_status": status,
+        "type":          type_label,
+        "contact_nom":   nom_c,
+        "contact_email": email_c,
+        "contact_tel":   tel_c,
+    }
 
 
 # ── Tableau de bord ───────────────────────────────────────────────────────────
 
 @traiteur_required
 def tableau_de_bord(request):
-    today = date.today()
-    prochaines_agapes = Reservation.objects.filter(
-        statut="validee",
-        besoin_agapes=True,
-        date__gte=today,
-        date__lte=today + timedelta(days=30),
-    ).select_related("loge", "temple").order_by("date")
+    today   = date.today()
+    horizon = today + timedelta(days=30)
 
-    blocages = BlocageCreneaux.objects.filter(
-        date__gte=today
-    ).prefetch_related("salles").order_by("date")[:5]
+    # Tenues temple du soir + agapes confirmées (30 j.)
+    tenues_temple = (
+        Reservation.objects.filter(
+            statut="validee",
+            date__gte=today,
+            date__lte=horizon,
+        )
+        .filter(Q(besoin_agapes=True) | Q(heure_debut__gte=HEURE_SOIR))
+        .select_related("loge", "temple")
+        .order_by("date", "heure_debut")
+    )
 
-    # Notifications couverts non lues
-    notifications = NotificationCouverts.objects.filter(
-        statut="non_lu"
-    ).select_related("loge").order_by("-created_at")
+    # Banquets/agapes salles (30 j.)
+    tenues_salle = (
+        ReservationSalle.objects.filter(
+            statut="validee",
+            date__gte=today,
+            date__lte=horizon,
+            salle__type_salle="agapes",
+        )
+        .select_related("loge", "salle")
+        .order_by("date", "heure_debut")
+    )
 
-    context = {
-        "prochaines_agapes":   prochaines_agapes,
-        "nb_agapes_mois":      prochaines_agapes.count(),
-        "blocages":            blocages,
-        "notifications":       notifications,
-        "nb_notifications":    notifications.count(),
-        "today":               today,
-    }
-    return render(request, "traiteur/tableau_de_bord.html", context)
+    repas_a_venir = [_build_repas(r, "Temple") for r in tenues_temple]
+    repas_a_venir += [_build_repas(r, "Salle") for r in tenues_salle]
+    repas_a_venir.sort(key=lambda x: (x["date"], x["heure_debut"]))
+
+    nb_confirmes = sum(1 for r in repas_a_venir if r["agapes_status"] == "confirme")
+    nb_probables = sum(1 for r in repas_a_venir if r["agapes_status"] == "probable")
+
+    blocages = (
+        BlocageCreneaux.objects.filter(date__gte=today)
+        .prefetch_related("salles")
+        .order_by("date")[:5]
+    )
+
+    notifications = (
+        NotificationCouverts.objects.filter(statut="non_lu")
+        .select_related("loge")
+        .order_by("-created_at")
+    )
+
+    return render(request, "traiteur/tableau_de_bord.html", {
+        "repas_a_venir":    repas_a_venir,
+        "nb_confirmes":     nb_confirmes,
+        "nb_probables":     nb_probables,
+        "blocages":         blocages,
+        "notifications":    notifications,
+        "nb_notifications": notifications.count(),
+        "today":            today,
+    })
 
 
 @traiteur_required
 def marquer_notification_lue(request, pk):
-    """Marquer une notification comme lue."""
     notif = get_object_or_404(NotificationCouverts, pk=pk)
     if request.method == "POST":
         notif.statut = "lu"
@@ -124,75 +203,74 @@ def marquer_notification_lue(request, pk):
     return redirect("traiteur:tableau_de_bord")
 
 
-# ── Calendrier agapes ─────────────────────────────────────────────────────────
+# ── Calendrier ────────────────────────────────────────────────────────────────
 
 @traiteur_required
 def calendrier(request):
-    """Calendrier mensuel avec filtres et sélecteur mois/année."""
     today  = date.today()
     annee  = int(request.GET.get("annee", today.year))
     mois   = int(request.GET.get("mois",  today.month))
-    filtre = request.GET.get("filtre", "tout")   # tout | agapes | blocages
+    filtre = request.GET.get("filtre", "tout")   # tout | soir | agapes | blocages
 
-    # Bornes mois
     mois_prec, annee_prec, mois_suiv, annee_suiv = _nav_mois(annee, mois)
     premier_jour = date(annee, mois, 1)
     dernier_jour = date(annee, mois, calendar.monthrange(annee, mois)[1])
 
-    # Données
-    reservations = Reservation.objects.filter(
-        statut="validee",
-        date__gte=premier_jour,
-        date__lte=dernier_jour,
-    ).select_related("loge", "temple").order_by("date", "heure_debut")
+    reservations = (
+        Reservation.objects.filter(statut="validee", date__gte=premier_jour, date__lte=dernier_jour)
+        .select_related("loge", "temple")
+        .order_by("date", "heure_debut")
+    )
+    reservations_salles = (
+        ReservationSalle.objects.filter(
+            statut="validee", date__gte=premier_jour, date__lte=dernier_jour,
+            salle__type_salle="agapes",
+        )
+        .select_related("salle", "loge")
+        .order_by("date", "heure_debut")
+    )
+    blocages = (
+        BlocageCreneaux.objects.filter(date__gte=premier_jour, date__lte=dernier_jour)
+        .prefetch_related("salles")
+        .order_by("date", "heure_debut")
+    )
 
-    reservations_salles = ReservationSalle.objects.filter(
-        statut="validee",
-        date__gte=premier_jour,
-        date__lte=dernier_jour,
-        salle__type_salle="agapes",
-    ).select_related("salle").order_by("date", "heure_debut")
-
-    blocages = BlocageCreneaux.objects.filter(
-        date__gte=premier_jour,
-        date__lte=dernier_jour,
-    ).prefetch_related("salles").order_by("date", "heure_debut")
-
-    # Application du filtre
     if filtre == "agapes":
         reservations = reservations.filter(besoin_agapes=True)
+    elif filtre == "soir":
+        reservations = reservations.filter(Q(besoin_agapes=True) | Q(heure_debut__gte=HEURE_SOIR))
     elif filtre == "blocages":
         reservations        = reservations.none()
         reservations_salles = reservations_salles.none()
 
-    # Construction events_by_date
     events_by_date = {}
     for r in reservations:
-        couverts, est_estim = _couverts_effectifs(r)
+        couverts, est = _couverts_effectifs(r)
+        status = _agapes_status(r)
+        nom_c, email_c, tel_c = _contact_loge(r.loge)
         events_by_date.setdefault(r.date, []).append({
-            "type":       "reservation",
-            "obj":        r,
-            "agapes":     r.besoin_agapes,
-            "couverts":   couverts,
-            "estimation": est_estim,
+            "type": "reservation", "obj": r,
+            "agapes": r.besoin_agapes, "agapes_status": status,
+            "couverts": couverts, "estimation": est,
+            "contact_nom": nom_c, "contact_email": email_c, "contact_tel": tel_c,
         })
     for r in reservations_salles:
-        couverts, est_estim = _couverts_effectifs(r)
+        couverts, est = _couverts_effectifs(r)
+        nom_c, email_c, tel_c = _contact_loge(r.loge)
         events_by_date.setdefault(r.date, []).append({
-            "type":       "salle",
-            "obj":        r,
-            "agapes":     True,
-            "couverts":   couverts,
-            "estimation": est_estim,
+            "type": "salle", "obj": r,
+            "agapes": True, "agapes_status": "confirme",
+            "couverts": couverts, "estimation": est,
+            "contact_nom": nom_c, "contact_email": email_c, "contact_tel": tel_c,
         })
     for b in blocages:
         events_by_date.setdefault(b.date, []).append({
-            "type": "blocage", "obj": b, "agapes": False, "couverts": 0, "estimation": False,
+            "type": "blocage", "obj": b, "agapes": False,
+            "agapes_status": "aucune", "couverts": None, "estimation": False,
+            "contact_nom": "", "contact_email": "", "contact_tel": "",
         })
 
-    # Sélecteur mois/année : 18 mois autour d'aujourd'hui
     mois_choices = []
-    import locale
     for delta in range(-3, 15):
         m = today.month + delta
         y = today.year + (m - 1) // 12
@@ -203,119 +281,101 @@ def calendrier(request):
             "actif": m == mois and y == annee,
         })
 
-    context = {
+    return render(request, "traiteur/calendrier.html", {
         "annee": annee, "mois": mois,
-        "nom_mois":  premier_jour.strftime("%B %Y").capitalize(),
-        "cal":       calendar.monthcalendar(annee, mois),
+        "nom_mois":       premier_jour.strftime("%B %Y").capitalize(),
+        "cal":            calendar.monthcalendar(annee, mois),
         "events_by_date": events_by_date,
-        "today":     today,
-        "mois_prec": mois_prec,  "annee_prec": annee_prec,
-        "mois_suiv": mois_suiv,  "annee_suiv": annee_suiv,
+        "today":          today,
+        "mois_prec": mois_prec, "annee_prec": annee_prec,
+        "mois_suiv": mois_suiv, "annee_suiv": annee_suiv,
         "filtre":    filtre,
         "mois_choices": mois_choices,
-        # Listes pour tableau détaillé
         "reservations":        reservations,
         "reservations_salles": reservations_salles,
         "blocages":            blocages,
-    }
-    return render(request, "traiteur/calendrier.html", context)
+    })
 
 
 # ── Planning mensuel ──────────────────────────────────────────────────────────
 
 @traiteur_required
 def planning(request):
-    """Vue liste mensuelle de tous les repas avec couverts (et estimations)."""
-    today = date.today()
-    annee = int(request.GET.get("annee", today.year))
-    mois  = int(request.GET.get("mois",  today.month))
+    today  = date.today()
+    annee  = int(request.GET.get("annee", today.year))
+    mois   = int(request.GET.get("mois",  today.month))
+    filtre = request.GET.get("filtre", "soir")  # agapes | soir | tout
 
     mois_prec, annee_prec, mois_suiv, annee_suiv = _nav_mois(annee, mois)
     premier_jour = date(annee, mois, 1)
     dernier_jour = date(annee, mois, calendar.monthrange(annee, mois)[1])
 
-    agapes_temple = Reservation.objects.filter(
-        statut="validee",
-        besoin_agapes=True,
-        date__gte=premier_jour,
-        date__lte=dernier_jour,
-    ).select_related("loge", "temple").order_by("date", "heure_debut")
+    qs_temple = (
+        Reservation.objects.filter(statut="validee", date__gte=premier_jour, date__lte=dernier_jour)
+        .select_related("loge", "temple")
+        .order_by("date", "heure_debut")
+    )
+    if filtre == "agapes":
+        qs_temple = qs_temple.filter(besoin_agapes=True)
+    elif filtre == "soir":
+        qs_temple = qs_temple.filter(Q(besoin_agapes=True) | Q(heure_debut__gte=HEURE_SOIR))
+    # filtre == "tout" : pas de filtre supplémentaire
 
-    agapes_salles = ReservationSalle.objects.filter(
-        statut="validee",
-        date__gte=premier_jour,
-        date__lte=dernier_jour,
-        salle__type_salle="agapes",
-    ).select_related("salle").order_by("date", "heure_debut")
+    qs_salle = (
+        ReservationSalle.objects.filter(
+            statut="validee", date__gte=premier_jour, date__lte=dernier_jour,
+            salle__type_salle="agapes",
+        )
+        .select_related("loge", "salle")
+        .order_by("date", "heure_debut")
+    )
 
-    repas = []
-    for r in agapes_temple:
-        couverts, est_estim = _couverts_effectifs(r)
-        repas.append({
-            "date":        r.date,
-            "heure_debut": r.heure_debut,
-            "heure_fin":   r.heure_fin,
-            "lieu":        str(r.temple),
-            "organisation": r.loge.nom if r.loge else r.nom_organisation or r.nom_demandeur,
-            "couverts":    couverts,
-            "estimation":  est_estim,
-            "type":        "Temple",
-        })
-    for r in agapes_salles:
-        couverts, est_estim = _couverts_effectifs(r)
-        repas.append({
-            "date":        r.date,
-            "heure_debut": r.heure_debut,
-            "heure_fin":   r.heure_fin,
-            "lieu":        str(r.salle),
-            "organisation": r.organisation or r.nom_demandeur,
-            "couverts":    couverts,
-            "estimation":  est_estim,
-            "type":        "Salle",
-        })
+    repas = [_build_repas(r, "Temple") for r in qs_temple]
+    repas += [_build_repas(r, "Salle")  for r in qs_salle]
     repas.sort(key=lambda x: (x["date"], x["heure_debut"]))
 
-    total_couverts    = sum(r["couverts"] for r in repas if not r["estimation"])
-    total_estimations = sum(r["couverts"] for r in repas if r["estimation"])
+    total_confirmes   = sum(
+        r["couverts"] for r in repas
+        if r["agapes_status"] == "confirme" and not r["estimation"] and r["couverts"]
+    )
+    total_estimations = sum(r["couverts"] for r in repas if r["estimation"] and r["couverts"])
+    nb_probables      = sum(1 for r in repas if r["agapes_status"] == "probable")
+    nb_inconnus       = sum(1 for r in repas if r["couverts"] is None)
 
-    context = {
+    return render(request, "traiteur/planning.html", {
         "repas":             repas,
-        "total_couverts":    total_couverts,
+        "total_confirmes":   total_confirmes,
         "total_estimations": total_estimations,
+        "nb_probables":      nb_probables,
+        "nb_inconnus":       nb_inconnus,
+        "filtre":            filtre,
         "annee": annee, "mois": mois,
         "nom_mois": premier_jour.strftime("%B %Y").capitalize(),
         "mois_prec": mois_prec, "annee_prec": annee_prec,
         "mois_suiv": mois_suiv, "annee_suiv": annee_suiv,
         "today": today,
-    }
-    return render(request, "traiteur/planning.html", context)
+    })
 
 
 # ── Réservation directe (traiteur) ────────────────────────────────────────────
 
 @traiteur_required
 def reserver(request):
-    """Formulaire de réservation directe salle agapes — statut validée immédiatement."""
     form = TraiteurReservationDirecteForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
         cd       = form.cleaned_data
         loge     = cd.get("loge")
         org      = cd.get("organisation") or ""
+        salle    = cd["salle"]
         date_r   = cd["date"]
-        hd       = cd["heure_debut"]
-        hf       = cd["heure_fin"]
+        hd, hf   = cd["heure_debut"], cd["heure_fin"]
         couverts = cd.get("nombre_repas") or 0
         note     = cd.get("commentaire") or ""
-        salle    = cd["salle"]
 
         ReservationSalle.objects.create(
-            loge=loge,
-            salle=salle,
-            date=date_r,
-            heure_debut=hd,
-            heure_fin=hf,
-            statut="validee",
+            loge=loge, salle=salle, date=date_r,
+            heure_debut=hd, heure_fin=hf, statut="validee",
             nom_demandeur=loge.nom if loge else org,
             email_demandeur="traiteur@kellermann.local",
             organisation=loge.nom if loge else org,
@@ -323,17 +383,93 @@ def reserver(request):
             nombre_participants=couverts,
             commentaire=note,
         )
-        messages.success(request, f"Réservation créée et validée sur {salle.nom} le {date_r:%d/%m/%Y}.")
+        messages.success(request, f"Réservation créée sur {salle.nom} le {date_r:%d/%m/%Y}.")
         return redirect("traiteur:planning")
 
     return render(request, "traiteur/reserver.html", {"form": form})
 
 
-# ── Blocage de créneaux ───────────────────────────────────────────────────────
+# ── Réservation multi-salles directe ─────────────────────────────────────────
+
+@traiteur_required
+def reserver_multi(request):
+    """Réservation directe sur plusieurs salles simultanées le même jour."""
+    import uuid as uuid_module
+
+    form = TraiteurMultiSalleForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        cd       = form.cleaned_data
+        loge     = cd.get("loge")
+        org      = cd.get("organisation") or ""
+        date_r   = cd["date"]
+        hd, hf   = cd["heure_debut"], cd["heure_fin"]
+        couverts = cd.get("nombre_participants") or 0
+        note     = cd.get("commentaire") or ""
+        salles   = cd["salles"]
+
+        nom      = loge.nom if loge else org
+        group_id = uuid_module.uuid4()
+
+        for salle in salles:
+            ReservationSalle.objects.create(
+                loge=loge, salle=salle, date=date_r,
+                heure_debut=hd, heure_fin=hf, statut="validee",
+                nom_demandeur=nom,
+                email_demandeur="traiteur@kellermann.local",
+                organisation=nom,
+                objet=note or "Réservation groupée",
+                nombre_participants=couverts,
+                commentaire=note,
+                group_uuid=group_id,
+            )
+
+        noms = ", ".join(s.nom for s in salles)
+        messages.success(request, f"{len(salles)} salle(s) réservée(s) ({noms}) le {date_r:%d/%m/%Y}.")
+        return redirect("traiteur:planning")
+
+    # Grouper les salles par type pour l'affichage
+    salles_par_type = {}
+    for salle in SalleReunion.objects.filter(actif=True).order_by("type_salle", "nom"):
+        label = salle.get_type_salle_display()
+        salles_par_type.setdefault(label, []).append(salle)
+
+    return render(request, "traiteur/reserver_multi.html", {
+        "form": form,
+        "salles_par_type": salles_par_type,
+    })
+
+
+# ── Couverts habituels par loge ───────────────────────────────────────────────
+
+@traiteur_required
+def loges_couverts(request):
+    """Liste des loges avec couverts habituels éditables par le traiteur."""
+    if request.method == "POST":
+        loge_pk  = request.POST.get("loge_pk", "").strip()
+        val      = request.POST.get("couverts", "").strip()
+        if loge_pk:
+            try:
+                loge = Loge.objects.get(pk=int(loge_pk), actif=True)
+                loge.couverts_habituels = int(val) if val else None
+                loge.save(update_fields=["couverts_habituels"])
+                messages.success(request, f"Mis à jour : {loge.nom}.")
+            except (Loge.DoesNotExist, ValueError):
+                messages.error(request, "Valeur invalide.")
+        return redirect("traiteur:loges_couverts")
+
+    loges = (
+        Loge.objects.filter(actif=True)
+        .select_related("obedience")
+        .order_by("nom")
+    )
+    return render(request, "traiteur/loges_couverts.html", {"loges": loges})
+
+
+# ── Blocages ──────────────────────────────────────────────────────────────────
 
 @traiteur_required
 def bloquer(request):
-    """Bloquer un créneau sur une ou plusieurs salles agapes."""
     form = BlocageCreneauxForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
@@ -344,98 +480,12 @@ def bloquer(request):
         messages.success(request, f"Créneau bloqué : {blocage.date} {blocage.heure_debut}–{blocage.heure_fin}.")
         return redirect("traiteur:calendrier")
 
-    blocages = BlocageCreneaux.objects.filter(
-        date__gte=date.today()
-    ).prefetch_related("salles").order_by("date")
-
+    blocages = (
+        BlocageCreneaux.objects.filter(date__gte=date.today())
+        .prefetch_related("salles")
+        .order_by("date")
+    )
     return render(request, "traiteur/bloquer.html", {"form": form, "blocages": blocages})
-
-
-@traiteur_required
-def export_agapes_excel(request):
-    """Export Excel agapes/banquets pour le traiteur — période et type filtrables."""
-    from datetime import datetime as dt, date as date_type
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from django.http import HttpResponse
-
-    today = date.today()
-    annee_courante = today.year if today.month >= 9 else today.year - 1
-    date_debut_s = request.GET.get('date_debut', '')
-    date_fin_s   = request.GET.get('date_fin', '')
-    type_export  = request.GET.get('type_export', 'tout')  # tout | agapes | banquet
-
-    try:
-        debut = dt.strptime(date_debut_s, '%Y-%m-%d').date() if date_debut_s else date_type(annee_courante, 9, 1)
-        fin   = dt.strptime(date_fin_s,   '%Y-%m-%d').date() if date_fin_s   else date_type(annee_courante + 1, 6, 30)
-    except ValueError:
-        debut = date_type(annee_courante, 9, 1)
-        fin   = date_type(annee_courante + 1, 6, 30)
-
-    lignes = []
-    if type_export in ('tout', 'agapes'):
-        for r in Reservation.objects.filter(
-            besoin_agapes=True, statut='validee', date__gte=debut, date__lte=fin
-        ).select_related('loge', 'temple').order_by('date'):
-            couverts = r.nombre_repas
-            if not couverts and r.loge and r.loge.effectif_moyen_agapes:
-                couverts = r.loge.effectif_moyen_agapes
-            lignes.append((
-                r.date.strftime('%d/%m/%Y'),
-                r.loge.nom if r.loge else (r.nom_organisation or r.nom_demandeur),
-                'Tenue + agapes',
-                couverts,
-                str(r.temple),
-                f"{r.heure_debut:%H:%M} – {r.heure_fin:%H:%M}",
-                r.commentaire,
-            ))
-    if type_export in ('tout', 'banquet'):
-        for b in ReservationSalle.objects.filter(
-            salle__type_salle='agapes', statut='validee', date__gte=debut, date__lte=fin
-        ).select_related('salle').order_by('date'):
-            lignes.append((
-                b.date.strftime('%d/%m/%Y'),
-                b.organisation or b.nom_demandeur,
-                "Banquet d'ordre",
-                b.nombre_participants,
-                str(b.salle),
-                f"{b.heure_debut:%H:%M} – {b.heure_fin:%H:%M}",
-                b.commentaire,
-            ))
-    lignes.sort(key=lambda x: x[0])
-
-    # Excel
-    wb  = openpyxl.Workbook()
-    ws  = wb.active
-    ws.title = f"Agapes {debut:%d/%m/%Y}-{fin:%d/%m/%Y}"
-    hf    = Font(bold=True, color="C8A84B")
-    hfill = PatternFill("solid", fgColor="0F2137")
-    ctr   = Alignment(horizontal="center", vertical="center")
-    thin  = Border(left=Side(style='thin'), right=Side(style='thin'),
-                   top=Side(style='thin'), bottom=Side(style='thin'))
-    headers = ["Date", "Loge / Organisation", "Type", "Couverts", "Lieu", "Horaires", "Commentaire"]
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.font = hf; cell.fill = hfill; cell.alignment = ctr; cell.border = thin
-    for i, w in enumerate([14, 36, 20, 12, 22, 18, 40], 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-    for row_idx, l in enumerate(lignes, 2):
-        for col, val in enumerate(l, 1):
-            c = ws.cell(row=row_idx, column=col, value=val)
-            c.border = thin
-            if col == 4:
-                c.alignment = ctr
-
-    # Total
-    row_idx = len(lignes) + 3
-    ws.cell(row=row_idx, column=1, value="TOTAL").font = Font(bold=True)
-    ws.cell(row=row_idx, column=4, value=sum(l[3] or 0 for l in lignes)).font = Font(bold=True)
-
-    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    fname = f"agapes_{debut:%d%m%Y}-{fin:%d%m%Y}.xlsx"
-    response['Content-Disposition'] = f'attachment; filename="{fname}"'
-    wb.save(response)
-    return response
 
 
 @traiteur_required
@@ -447,11 +497,157 @@ def supprimer_blocage(request, pk):
     return redirect("traiteur:bloquer")
 
 
+# ── Export Excel ──────────────────────────────────────────────────────────────
+
+@traiteur_required
+def export_agapes_excel(request):
+    """Export Excel agapes / tenues soir / banquets — période et type filtrables."""
+    from datetime import datetime as dt
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    from django.http import HttpResponse
+
+    today          = date.today()
+    annee_courante = today.year if today.month >= 9 else today.year - 1
+    debut_s        = request.GET.get('date_debut', '')
+    fin_s          = request.GET.get('date_fin', '')
+    type_export    = request.GET.get('type_export', 'soir')  # tout|agapes|banquet|soir
+
+    try:
+        debut = dt.strptime(debut_s, '%Y-%m-%d').date() if debut_s else date(annee_courante, 9, 1)
+        fin   = dt.strptime(fin_s,   '%Y-%m-%d').date() if fin_s   else date(annee_courante + 1, 6, 30)
+    except ValueError:
+        debut = date(annee_courante, 9, 1)
+        fin   = date(annee_courante + 1, 6, 30)
+
+    lignes = []
+
+    # Tenues temple
+    if type_export in ('tout', 'agapes', 'soir'):
+        qs_t = (
+            Reservation.objects.filter(statut='validee', date__gte=debut, date__lte=fin)
+            .select_related('loge', 'temple')
+            .order_by('date')
+        )
+        if type_export == 'agapes':
+            qs_t = qs_t.filter(besoin_agapes=True)
+        elif type_export == 'soir':
+            qs_t = qs_t.filter(Q(besoin_agapes=True) | Q(heure_debut__gte=HEURE_SOIR))
+
+        for r in qs_t:
+            couverts, est = _couverts_effectifs(r)
+            loge = r.loge
+            lignes.append({
+                "date":         r.date,
+                "organisation": loge.nom if loge else (r.nom_organisation or r.nom_demandeur or ''),
+                "type_label":   "✓ Agapes conf." if r.besoin_agapes else "~ Soir (probable)",
+                "couverts":     couverts,
+                "estimation":   est,
+                "lieu":         str(r.temple) if r.temple else '',
+                "horaires":     f"{r.heure_debut:%H:%M} – {r.heure_fin:%H:%M}",
+                "commentaire":  r.commentaire or '',
+                "contact_nom":  loge.nom_contact if loge else '',
+                "contact_email": loge.email if loge else '',
+                "contact_tel":  loge.telephone if loge else '',
+            })
+
+    # Banquets / salles agapes
+    if type_export in ('tout', 'banquet', 'soir'):
+        for b in (
+            ReservationSalle.objects.filter(
+                salle__type_salle='agapes', statut='validee', date__gte=debut, date__lte=fin
+            )
+            .select_related('loge', 'salle')
+            .order_by('date')
+        ):
+            couverts, est = _couverts_effectifs(b)
+            loge = b.loge
+            lignes.append({
+                "date":         b.date,
+                "organisation": loge.nom if loge else (b.organisation or b.nom_demandeur or ''),
+                "type_label":   "Banquet d'ordre",
+                "couverts":     couverts,
+                "estimation":   est,
+                "lieu":         str(b.salle),
+                "horaires":     f"{b.heure_debut:%H:%M} – {b.heure_fin:%H:%M}",
+                "commentaire":  b.commentaire or '',
+                "contact_nom":  loge.nom_contact if loge else '',
+                "contact_email": loge.email if loge else '',
+                "contact_tel":  loge.telephone if loge else '',
+            })
+
+    lignes.sort(key=lambda x: x["date"])
+
+    # ── Construction Excel ──────────────────────────────────────────────────
+    wb  = openpyxl.Workbook()
+    ws  = wb.active
+    ws.title = f"Agapes {debut:%d%m%Y}-{fin:%d%m%Y}"
+
+    BLEU = "0F2137"; OR = "C8A84B"; GRIS = "F1F5F9"
+    thin = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'),  bottom=Side(style='thin'),
+    )
+    ctr = Alignment(horizontal="center", vertical="center")
+
+    headers    = ["Date", "Loge / Organisation", "Type", "Couverts", "Est.",
+                  "Lieu", "Horaires", "Commentaire", "Contact", "Email", "Téléphone"]
+    col_widths = [14, 36, 22, 10, 6, 22, 18, 30, 22, 28, 16]
+
+    for col, (h, w) in enumerate(zip(headers, col_widths), 1):
+        c = ws.cell(row=1, column=col, value=h)
+        c.font      = Font(bold=True, color=OR)
+        c.fill      = PatternFill("solid", fgColor=BLEU)
+        c.alignment = ctr
+        c.border    = thin
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    for ri, l in enumerate(lignes, 2):
+        bg = GRIS if ri % 2 == 0 else "FFFFFF"
+        vals = [
+            l["date"].strftime('%d/%m/%Y'),
+            l["organisation"],
+            l["type_label"],
+            l["couverts"] if l["couverts"] else "?",
+            "estim." if l["estimation"] else ("?" if l["couverts"] is None else ""),
+            l["lieu"],
+            l["horaires"],
+            l["commentaire"],
+            l["contact_nom"],
+            l["contact_email"],
+            l["contact_tel"],
+        ]
+        for col, val in enumerate(vals, 1):
+            c = ws.cell(row=ri, column=col, value=val)
+            c.border = thin
+            c.fill   = PatternFill("solid", fgColor=bg)
+            if col in (4, 5):
+                c.alignment = ctr
+
+    # Ligne TOTAL
+    row_tot = len(lignes) + 3
+    c = ws.cell(row=row_tot, column=1, value="TOTAL")
+    c.font = Font(bold=True)
+    total_cov = sum(l["couverts"] for l in lignes if l["couverts"])
+    c = ws.cell(row=row_tot, column=4, value=total_cov)
+    c.font = Font(bold=True)
+    inconnus = sum(1 for l in lignes if not l["couverts"])
+    if inconnus:
+        ws.cell(row=row_tot, column=5, value=f"({inconnus} sans données)")
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="agapes_{debut:%d%m%Y}-{fin:%d%m%Y}.xlsx"'
+    wb.save(response)
+    return response
+
+
 # ── Notification couverts (accessible aux membres) ────────────────────────────
 
 @membre_ou_traiteur_required
 def notification(request):
-    """Formulaire permettant à un membre de notifier le traiteur d'un changement de couverts."""
     form = NotificationCouvertsForm(request.POST or None)
 
     if request.method == "POST" and form.is_valid():
@@ -463,16 +659,11 @@ def notification(request):
             commentaire=cd.get("commentaire") or "",
             email_contact=cd["email_contact"],
         )
-
-        # Email au traiteur
         _envoyer_email_notification_traiteur(notif)
-        # Email de confirmation au demandeur
         _envoyer_email_confirmation_demandeur(notif)
-
         messages.success(
             request,
-            f"Votre notification a été transmise au traiteur. "
-            f"Un email de confirmation a été envoyé à {notif.email_contact}."
+            f"Notification transmise. Confirmation envoyée à {notif.email_contact}."
         )
         return redirect("traiteur:notification_confirmee")
 
@@ -484,17 +675,16 @@ def notification_confirmee(request):
     return render(request, "traiteur/notification_confirmee.html")
 
 
-# ── Emails notifications ──────────────────────────────────────────────────────
+# ── Emails ────────────────────────────────────────────────────────────────────
 
 def _envoyer_email_notification_traiteur(notif):
-    """Envoie un email au traiteur pour signaler la notification."""
     try:
         from temple_project.apps.administration.email_utils import (
-            send_mail_kellermann, get_email_admin
+            send_mail_kellermann, get_email_admin,
         )
         sujet = f"[Traiteur] Notification couverts — {notif.loge} — {notif.date_tenue:%d/%m/%Y}"
         corps = (
-            f"Une notification de couverts a été envoyée.\n\n"
+            f"Notification de couverts.\n\n"
             f"Loge       : {notif.loge}\n"
             f"Date tenue : {notif.date_tenue:%d/%m/%Y}\n"
             f"Couverts   : {notif.nombre_couverts}\n"
@@ -507,7 +697,6 @@ def _envoyer_email_notification_traiteur(notif):
 
 
 def _envoyer_email_confirmation_demandeur(notif):
-    """Envoie un email de confirmation au demandeur."""
     try:
         from temple_project.apps.administration.email_utils import send_mail_kellermann
         sujet = f"[Kellermann] Notification reçue — {notif.date_tenue:%d/%m/%Y}"

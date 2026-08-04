@@ -242,6 +242,58 @@ class BlocageCreneauxForm(forms.ModelForm):
         return cleaned
 
 
+class TraiteurMultiSalleForm(forms.Form):
+    """Réservation directe traiteur sur plusieurs salles le même jour."""
+
+    loge = forms.ModelChoiceField(
+        queryset=Loge.objects.filter(actif=True).order_by("nom"),
+        required=False, label="Loge",
+        widget=forms.Select(attrs={"class": "form-select"}),
+        empty_label="— Aucune loge —",
+    )
+    organisation = forms.CharField(
+        max_length=200, required=False, label="Organisation / nom libre",
+        widget=forms.TextInput(attrs={"class": "form-control",
+                                      "placeholder": "Si la loge n'est pas dans la liste"})
+    )
+    salles = forms.ModelMultipleChoiceField(
+        queryset=SalleReunion.objects.filter(actif=True).order_by("type_salle", "nom"),
+        required=True, label="Salles à réserver",
+        widget=forms.CheckboxSelectMultiple(),
+    )
+    date = forms.DateField(
+        label="Date",
+        widget=forms.DateInput(attrs={"class": "form-control", "type": "date"})
+    )
+    heure_debut = forms.ChoiceField(
+        choices=HORAIRES_GROUPED, label="Heure de début",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    heure_fin = forms.ChoiceField(
+        choices=HORAIRES_GROUPED, label="Heure de fin",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    nombre_participants = forms.IntegerField(
+        min_value=0, required=False, initial=0, label="Nombre de participants",
+        widget=forms.NumberInput(attrs={"class": "form-control"})
+    )
+    commentaire = forms.CharField(
+        required=False, label="Commentaire",
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 3,
+                                     "placeholder": "Informations complémentaires…"})
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        hd = cleaned.get("heure_debut")
+        hf = cleaned.get("heure_fin")
+        if hd and hf and hf <= hd:
+            self.add_error("heure_fin", "L'heure de fin doit être après l'heure de début.")
+        if not cleaned.get("loge") and not cleaned.get("organisation"):
+            self.add_error("organisation", "Indiquez une loge ou un nom d'organisation.")
+        return cleaned
+
+
 class NotificationCouvertsForm(forms.Form):
     """Formulaire permettant à un membre de notifier le traiteur d'un changement de couverts."""
 
