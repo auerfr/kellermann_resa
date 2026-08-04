@@ -139,7 +139,7 @@
     </div>
 
     {% elif evt.type == "salle" %}
-      {% if evt.obj.type_reunion == "banquet" %}
+      {% if evt.is_banquet %}
     <div class="agenda-card ac-banquet {% if evt.statut == 'attente' %}ac-attente{% endif %}"
          data-bs-toggle="modal" data-bs-target="#evtModal"
          data-etype="banquet"
@@ -352,7 +352,7 @@
               </div>
 
               {% elif evt.type == "salle" %}
-                {% if evt.obj.type_reunion == "banquet" %}
+                {% if evt.is_banquet %}
               <div class="evt evt-banquet"
                    data-bs-toggle="modal" data-bs-target="#evtModal"
                    data-etype="banquet"
@@ -517,7 +517,7 @@
             </tr>
 
             {% elif evt.type == "salle" %}
-              {% if evt.obj.type_reunion == "banquet" %}
+              {% if evt.is_banquet %}
             <tr style="background:#FFFBEB;">
               <td><strong>{{ date_jour|date:"D d/m" }}</strong></td>
               <td>{{ evt.obj.heure_debut|time:"H\hi" }}–{{ evt.obj.heure_fin|time:"H\hi" }}</td>

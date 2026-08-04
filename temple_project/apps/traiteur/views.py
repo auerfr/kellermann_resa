@@ -270,9 +270,11 @@ def calendrier(request):
         nom_c, email_c, tel_c = _contact_loge(r.loge)
         tr = getattr(r, 'type_reunion', '')
         salle_type = getattr(r.salle, 'type_salle', '') if r.salle else ''
-        salle_status = "confirme" if (salle_type == 'agapes' or tr == 'banquet') else "probable"
+        is_banquet = (salle_type == 'agapes' or tr == 'banquet')
+        salle_status = "confirme" if is_banquet else "probable"
         events_by_date.setdefault(r.date, []).append({
             "type": "salle", "obj": r,
+            "is_banquet": is_banquet,
             "agapes": True, "agapes_status": salle_status,
             "statut": r.statut,
             "couverts": couverts, "estimation": est,
