@@ -264,6 +264,14 @@ class ReservationSalle(models.Model):
         ("refusee", "Refusée"),
     ]
 
+    TYPE_REUNION_CHOICES = [
+        ("reunion",  "Réunion de travail"),
+        ("chantier", "Chantier (apprentis / compagnons)"),
+        ("conseil",  "Conseil d'officiers"),
+        ("banquet",  "Banquet d'ordre"),
+        ("autre",    "Autre"),
+    ]
+
     HORAIRES_SUGGERES = [
         ("09:00", "09h00"),
         ("10:00", "10h00"),
@@ -303,6 +311,10 @@ class ReservationSalle(models.Model):
         related_name='reservations_preferees',
     )
     commentaire     = models.TextField(blank=True)
+    type_reunion    = models.CharField(
+        max_length=20, choices=TYPE_REUNION_CHOICES, default="reunion", blank=True,
+        help_text="Nature de la réunion (permet au traiteur d'anticiper les besoins)"
+    )
     facturable      = models.BooleanField(
         default=True,
         help_text="Cocher si cette réservation doit être facturée (à décocher pour les réunions internes non facturées)"
@@ -374,6 +386,48 @@ class RegleRecurrenceSalle(models.Model):
             f"{self.loge} – "
             f"{self.get_numero_semaine_display()} "
             f"{self.get_jour_semaine_display()}"
+        )
+
+
+class DemandeRegleRecurrenceSalle(models.Model):
+    """Demande front-end (portail loge) pour créer une règle de récurrence sur des salles."""
+    STATUT_CHOICES = [
+        ("attente", "En attente"),
+        ("validee", "Validée"),
+        ("refusee", "Refusée"),
+    ]
+
+    uuid             = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    loge             = models.ForeignKey(Loge, on_delete=models.CASCADE, related_name="demandes_regle_salle")
+    salles           = models.ManyToManyField(SalleReunion, blank=False, related_name="demandes_recurrence")
+    jour_semaine     = models.PositiveSmallIntegerField(choices=RegleRecurrenceSalle.JOUR_CHOICES)
+    numero_semaine   = models.SmallIntegerField(choices=RegleRecurrenceSalle.SEMAINE_CHOICES)
+    heure_debut      = models.TimeField()
+    heure_fin        = models.TimeField()
+    mois_actifs      = models.JSONField(default=list, blank=True)
+    objet            = models.CharField(max_length=300, blank=True, default="Réunion")
+    nombre_participants = models.PositiveSmallIntegerField(default=0)
+    type_reunion     = models.CharField(max_length=20, choices=ReservationSalle.TYPE_REUNION_CHOICES, default="reunion")
+    nom_demandeur    = models.CharField(max_length=100)
+    email_demandeur  = models.EmailField()
+    commentaire      = models.TextField(blank=True)
+    statut           = models.CharField(max_length=10, choices=STATUT_CHOICES, default="attente")
+    date_demande     = models.DateTimeField(auto_now_add=True)
+    regle_creee      = models.ForeignKey(
+        RegleRecurrenceSalle, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="demande_source"
+    )
+    commentaire_admin = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Demande de récurrence salle"
+        verbose_name_plural = "Demandes de récurrence salles"
+        ordering = ["-date_demande"]
+
+    def __str__(self):
+        return (
+            f"{self.loge} – {self.get_numero_semaine_display()} "
+            f"{self.get_jour_semaine_display()} [{self.get_statut_display()}]"
         )
 
 

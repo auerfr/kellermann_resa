@@ -13,6 +13,7 @@ from temple_project.apps.reservations.models import (
     Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle,
     DemandeAccesPortail, ValidationSaison, ValidationSaisonLigne,
     Indisponibilite, BlocageCreneaux, RegleRecurrenceSalle,
+    DemandeRegleRecurrenceSalle,
 )
 from temple_project.apps.loges.models import Loge, Obedience
 from .models import Parametres, JournalEvenement, Annonce
@@ -48,6 +49,7 @@ def tableau_de_bord(request):
         statut='attente'
     ).select_related('salle').order_by('date')
     demandes_portail_attente = DemandeAccesPortail.objects.filter(statut='attente').order_by('created_at')
+    demandes_recsalle_attente = DemandeRegleRecurrenceSalle.objects.filter(statut='attente').select_related('loge').order_by('date_demande')
     from temple_project.apps.reservations.models import MessageContact
     messages_nouveaux = MessageContact.objects.filter(statut='nouveau').order_by('-created_at')
     context = {
@@ -61,6 +63,8 @@ def tableau_de_bord(request):
         'nb_attente_salles':        reservations_salle_attente.count(),
         'demandes_portail':         demandes_portail_attente,
         'nb_demandes_portail':      demandes_portail_attente.count(),
+        'demandes_recsalle':        demandes_recsalle_attente,
+        'nb_demandes_recsalle':     demandes_recsalle_attente.count(),
         'messages_nouveaux':        messages_nouveaux,
         'nb_messages_nx':           messages_nouveaux.count(),
     }
@@ -5539,4 +5543,82 @@ def reserver_multi_salles(request):
     return render(request, 'administration/reserver_multi_salles.html', {
         'loges': loges,
         'salles_par_type': salles_par_type,
+    })
+
+
+# ── Validation demandes récurrence salle (portail loge) ──────────────────────
+
+@staff_required
+def valider_demande_recurrence_salle(request, pk):
+    """L'admin valide ou refuse une demande de règle de récurrence salle soumise depuis le portail."""
+    from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin
+    demande = get_object_or_404(DemandeRegleRecurrenceSalle, pk=pk)
+
+    if request.method == 'POST':
+        action            = request.POST.get('action')
+        commentaire_admin = request.POST.get('commentaire_admin', '').strip()
+
+        if action not in ('valider', 'refuser'):
+            messages.error(request, "Action invalide.")
+            return redirect('administration:tableau_de_bord')
+
+        demande.statut           = 'validee' if action == 'valider' else 'refusee'
+        demande.commentaire_admin = commentaire_admin
+        demande.save()
+
+        if action == 'valider':
+            # Créer la RegleRecurrenceSalle correspondante
+            regle = RegleRecurrenceSalle.objects.create(
+                loge=demande.loge,
+                jour_semaine=demande.jour_semaine,
+                numero_semaine=demande.numero_semaine,
+                heure_debut=demande.heure_debut,
+                heure_fin=demande.heure_fin,
+                mois_actifs=demande.mois_actifs,
+                objet=demande.objet,
+                nombre_participants=demande.nombre_participants,
+                actif=True,
+            )
+            regle.salles.set(demande.salles.all())
+            demande.regle_creee = regle
+            demande.save(update_fields=['regle_creee'])
+
+            noms_salles = ', '.join(s.nom for s in demande.salles.all())
+            send_mail_kellermann(
+                subject="[Kellermann] Votre demande de récurrence salle a été validée",
+                message=(
+                    f"Bonjour {demande.nom_demandeur},\n\n"
+                    f"Votre demande de règle de récurrence salle a été validée.\n\n"
+                    f"Salle(s)  : {noms_salles}\n"
+                    f"Fréquence : {regle.get_numero_semaine_display()} {regle.get_jour_semaine_display()}\n"
+                    f"Horaires  : {regle.heure_debut:%H:%M} – {regle.heure_fin:%H:%M}\n"
+                    f"Objet     : {regle.objet}\n"
+                    + (f"\nCommentaire : {commentaire_admin}\n" if commentaire_admin else "")
+                    + f"\nLa règle sera appliquée lors de la prochaine génération des réservations.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[demande.email_demandeur],
+            )
+            log_evenement('validation_regle_salle',
+                f"Règle récurrence salle validée : {demande.loge} — {regle.get_numero_semaine_display()} {regle.get_jour_semaine_display()} — {noms_salles}",
+                request=request, objet=regle)
+            messages.success(request, f"Demande validée — règle de récurrence créée pour {demande.loge}.")
+        else:
+            send_mail_kellermann(
+                subject="[Kellermann] Votre demande de récurrence salle",
+                message=(
+                    f"Bonjour {demande.nom_demandeur},\n\n"
+                    f"Votre demande de règle de récurrence salle n'a pas pu être accordée.\n\n"
+                    + (f"Motif : {commentaire_admin}\n\n" if commentaire_admin else "")
+                    + f"Pour toute question, contactez l'administration.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[demande.email_demandeur],
+            )
+            messages.warning(request, f"Demande refusée — email envoyé à {demande.email_demandeur}.")
+
+        return redirect('administration:tableau_de_bord')
+
+    return render(request, 'administration/valider_demande_recurrence_salle.html', {
+        'demande': demande,
     })

@@ -94,16 +94,19 @@ def _contact_loge(loge):
 
 
 def _agapes_status(r):
-    """'confirme' | 'probable' | 'aucune' pour une Reservation temple."""
+    """'confirme' | 'probable_classique' | 'probable' | 'aucune' pour une Reservation temple."""
     if r.besoin_agapes:
         return "confirme"
     if r.heure_debut >= HEURE_SOIR:
+        # Tenue récurrente (issue d'une règle) = agapes classiques probables
+        if getattr(r, 'regle_source_id', None):
+            return "probable_classique"
         return "probable"
     return "aucune"
 
 
 def _build_repas(r, type_label):
-    """Construit un dict unifié pour la vue planning (temple ou salle agapes)."""
+    """Construit un dict unifié pour la vue planning (temple ou salle)."""
     couverts, estimation = _couverts_effectifs(r)
     if type_label == "Temple":
         loge = r.loge
@@ -114,7 +117,9 @@ def _build_repas(r, type_label):
         loge = r.loge
         lieu = str(r.salle) if r.salle else "—"
         org  = loge.nom if loge else (r.organisation or r.nom_demandeur or "—")
-        status = "confirme"
+        # Banquet d'ordre en salle = agapes confirmées ; salle agapes standard aussi
+        tr = getattr(r, 'type_reunion', '')
+        status = "confirme" if (getattr(r.salle, 'type_salle', '') == 'agapes' or tr == 'banquet') else "probable"
 
     nom_c, email_c, tel_c = _contact_loge(loge)
     return {
@@ -152,14 +157,14 @@ def tableau_de_bord(request):
         .order_by("date", "heure_debut")
     )
 
-    # Banquets/agapes salles (30 j.)
+    # Banquets/agapes salles (30 j.) : salles agapes + banquets d'ordre en salle réunion
     tenues_salle = (
         ReservationSalle.objects.filter(
             statut="validee",
             date__gte=today,
             date__lte=horizon,
-            salle__type_salle="agapes",
         )
+        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -169,7 +174,7 @@ def tableau_de_bord(request):
     repas_a_venir.sort(key=lambda x: (x["date"], x["heure_debut"]))
 
     nb_confirmes = sum(1 for r in repas_a_venir if r["agapes_status"] == "confirme")
-    nb_probables = sum(1 for r in repas_a_venir if r["agapes_status"] == "probable")
+    nb_probables = sum(1 for r in repas_a_venir if r["agapes_status"] in ("probable", "probable_classique"))
 
     blocages = (
         BlocageCreneaux.objects.filter(date__gte=today)
@@ -324,8 +329,8 @@ def planning(request):
     qs_salle = (
         ReservationSalle.objects.filter(
             statut="validee", date__gte=premier_jour, date__lte=dernier_jour,
-            salle__type_salle="agapes",
         )
+        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -339,7 +344,7 @@ def planning(request):
         if r["agapes_status"] == "confirme" and not r["estimation"] and r["couverts"]
     )
     total_estimations = sum(r["couverts"] for r in repas if r["estimation"] and r["couverts"])
-    nb_probables      = sum(1 for r in repas if r["agapes_status"] == "probable")
+    nb_probables      = sum(1 for r in repas if r["agapes_status"] in ("probable", "probable_classique"))
     nb_inconnus       = sum(1 for r in repas if r["couverts"] is None)
 
     return render(request, "traiteur/planning.html", {

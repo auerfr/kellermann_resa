@@ -615,6 +615,24 @@
               </div>
             </a>
           </div>
+          <div class="col-md-4">
+            <a href="{% url 'reservations:portail_demande_salle' token=demande.token %}" class="text-decoration-none">
+              <div class="card border-0 shadow-sm card-action text-center px-3 py-4">
+                <div style="font-size:2rem;">🏛</div>
+                <div class="fw-semibold mt-2" style="color:#0F2137;">Réserver une salle</div>
+                <div class="small text-muted mt-1">Salle de réunion, banquet d'ordre — une ou plusieurs salles pour le même créneau.</div>
+              </div>
+            </a>
+          </div>
+          <div class="col-md-4">
+            <a href="{% url 'reservations:portail_demande_recurrence_salle' token=demande.token %}" class="text-decoration-none">
+              <div class="card border-0 shadow-sm card-action text-center px-3 py-4">
+                <div style="font-size:2rem;">🔁</div>
+                <div class="fw-semibold mt-2" style="color:#0F2137;">Récurrence salle</div>
+                <div class="small text-muted mt-1">Chantier mensuel, conseil d'officiers, banquet d'ordre régulier — à date fixe chaque mois.</div>
+              </div>
+            </a>
+          </div>
         </div>
       </div>
     </div>

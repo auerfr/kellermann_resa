@@ -7,7 +7,8 @@ from django.db.models import Q, Sum
 from .emails import envoyer_email_nouvelle_demande
 from .models import (
     Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence,
-    RegleRecurrence, Temple, DemandeAccesPortail,
+    RegleRecurrence, RegleRecurrenceSalle, DemandeRegleRecurrenceSalle,
+    Temple, DemandeAccesPortail,
     ValidationSaison, ValidationSaisonLigne, MessageContact,
 )
 from temple_project.apps.loges.models import Loge
@@ -1042,4 +1043,252 @@ def portail_loge(request, token):
         'today':                 today,
         'rites':                 Loge.RITE_CHOICES,
         'tarifs':                Parametres.get_instance(),
+    })
+
+
+# ── Portail loge : demande de salle (multi-salles + type réunion) ─────────────
+
+def portail_demande_salle(request, token):
+    """Depuis le portail loge, une loge demande une ou plusieurs salles de réunion."""
+    import uuid as uuid_module
+    from datetime import date as date_cls, time as time_cls
+
+    demande_acces = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    loge = demande_acces.loge
+
+    salles_reunion = list(SalleReunion.objects.filter(
+        type_salle__in=['reunion', 'agapes'], actif=True
+    ).order_by('type_salle', 'nom'))
+    salles_par_type = {}
+    for s in salles_reunion:
+        salles_par_type.setdefault(s.get_type_salle_display(), []).append(s)
+
+    HORAIRES = [
+        ("Matin",      [("08:00","08h00"),("09:00","09h00"),("10:00","10h00"),("11:00","11h00")]),
+        ("Après-midi", [("14:00","14h00"),("15:00","15h00"),("16:00","16h00"),("17:00","17h00")]),
+        ("Soir",       [("18:00","18h00"),("18:30","18h30"),("19:00","19h00"),("19:30","19h30"),
+                        ("20:00","20h00"),("21:00","21h00"),("22:00","22h00"),("22:30","22h30")]),
+    ]
+
+    if request.method == 'POST':
+        salle_pks     = request.POST.getlist('salles')
+        date_str      = request.POST.get('date', '').strip()
+        hd_str        = request.POST.get('heure_debut', '').strip()
+        hf_str        = request.POST.get('heure_fin', '').strip()
+        objet         = request.POST.get('objet', '').strip()
+        type_reunion  = request.POST.get('type_reunion', 'reunion')
+        participants  = request.POST.get('nombre_participants', '1').strip()
+        commentaire   = request.POST.get('commentaire', '').strip()
+        nom_dem       = (loge.nom_contact if loge else '').strip() or demande_acces.nom_venerable
+        email_dem     = (loge.email if loge else '').strip() or ''
+
+        errors = []
+        if not salle_pks:
+            errors.append("Sélectionnez au moins une salle.")
+        try:
+            date_r = date_cls.fromisoformat(date_str)
+            if date_r < date_cls.today():
+                errors.append("La date ne peut pas être dans le passé.")
+        except (ValueError, TypeError):
+            date_r = None
+            errors.append("Date invalide.")
+        try:
+            hd = time_cls.fromisoformat(hd_str)
+            hf = time_cls.fromisoformat(hf_str)
+            if hf <= hd:
+                errors.append("L'heure de fin doit être après l'heure de début.")
+        except (ValueError, TypeError):
+            hd = hf = None
+            errors.append("Horaires invalides.")
+        if not objet:
+            errors.append("L'objet de la réunion est obligatoire.")
+        if not email_dem:
+            errors.append("Email de contact manquant — mettez à jour les infos de la loge.")
+
+        salles_sel = list(SalleReunion.objects.filter(pk__in=salle_pks, actif=True))
+
+        if not errors and date_r and hd and hf and salles_sel:
+            try:
+                nb_part = int(participants)
+            except ValueError:
+                nb_part = 1
+            nom = loge.nom if loge else demande_acces.nom_venerable
+            group_id = uuid_module.uuid4()
+            created = []
+            for salle in salles_sel:
+                rs = ReservationSalle.objects.create(
+                    loge=loge, salle=salle, date=date_r,
+                    heure_debut=hd, heure_fin=hf, statut='attente',
+                    nom_demandeur=nom_dem,
+                    email_demandeur=email_dem,
+                    organisation=nom,
+                    objet=objet,
+                    type_reunion=type_reunion,
+                    nombre_participants=nb_part,
+                    commentaire=commentaire,
+                    group_uuid=group_id,
+                )
+                created.append(rs)
+
+            # Email confirmation au demandeur
+            noms_salles = ', '.join(s.nom for s in salles_sel)
+            send_mail_kellermann(
+                subject=f"[Kellermann] Confirmation de votre demande de salle — {date_r:%d/%m/%Y}",
+                message=(
+                    f"Bonjour {nom_dem},\n\n"
+                    f"Votre demande de salle a bien été reçue.\n\n"
+                    f"Salle(s) : {noms_salles}\n"
+                    f"Date     : {date_r:%d/%m/%Y}\n"
+                    f"Horaires : {hd:%H:%M} – {hf:%H:%M}\n"
+                    f"Objet    : {objet}\n\n"
+                    f"Vous serez notifié(e) par email à la validation.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[email_dem],
+            )
+            # Email à l'admin
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande de salle — {loge or nom} — {date_r:%d/%m/%Y}",
+                message=(
+                    f"Nouvelle demande de salle depuis le portail loge.\n\n"
+                    f"Loge     : {loge or nom}\n"
+                    f"Salle(s) : {noms_salles}\n"
+                    f"Date     : {date_r:%d/%m/%Y}\n"
+                    f"Horaires : {hd:%H:%M} – {hf:%H:%M}\n"
+                    f"Type     : {dict(ReservationSalle.TYPE_REUNION_CHOICES).get(type_reunion, type_reunion)}\n"
+                    f"Objet    : {objet}\n"
+                    f"Contact  : {nom_dem} — {email_dem}\n"
+                ),
+                recipient_list=[get_email_admin()],
+            )
+            messages.success(request, f"Demande de salle envoyée pour le {date_r:%d/%m/%Y}.")
+            return redirect('reservations:portail_loge', token=token)
+
+        for err in errors:
+            messages.error(request, err)
+
+    return render(request, 'reservations/portail_demande_salle.html', {
+        'demande_acces':  demande_acces,
+        'loge':           loge,
+        'salles_par_type': salles_par_type,
+        'horaires':        HORAIRES,
+        'type_reunion_choices': ReservationSalle.TYPE_REUNION_CHOICES,
+        'token':           token,
+    })
+
+
+# ── Portail loge : demande de règle de récurrence salle ──────────────────────
+
+def portail_demande_recurrence_salle(request, token):
+    """Depuis le portail loge, demande d'une règle de récurrence sur des salles."""
+    demande_acces = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    loge = demande_acces.loge
+
+    salles_reunion = list(SalleReunion.objects.filter(
+        type_salle__in=['reunion', 'agapes'], actif=True
+    ).order_by('type_salle', 'nom'))
+    salles_par_type = {}
+    for s in salles_reunion:
+        salles_par_type.setdefault(s.get_type_salle_display(), []).append(s)
+
+    MOIS = [
+        (9,'Septembre'),(10,'Octobre'),(11,'Novembre'),(12,'Décembre'),
+        (1,'Janvier'),(2,'Février'),(3,'Mars'),(4,'Avril'),(5,'Mai'),(6,'Juin'),
+    ]
+
+    if request.method == 'POST':
+        salle_pks      = request.POST.getlist('salles')
+        jour_semaine   = request.POST.get('jour_semaine', '').strip()
+        numero_semaine = request.POST.get('numero_semaine', '').strip()
+        hd_str         = request.POST.get('heure_debut', '19:30').strip()
+        hf_str         = request.POST.get('heure_fin', '22:30').strip()
+        mois_actifs    = [int(m) for m in request.POST.getlist('mois_actifs') if m.isdigit()]
+        objet          = request.POST.get('objet', '').strip() or 'Réunion'
+        type_reunion   = request.POST.get('type_reunion', 'reunion')
+        participants   = request.POST.get('nombre_participants', '0').strip()
+        commentaire    = request.POST.get('commentaire', '').strip()
+        nom_dem        = (loge.nom_contact if loge else '').strip() or demande_acces.nom_venerable
+        email_dem      = (loge.email if loge else '').strip() or ''
+
+        errors = []
+        if not loge:
+            errors.append("Aucune loge n'est associée à ce portail.")
+        if not salle_pks:
+            errors.append("Sélectionnez au moins une salle.")
+        if not jour_semaine or not jour_semaine.lstrip('-').isdigit():
+            errors.append("Jour de la semaine manquant.")
+        if not numero_semaine or not numero_semaine.lstrip('-').isdigit():
+            errors.append("Numéro de semaine manquant.")
+        if not email_dem:
+            errors.append("Email de contact manquant — mettez à jour les infos de la loge.")
+
+        salles_sel = list(SalleReunion.objects.filter(pk__in=salle_pks, actif=True))
+
+        if not errors and loge and salles_sel:
+            try:
+                nb_part = int(participants)
+            except ValueError:
+                nb_part = 0
+            demande = DemandeRegleRecurrenceSalle.objects.create(
+                loge=loge,
+                jour_semaine=int(jour_semaine),
+                numero_semaine=int(numero_semaine),
+                heure_debut=hd_str,
+                heure_fin=hf_str,
+                mois_actifs=mois_actifs or [],
+                objet=objet,
+                type_reunion=type_reunion,
+                nombre_participants=nb_part,
+                nom_demandeur=nom_dem,
+                email_demandeur=email_dem,
+                commentaire=commentaire,
+                statut='attente',
+            )
+            demande.salles.set(salles_sel)
+
+            noms_salles = ', '.join(s.nom for s in salles_sel)
+            # Email confirmation
+            send_mail_kellermann(
+                subject="[Kellermann] Confirmation de votre demande de récurrence salle",
+                message=(
+                    f"Bonjour {nom_dem},\n\n"
+                    f"Votre demande de règle de récurrence salle a bien été reçue.\n\n"
+                    f"Salle(s) : {noms_salles}\n"
+                    f"Fréquence : {demande.get_numero_semaine_display()} {demande.get_jour_semaine_display()}\n"
+                    f"Horaires : {hd_str} – {hf_str}\n"
+                    f"Objet    : {objet}\n\n"
+                    f"L'administration vous contactera après validation.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[email_dem],
+            )
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande récurrence salle — {loge}",
+                message=(
+                    f"Nouvelle demande de règle de récurrence salle.\n\n"
+                    f"Loge     : {loge}\n"
+                    f"Salle(s) : {noms_salles}\n"
+                    f"Fréquence : {demande.get_numero_semaine_display()} {demande.get_jour_semaine_display()}\n"
+                    f"Horaires : {hd_str} – {hf_str}\n"
+                    f"Type     : {dict(ReservationSalle.TYPE_REUNION_CHOICES).get(type_reunion, type_reunion)}\n"
+                    f"Objet    : {objet}\n"
+                    f"Contact  : {nom_dem} — {email_dem}\n"
+                ),
+                recipient_list=[get_email_admin()],
+            )
+            messages.success(request, "Demande de récurrence salle envoyée — l'administration vous contactera.")
+            return redirect('reservations:portail_loge', token=token)
+
+        for err in errors:
+            messages.error(request, err)
+
+    return render(request, 'reservations/portail_demande_recurrence_salle.html', {
+        'demande_acces':  demande_acces,
+        'loge':           loge,
+        'salles_par_type': salles_par_type,
+        'mois':            MOIS,
+        'type_reunion_choices': ReservationSalle.TYPE_REUNION_CHOICES,
+        'jour_choices':    RegleRecurrenceSalle.JOUR_CHOICES,
+        'semaine_choices': RegleRecurrenceSalle.SEMAINE_CHOICES,
+        'token':           token,
     })

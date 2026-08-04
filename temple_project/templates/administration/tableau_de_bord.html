@@ -171,6 +171,32 @@
 </div>
 {% endif %}
 
+{% if demandes_recsalle %}
+<div class="stx-card mb-4" style="border-left:4px solid #8B5CF6;overflow:hidden;">
+  <div class="d-flex justify-content-between align-items-center" style="padding:13px 16px;border-bottom:1px solid #F3F5F8;">
+    <span class="stx-h" style="color:#6D28D9;">🔁 Demandes récurrence salle en attente <span class="ms-1" style="background:#EDE9FE;color:#6D28D9;font-size:12px;font-weight:600;padding:3px 9px;border-radius:7px;">{{ nb_demandes_recsalle }}</span></span>
+    <span style="font-size:11px;color:#7C3AED;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Action requise</span>
+  </div>
+  <div class="table-responsive">
+    <table class="stx-tbl">
+      <thead><tr><th>Loge</th><th>Fréquence</th><th>Salle(s)</th><th>Type</th><th>Soumis le</th><th></th></tr></thead>
+      <tbody>
+        {% for d in demandes_recsalle %}
+        <tr>
+          <td style="font-weight:600;color:#0F2137;">{{ d.loge }}</td>
+          <td>{{ d.get_numero_semaine_display }} {{ d.get_jour_semaine_display }}</td>
+          <td class="small">{% for s in d.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+          <td>{{ d.get_type_reunion_display }}</td>
+          <td style="color:#64748B;">{{ d.date_demande|date:"d/m à H:i" }}</td>
+          <td class="text-end"><a href="{% url 'administration:valider_demande_recurrence_salle' d.pk %}" class="btn btn-sm fw-semibold" style="font-size:12px;background:#EDE9FE;color:#6D28D9;">Traiter →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {% if attente_salles %}
 <div class="stx-card mb-4" style="border-left:4px solid #F59E0B;overflow:hidden;">
   <div class="d-flex justify-content-between align-items-center" style="padding:13px 16px;border-bottom:1px solid #F3F5F8;">

@@ -77,4 +77,12 @@ urlpatterns = [
     path("recurrence/suivi/<uuid:uuid>/",
          views.suivi_recurrence,
          name="suivi_recurrence"),
+
+    # Portail loge — demande salle + récurrence salle
+    path("portail/<uuid:token>/demande-salle/",
+         views.portail_demande_salle,
+         name="portail_demande_salle"),
+    path("portail/<uuid:token>/demande-recurrence-salle/",
+         views.portail_demande_recurrence_salle,
+         name="portail_demande_recurrence_salle"),
 ]

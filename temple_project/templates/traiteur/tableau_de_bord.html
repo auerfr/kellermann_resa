@@ -104,6 +104,8 @@
               {{ r.organisation }}
               {% if r.agapes_status == 'confirme' %}
                 <span class="badge" style="background:#22C55E;font-size:9px;">✓ Agapes</span>
+              {% elif r.agapes_status == 'probable_classique' %}
+                <span class="badge" style="background:#7C3AED;color:white;font-size:9px;">~ Agapes probables classiques</span>
               {% elif r.agapes_status == 'probable' %}
                 <span class="badge" style="background:#C8A84B;color:#0F2137;font-size:9px;">~ Probable</span>
               {% endif %}
