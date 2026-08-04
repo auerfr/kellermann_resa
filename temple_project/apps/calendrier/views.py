@@ -7,7 +7,7 @@ import calendar
 
 from temple_project.apps.reservations.models import (
     Reservation, Temple, Indisponibilite,
-    SalleReunion, ReservationSalle,
+    SalleReunion, ReservationSalle, BlocageCreneaux,
 )
 from temple_project.apps.loges.models import Loge, Obedience
 
@@ -192,7 +192,39 @@ def api_evenements(request):
             },
         })
 
-    # ── 4. Jours fériés et vacances scolaires Zone B ─────────────────────────
+    # ── 4. Blocages traiteur ─────────────────────────────────────────────────
+    blocages_qs = BlocageCreneaux.objects.filter(
+        date__lte=end,
+    ).filter(
+        Q(date_fin__gte=start) | Q(date_fin__isnull=True, date__gte=start)
+    ).prefetch_related("salles", "temples")
+
+    for b in blocages_qs:
+        b_fin = b.date_fin or b.date
+        # Lieux concernés
+        lieux = [str(s) for s in b.salles.all()] + [str(t) for t in b.temples.all()]
+        lieux_label = ", ".join(lieux) if lieux else "Tous espaces"
+        events.append({
+            "id":              f"blocage-{b.pk}",
+            "title":           f"🔒 Traiteur fermé — {b.motif}",
+            "start":           str(b.date),
+            "end":             str(b_fin + timedelta(days=1)),
+            "allDay":          True,
+            "backgroundColor": "#DC2626",
+            "borderColor":     "#991B1B",
+            "textColor":       "#FFFFFF",
+            "extendedProps": {
+                "type":        "blocage_traiteur",
+                "motif":       b.motif,
+                "heure_debut": str(b.heure_debut)[:5],
+                "heure_fin":   str(b.heure_fin)[:5],
+                "lieux":       lieux_label,
+                "date_debut":  str(b.date),
+                "date_fin":    str(b_fin),
+            },
+        })
+
+    # ── 5. Jours fériés et vacances scolaires Zone B ─────────────────────────
     if request.GET.get("conges", "1") != "0":
         annee_debut = int(start[:4]) if start else date.today().year
         annee_fin   = int(end[:4])   if end   else date.today().year

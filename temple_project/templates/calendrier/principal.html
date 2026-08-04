@@ -616,6 +616,20 @@ function openPanel(event) {
       + '<tr><td class="text-muted">Participants</td><td>' + p.participants + '</td></tr>'
       + (IS_ADMIN ? '<tr><td class="text-muted">Demandeur</td><td>' + (p.demandeur || "") + '</td></tr>' : "")
       + '</table>';
+  } else if (p.type === "blocage_traiteur") {
+    var periode = p.date_debut === p.date_fin
+      ? p.date_debut
+      : p.date_debut + ' → ' + p.date_fin;
+    html = '<div class="mb-3" style="border-left:4px solid #DC2626;padding-left:12px;">'
+      + '<div class="text-muted small text-uppercase mb-1" style="font-size:10px;color:#DC2626;">🔒 Traiteur fermé</div>'
+      + '<h5 class="mb-1" style="color:#0F2137;">' + p.motif + '</h5>'
+      + '<div class="text-muted small">' + periode + '</div></div>'
+      + '<table class="table table-sm table-borderless">'
+      + '<tr><td class="text-muted" style="width:40%">Période</td><td class="fw-semibold">' + periode + '</td></tr>'
+      + '<tr><td class="text-muted">Horaires</td><td>' + p.heure_debut + ' – ' + p.heure_fin + '</td></tr>'
+      + '<tr><td class="text-muted">Espaces</td><td>' + p.lieux + '</td></tr>'
+      + '</table>'
+      + '<div class="alert alert-danger py-2 mb-0" style="font-size:.85rem;">Aucune réservation possible pendant cette période.</div>';
   }
   document.getElementById("panel-content").innerHTML = html;
   document.getElementById("detail-panel").classList.add("open");
