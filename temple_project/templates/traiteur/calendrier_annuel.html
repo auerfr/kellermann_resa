@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}Calendrier {{ debut }}/{{ fin }} — Temples Kellermann{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Écran ─────────────────────────────────────────────────── */
+.cal-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.cal-tbl {
+  border-collapse: collapse;
+  font-size: 8.5px;
+  font-family: Arial, Helvetica, sans-serif;
+  white-space: nowrap;
+  min-width: max-content;
+}
+
+.cal-tbl th, .cal-tbl td {
+  border: 0.5px solid #94A3B8;
+  padding: 1px 3px;
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.15;
+}
+
+/* En-tête mois */
+.th-mois {
+  background: #0F2137;
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 4px;
+}
+
+/* En-tête sous-colonnes */
+.th-sub {
+  background: #1E3A8A;
+  color: #E0E7FF;
+  font-weight: 600;
+  font-size: 7.5px;
+  padding: 1px 3px;
+}
+
+/* Numéro de jour */
+.td-num {
+  background: #F1F5F9;
+  font-weight: 700;
+  font-size: 9px;
+  min-width: 16px;
+  color: #0F2137;
+}
+
+/* Jour semaine */
+.td-j {
+  color: #475569;
+  font-size: 7.5px;
+  min-width: 18px;
+  background: #F8FAFC;
+}
+
+/* Cellule temple (loge) */
+.td-t {
+  min-width: 40px;
+  max-width: 75px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 8px;
+  color: #0F2137;
+}
+
+/* Séparateur entre mois */
+.td-sep {
+  width: 4px;
+  background: #CBD5E1;
+  border-color: #94A3B8;
+  padding: 0;
+}
+
+/* Weekend */
+.we .td-j, .we .td-t { background: #FEF9C3; }
+.we .td-num           { background: #FEF3C7; color: #92400E; }
+
+/* Férié */
+.ferie .td-j, .ferie .td-t { background: #FEE2E2; }
+.ferie .td-num               { background: #FCA5A5; color: #7F1D1D; }
+
+/* Aujourd'hui */
+.today .td-num { background: #0F2137; color: #FFFFFF; border-radius: 3px; }
+
+/* Cellule vide (mois sans ce jour — ex: 31 en avril) */
+.td-void { background: #E2E8F0; border-color: #CBD5E1; }
+
+/* Ligne de 5 — repère visuel toutes les 5 lignes */
+.row-5 .td-num { border-top: 2px solid #475569; }
+
+/* ── Légende ────────────────────────────────────────────────── */
+.legende-wrap { font-size: 8px; columns: 3; column-gap: 12px; margin-top: 6px; }
+.legende-item { display: flex; gap: 5px; margin-bottom: 2px; break-inside: avoid; }
+.legende-abbr { font-weight: 700; min-width: 32px; color: #0F2137; }
+.legende-nom  { color: #475569; }
+
+/* ── Impression A3 paysage ───────────────────────────────────── */
+@media print {
+  @page { size: A3 landscape; margin: 6mm 8mm; }
+
+  .no-print { display: none !important; }
+  nav, footer, .navbar, .breadcrumb { display: none !important; }
+
+  body, .cal-tbl {
+    font-size: 6.5pt;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  .cal-tbl th, .cal-tbl td {
+    border: 0.4pt solid #888;
+    padding: 0 2px;
+  }
+
+  .th-mois {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    font-size: 7pt;
+    padding: 1pt 2pt;
+  }
+  .th-sub { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .we .td-j, .we .td-t, .we .td-num,
+  .ferie .td-j, .ferie .td-t, .ferie .td-num,
+  .today .td-num, .td-void {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .cal-wrap { overflow: visible; }
+  .legende-wrap { font-size: 6pt; columns: 4; }
+
+  .titre-impression { display: block !important; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Barre de navigation (masquée à l'impression) -->
+<div class="no-print d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h1 class="h4 mb-0">📅 Calendrier {{ debut }}/{{ fin }}</h1>
+    <p class="text-muted small mb-0">Grille annuelle des tenues par temple · Impression A3 paysage</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="?annee={{ prec }}" class="btn btn-sm btn-outline-secondary">‹ {{ prec }}/{{ debut }}</a>
+    <button onclick="window.print()" class="btn btn-sm btn-primary">🖨 Imprimer A3</button>
+    <a href="?annee={{ suiv }}" class="btn btn-sm btn-outline-secondary">{{ fin }}/{% widthratio suiv 1 1 %} ›</a>
+    <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-sm btn-outline-secondary">← Tableau de bord</a>
+  </div>
+</div>
+
+<!-- Titre imprimable -->
+<div class="titre-impression text-center mb-2" style="display:none;font-weight:700;font-size:11pt;letter-spacing:.05em;font-family:Arial,sans-serif;">
+  TEMPLES KELLERMANN — CALENDRIER DES TENUES {{ debut }}/{{ fin }}
+</div>
+
+<!-- Légende couleurs (no-print) -->
+<div class="no-print d-flex gap-3 mb-2 flex-wrap" style="font-size:.78rem;">
+  <span style="background:#FEF3C7;padding:1px 8px;border-radius:4px;border:1px solid #FDE68A;">🟡 Weekend</span>
+  <span style="background:#FEE2E2;padding:1px 8px;border-radius:4px;border:1px solid #FCA5A5;">🔴 Jour férié</span>
+  <span style="background:#0F2137;color:white;padding:1px 8px;border-radius:4px;">■ Aujourd'hui</span>
+</div>
+
+<!-- Grille principale -->
+<div class="cal-wrap">
+<table class="cal-tbl">
+  <thead>
+    <!-- Ligne 1 : mois -->
+    <tr>
+      <th class="th-sub" style="width:16px;" rowspan="2">J.</th>
+      {% for mh in mois_headers %}
+      <th class="th-mois" colspan="{{ mh.cols }}">{{ mh.nom }}&nbsp;{{ mh.annee }}</th>
+      <th class="td-sep" rowspan="2"></th>
+      {% endfor %}
+    </tr>
+    <!-- Ligne 2 : sous-colonnes (j + temples) -->
+    <tr>
+      {% for mh in mois_headers %}
+      <th class="th-sub" style="min-width:18px;">J</th>
+      {% for t in temples %}
+      <th class="th-sub" title="{{ t.nom }}" style="min-width:42px;">{{ t.nom|truncatechars:6 }}</th>
+      {% endfor %}
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr class="{% if row.n|divisibleby:5 %}row-5{% endif %}">
+      <td class="td-num">{{ row.n }}</td>
+      {% for cell in row.c %}
+        {% if cell %}
+          <td class="td-j {% if cell.we %}we{% endif %} {% if cell.fer %}ferie{% endif %} {% if cell.nt %}today{% endif %}">{{ cell.j }}</td>
+          {% for val in cell.tv %}
+          <td class="td-t {% if cell.we %}we{% endif %} {% if cell.fer %}ferie{% endif %}">{{ val }}</td>
+          {% endfor %}
+        {% else %}
+          <td class="td-void"></td>
+          {% for t in temples %}
+          <td class="td-void"></td>
+          {% endfor %}
+        {% endif %}
+        <td class="td-sep"></td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<!-- Légende des loges -->
+{% if loges_legende %}
+<div class="mt-3" style="border-top:1.5px solid #CBD5E1;padding-top:6px;">
+  <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569;margin-bottom:3px;">
+    LOGES — Abréviations
+  </div>
+  <div class="legende-wrap">
+    {% for loge in loges_legende %}
+    <div class="legende-item">
+      <span class="legende-abbr">{{ loge.abreviation|default:loge.nom|slice:":4" }}</span>
+      <span class="legende-nom">{{ loge.nom }}{% if loge.obedience %} · {{ loge.obedience }}{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Bas de page impression -->
+<div class="titre-impression mt-2" style="display:none;font-size:6pt;color:#888;font-family:Arial,sans-serif;">
+  🟡 Weekend &nbsp;|&nbsp; 🔴 Jour férié &nbsp;|&nbsp; ■ Aujourd'hui
+  &nbsp;&nbsp;&nbsp; Édité le {{ today|date:"d/m/Y" }} — kellermannadmin.eu.pythonanywhere.com
+</div>
+
+{% endblock %}

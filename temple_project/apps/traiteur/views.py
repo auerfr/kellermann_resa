@@ -585,6 +585,130 @@ def guide_traiteur(request):
 
 
 @traiteur_required
+def calendrier_annuel(request):
+    """Calendrier annuel A3 — grille mois × temple, une ligne par jour 1-31."""
+    import calendar as cal_module
+    from collections import defaultdict
+    from temple_project.apps.reservations.models import Temple
+
+    today = date.today()
+
+    # Saison : septembre → juin
+    annee_param = request.GET.get('annee', '')
+    if annee_param.isdigit():
+        debut = int(annee_param)
+    else:
+        debut = today.year if today.month >= 9 else today.year - 1
+    fin = debut + 1
+
+    MOIS_SAISON = [
+        (debut, 9), (debut, 10), (debut, 11), (debut, 12),
+        (fin,   1), (fin,   2),  (fin,   3),  (fin,   4), (fin, 5), (fin, 6),
+    ]
+    MOIS_NOM = {
+        1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril',
+        5: 'Mai', 6: 'Juin', 9: 'Septembre', 10: 'Octobre',
+        11: 'Novembre', 12: 'Décembre',
+    }
+    JOURS_FR = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di']
+    FERIES_FR = {  # fériés fixes courants
+        (1, 1), (5, 1), (5, 8), (7, 14), (8, 15), (11, 1), (11, 11), (12, 25),
+    }
+
+    # Temples
+    temples = list(Temple.objects.all().order_by('nom'))
+
+    # Date range
+    d_debut = date(debut, 9, 1)
+    d_fin   = date(fin,   6, 30)
+
+    # Index reservations : date → temple_pk → [abréviations]
+    resa_idx = defaultdict(lambda: defaultdict(list))
+    for r in (
+        Reservation.objects.filter(statut='validee', date__gte=d_debut, date__lte=d_fin)
+        .select_related('loge', 'temple')
+        .order_by('date', 'heure_debut')
+    ):
+        if not r.temple:
+            continue
+        abbr = (r.loge.abreviation or r.loge.nom[:4]) if r.loge else '?'
+        resa_idx[r.date][r.temple.pk].append(abbr)
+
+    # Index banquets (ReservationSalle) : date → [abréviations]
+    bq_idx = defaultdict(list)
+    for s in (
+        ReservationSalle.objects.filter(statut='validee', date__gte=d_debut, date__lte=d_fin)
+        .select_related('loge')
+        .order_by('date')
+    ):
+        abbr = (s.loge.abreviation or s.loge.nom[:4]) if s.loge else '?'
+        bq_idx[s.date].append(abbr)
+
+    # Règles récurrentes → noms courts (pour enrichir les cases vides)
+    from temple_project.apps.reservations.models import RegleRecurrence
+    regles = list(
+        RegleRecurrence.objects.filter(actif=True)
+        .select_related('loge', 'temple')
+        .prefetch_related('mois_actifs_field') if hasattr(RegleRecurrence, 'mois_actifs_field')
+        else RegleRecurrence.objects.filter(actif=True).select_related('loge', 'temple')
+    )
+
+    # Construire grille : 31 lignes × nb_mois colonnes
+    rows = []
+    for jour in range(1, 32):
+        cells = []
+        for annee, mois in MOIS_SAISON:
+            _, nb_j = cal_module.monthrange(annee, mois)
+            if jour > nb_j:
+                cells.append(None)
+            else:
+                d = date(annee, mois, jour)
+                is_we = d.weekday() >= 5
+                is_ferie = (mois, jour) in FERIES_FR
+                # valeurs par temple (liste ordonnée)
+                tv = [' '.join(resa_idx[d].get(t.pk, [])) for t in temples]
+                bq = ' '.join(bq_idx.get(d, []))
+                cells.append({
+                    'j':   JOURS_FR[d.weekday()],
+                    'we':  is_we,
+                    'fer': is_ferie,
+                    'nt':  d == today,
+                    'tv':  tv,     # ordered list matching temples
+                    'bq':  bq,     # banquets ce jour
+                })
+        rows.append({'n': jour, 'c': cells})
+
+    # Entêtes mois (nom + colspan = 1 jour + nb_temples)
+    mois_headers = [
+        {'nom': MOIS_NOM[m], 'annee': a, 'cols': 1 + len(temples)}
+        for a, m in MOIS_SAISON
+    ]
+
+    # Légende : loges avec réservations validées cette saison
+    loges_legende = (
+        Loge.objects.filter(
+            reservations__date__gte=d_debut,
+            reservations__date__lte=d_fin,
+            reservations__statut='validee',
+        )
+        .distinct()
+        .order_by('abreviation', 'nom')
+    )
+
+    return render(request, 'traiteur/calendrier_annuel.html', {
+        'rows':          rows,
+        'temples':       temples,
+        'mois_headers':  mois_headers,
+        'loges_legende': loges_legende,
+        'debut':         debut,
+        'fin':           fin,
+        'prec':          debut - 1,
+        'suiv':          debut + 1,
+        'today':         today,
+    })
+
+
+@traiteur_required
 def contact_traiteur(request):
     """Page contacts : formulaires d'envoi de message (loges + admin)."""
     from django.contrib.auth import get_user_model

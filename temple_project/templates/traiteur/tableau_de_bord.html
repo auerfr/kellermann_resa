@@ -115,9 +115,10 @@
   </div>
   <!-- Actions secondaires (admin / navigation) -->
   <div class="d-flex gap-2 flex-wrap">
-    <a href="{% url 'traiteur:calendrier' %}"   class="btn btn-sm btn-outline-secondary">📅 Calendrier</a>
-    <a href="{% url 'traiteur:reserver' %}"     class="btn btn-sm btn-outline-secondary">➕ Réserver</a>
-    <a href="{% url 'traiteur:guide' %}"         class="btn btn-sm btn-outline-secondary">❓ Guide</a>
+    <a href="{% url 'traiteur:calendrier' %}"       class="btn btn-sm btn-outline-secondary">📅 Calendrier</a>
+    <a href="{% url 'traiteur:calendrier_annuel' %}" class="btn btn-sm btn-outline-primary">🗓 Vue annuelle</a>
+    <a href="{% url 'traiteur:reserver' %}"         class="btn btn-sm btn-outline-secondary">➕ Réserver</a>
+    <a href="{% url 'traiteur:guide' %}"             class="btn btn-sm btn-outline-secondary">❓ Guide</a>
   </div>
 </div>
 
