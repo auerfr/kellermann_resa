@@ -367,6 +367,7 @@ def demande_banquet(request):
                 email_demandeur=form.cleaned_data['email_demandeur'],
                 organisation=str(form.cleaned_data['loge']),
                 objet="Banquet d'ordre",
+                type_reunion="banquet",
                 nombre_participants=form.cleaned_data['nombre_repas'],
                 nombre_cabinets=1,
                 commentaire=commentaire_complet,

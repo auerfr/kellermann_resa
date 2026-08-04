@@ -135,6 +135,7 @@ def _build_repas(r, type_label):
         "contact_nom":   nom_c,
         "contact_email": email_c,
         "contact_tel":   tel_c,
+        "statut":        getattr(r, "statut", "validee"),
     }
 
 
@@ -157,14 +158,17 @@ def tableau_de_bord(request):
         .order_by("date", "heure_debut")
     )
 
-    # Banquets/agapes salles (30 j.) : salles agapes + banquets d'ordre en salle réunion
+    # Banquets/agapes salles (30 j.) : salles agapes + banquets d'ordre en salle réunion.
+    # Inclus même en statut "attente" : le traiteur doit anticiper avant validation admin.
     tenues_salle = (
         ReservationSalle.objects.filter(
-            statut="validee",
             date__gte=today,
             date__lte=horizon,
+            statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(
+            Q(salle__type_salle="agapes") | Q(type_reunion="banquet")
+        )
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -228,9 +232,10 @@ def calendrier(request):
     )
     reservations_salles = (
         ReservationSalle.objects.filter(
-            statut="validee", date__gte=premier_jour, date__lte=dernier_jour,
-            salle__type_salle="agapes",
+            date__gte=premier_jour, date__lte=dernier_jour,
+            statut__in=["attente", "validee"],
         )
+        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
         .select_related("salle", "loge")
         .order_by("date", "heure_debut")
     )
@@ -256,15 +261,20 @@ def calendrier(request):
         events_by_date.setdefault(r.date, []).append({
             "type": "reservation", "obj": r,
             "agapes": r.besoin_agapes, "agapes_status": status,
+            "statut": r.statut,
             "couverts": couverts, "estimation": est,
             "contact_nom": nom_c, "contact_email": email_c, "contact_tel": tel_c,
         })
     for r in reservations_salles:
         couverts, est = _couverts_effectifs(r)
         nom_c, email_c, tel_c = _contact_loge(r.loge)
+        tr = getattr(r, 'type_reunion', '')
+        salle_type = getattr(r.salle, 'type_salle', '') if r.salle else ''
+        salle_status = "confirme" if (salle_type == 'agapes' or tr == 'banquet') else "probable"
         events_by_date.setdefault(r.date, []).append({
             "type": "salle", "obj": r,
-            "agapes": True, "agapes_status": "confirme",
+            "agapes": True, "agapes_status": salle_status,
+            "statut": r.statut,
             "couverts": couverts, "estimation": est,
             "contact_nom": nom_c, "contact_email": email_c, "contact_tel": tel_c,
         })
@@ -328,7 +338,8 @@ def planning(request):
 
     qs_salle = (
         ReservationSalle.objects.filter(
-            statut="validee", date__gte=premier_jour, date__lte=dernier_jour,
+            date__gte=premier_jour, date__lte=dernier_jour,
+            statut__in=["attente", "validee"],
         )
         .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
         .select_related("loge", "salle")

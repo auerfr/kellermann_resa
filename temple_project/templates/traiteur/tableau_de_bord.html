@@ -97,7 +97,9 @@
         </thead>
         <tbody>
           {% for r in repas_a_venir %}
-          <tr {% if r.agapes_status == 'probable' %}class="table-warning"{% elif r.agapes_status == 'confirme' %}class="table-success"{% endif %}>
+          <tr {% if r.agapes_status == 'confirme' %}class="table-success"
+              {% elif r.agapes_status == 'probable_classique' %}style="background:#EDE9FE;"
+              {% elif r.agapes_status == 'probable' %}class="table-warning"{% endif %}>
             <td><strong>{{ r.date|date:"D d/m" }}</strong></td>
             <td class="text-muted small">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</td>
             <td>
@@ -105,9 +107,12 @@
               {% if r.agapes_status == 'confirme' %}
                 <span class="badge" style="background:#22C55E;font-size:9px;">✓ Agapes</span>
               {% elif r.agapes_status == 'probable_classique' %}
-                <span class="badge" style="background:#7C3AED;color:white;font-size:9px;">~ Agapes probables classiques</span>
+                <span class="badge" style="background:#7C3AED;color:white;font-size:9px;">~ Classiques</span>
               {% elif r.agapes_status == 'probable' %}
                 <span class="badge" style="background:#C8A84B;color:#0F2137;font-size:9px;">~ Probable</span>
+              {% endif %}
+              {% if r.statut == 'attente' %}
+                <span class="badge bg-secondary" style="font-size:9px;">⏳ Attente</span>
               {% endif %}
             </td>
             <td class="small">{{ r.lieu }}</td>
