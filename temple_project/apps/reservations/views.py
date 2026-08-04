@@ -412,6 +412,135 @@ def _fmt_heure(t):
     return t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)[:5]
 
 
+def choisir_recurrence(request):
+    """Page d'aiguillage : récurrence temple ou salle de réunion."""
+    return render(request, 'reservations/choisir_recurrence.html')
+
+
+def soumettre_demande_recurrence_salle_publique(request):
+    """Formulaire public (sans token) pour demander une récurrence salle."""
+    loges = Loge.objects.filter(actif=True).order_by('nom')
+    salles_reunion = list(SalleReunion.objects.filter(
+        type_salle__in=['reunion', 'agapes'], actif=True
+    ).order_by('type_salle', 'nom'))
+    salles_par_type = {}
+    for s in salles_reunion:
+        salles_par_type.setdefault(s.get_type_salle_display(), []).append(s)
+
+    MOIS = [
+        (9,'Septembre'),(10,'Octobre'),(11,'Novembre'),(12,'Décembre'),
+        (1,'Janvier'),(2,'Février'),(3,'Mars'),(4,'Avril'),(5,'Mai'),(6,'Juin'),
+    ]
+
+    if request.method == 'POST':
+        loge_pk        = request.POST.get('loge_pk', '').strip()
+        salle_pks      = request.POST.getlist('salles')
+        jour_semaine   = request.POST.get('jour_semaine', '').strip()
+        numero_semaine = request.POST.get('numero_semaine', '').strip()
+        hd_str         = request.POST.get('heure_debut', '19:30').strip()
+        hf_str         = request.POST.get('heure_fin', '22:30').strip()
+        mois_actifs    = [int(m) for m in request.POST.getlist('mois_actifs') if m.isdigit()]
+        objet          = request.POST.get('objet', '').strip() or 'Réunion'
+        type_reunion   = request.POST.get('type_reunion', 'reunion')
+        participants   = request.POST.get('nombre_participants', '0').strip()
+        commentaire    = request.POST.get('commentaire', '').strip()
+        nom_dem        = request.POST.get('nom_demandeur', '').strip()
+        email_dem      = request.POST.get('email_demandeur', '').strip()
+
+        errors = []
+        loge = None
+        if loge_pk:
+            try:
+                loge = Loge.objects.get(pk=int(loge_pk))
+            except (Loge.DoesNotExist, ValueError):
+                errors.append("Loge introuvable.")
+        if not loge:
+            errors.append("Sélectionnez une loge.")
+        if not salle_pks:
+            errors.append("Sélectionnez au moins une salle.")
+        if not nom_dem:
+            errors.append("Votre nom est requis.")
+        if not email_dem:
+            errors.append("Votre email est requis.")
+        if not jour_semaine or not jour_semaine.lstrip('-').isdigit():
+            errors.append("Précisez la fréquence (semaine et jour).")
+        if not numero_semaine or not numero_semaine.lstrip('-').isdigit():
+            errors.append("Précisez le numéro de semaine.")
+
+        salles_sel = list(SalleReunion.objects.filter(pk__in=salle_pks, actif=True))
+
+        if not errors and loge and salles_sel:
+            try:
+                nb_part = int(participants)
+            except ValueError:
+                nb_part = 0
+            demande = DemandeRegleRecurrenceSalle.objects.create(
+                loge=loge,
+                jour_semaine=int(jour_semaine),
+                numero_semaine=int(numero_semaine),
+                heure_debut=hd_str,
+                heure_fin=hf_str,
+                mois_actifs=mois_actifs or [],
+                objet=objet,
+                type_reunion=type_reunion,
+                nombre_participants=nb_part,
+                nom_demandeur=nom_dem,
+                email_demandeur=email_dem,
+                commentaire=commentaire,
+                statut='attente',
+            )
+            demande.salles.set(salles_sel)
+
+            noms_salles = ', '.join(s.nom for s in salles_sel)
+            send_mail_kellermann(
+                subject="[Kellermann] Confirmation de votre demande de récurrence salle",
+                message=(
+                    f"Bonjour {nom_dem},\n\n"
+                    f"Votre demande de règle de récurrence salle a bien été reçue.\n\n"
+                    f"Loge     : {loge}\n"
+                    f"Salle(s) : {noms_salles}\n"
+                    f"Fréquence : {demande.get_numero_semaine_display()} {demande.get_jour_semaine_display()}\n"
+                    f"Horaires : {hd_str} – {hf_str}\n"
+                    f"Objet    : {objet}\n\n"
+                    f"L'administration vous contactera après validation.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[email_dem],
+            )
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande récurrence salle — {loge}",
+                message=(
+                    f"Nouvelle demande de règle de récurrence salle.\n\n"
+                    f"Loge     : {loge}\n"
+                    f"Salle(s) : {noms_salles}\n"
+                    f"Fréquence : {demande.get_numero_semaine_display()} {demande.get_jour_semaine_display()}\n"
+                    f"Horaires : {hd_str} – {hf_str}\n"
+                    f"Type     : {dict(ReservationSalle.TYPE_REUNION_CHOICES).get(type_reunion, type_reunion)}\n"
+                    f"Contact  : {nom_dem} — {email_dem}\n"
+                ),
+                recipient_list=[get_email_admin()],
+            )
+            messages.success(request, "Demande envoyée — vous recevrez une confirmation par email.")
+            return redirect('reservations:confirmation_recurrence_salle', uuid=demande.uuid)
+
+        for err in errors:
+            messages.error(request, err)
+
+    return render(request, 'reservations/formulaire_recurrence_salle.html', {
+        'loges':                loges,
+        'salles_par_type':      salles_par_type,
+        'mois':                 MOIS,
+        'type_reunion_choices': ReservationSalle.TYPE_REUNION_CHOICES,
+        'jour_choices':         RegleRecurrenceSalle.JOUR_CHOICES,
+        'semaine_choices':      RegleRecurrenceSalle.SEMAINE_CHOICES,
+    })
+
+
+def confirmation_recurrence_salle(request, uuid):
+    demande = get_object_or_404(DemandeRegleRecurrenceSalle, uuid=uuid)
+    return render(request, 'reservations/confirmation_recurrence_salle.html', {'demande': demande})
+
+
 def soumettre_demande_recurrence(request):
     """Formulaire front-end : une loge demande une règle de récurrence."""
     HORAIRES_GROUPED = [

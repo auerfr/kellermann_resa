@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Récurrence — Salle de réunion{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <a href="{% url 'reservations:choisir_recurrence' %}" class="btn btn-sm btn-outline-secondary">‹ Retour</a>
+      <h1 class="h3 mb-0">🔁 Demande de récurrence — Salle de réunion</h1>
+    </div>
+    <p class="text-muted mb-4">
+      Remplissez ce formulaire pour demander un créneau récurrent dans une ou plusieurs salles.
+      L'administration examinera votre demande et vous contactera par email.
+    </p>
+
+    {% if messages %}
+    {% for msg in messages %}
+    <div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} mb-3">{{ msg }}</div>
+    {% endfor %}
+    {% endif %}
+
+    <form method="post" class="card shadow-sm border-0">
+      {% csrf_token %}
+      <div class="card-body">
+
+        {# Loge #}
+        <div class="mb-4">
+          <h6 class="fw-semibold border-bottom pb-1 mb-3" style="color:#0F2137;">Loge</h6>
+          <label class="form-label fw-semibold">Loge <span class="text-danger">*</span></label>
+          <select name="loge_pk" class="form-select" required>
+            <option value="">— Sélectionnez votre loge —</option>
+            {% for loge in loges %}
+            <option value="{{ loge.pk }}">{{ loge.nom }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        {# Type de réunion #}
+        <div class="mb-4">
+          <h6 class="fw-semibold border-bottom pb-1 mb-3" style="color:#0F2137;">Type de réunion</h6>
+          <div class="row g-2">
+            {% for val, lib in type_reunion_choices %}
+            <div class="col-6 col-md-4">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="type_reunion" id="tr_{{ val }}"
+                       value="{{ val }}" {% if val == 'reunion' %}checked{% endif %}>
+                <label class="form-check-label" for="tr_{{ val }}">{{ lib }}</label>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# Salles #}
+        <div class="mb-4">
+          <h6 class="fw-semibold border-bottom pb-1 mb-3" style="color:#0F2137;">Salle(s) souhaitée(s) <span class="text-danger">*</span></h6>
+          <p class="text-muted small mb-2">Plusieurs choix possibles.</p>
+          {% for type_lib, salles in salles_par_type.items %}
+          <div class="mb-2">
+            <div class="text-muted small fw-semibold mb-1">{{ type_lib }}</div>
+            {% for salle in salles %}
+            <div class="form-check ms-2">
+              <input class="form-check-input" type="checkbox" name="salles" id="salle_{{ salle.pk }}" value="{{ salle.pk }}">
+              <label class="form-check-label" for="salle_{{ salle.pk }}">{{ salle.nom }}
+                {% if salle.capacite %}<span class="text-muted small">({{ salle.capacite }} pers.)</span>{% endif %}
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
+
+        {# Objet et participants #}
+        <div class="mb-4">
+          <h6 class="fw-semibold border-bottom pb-1 mb-3" style="color:#0F2137;">Objet</h6>
+          <div class="row g-3">
+            <div class="col-md-8">
+              <label class="form-label fw-semibold">Intitulé de la réunion</label>
+              <input type="text" name="objet" class="form-control" value="Réunion" maxlength="300">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Nombre de participants estimé</label>
+              <input type="number" name="nombre_participants" class="form-control" min="0" value="0">
+            </div>
+          </div>
+        </div>
+
+        {# Fréquence #}
+        <div class="mb-4">
+          <h6 class="fw-semibold border-bottom pb-1 mb-3" style="color:#0F2137;">Fréquence <span class="text-danger">*</span></h6>
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label class="form-label fw-semibold">Semaine du mois</label>
+              <select name="numero_semaine" class="form-select" required>
+                <option value="">—</option>
+                {% for val, lib in semaine_choices %}
+                <option value="{{ val }}">{{ lib }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <label class="form-label fw-semibold">Jour</label>
+              <select name="jour_semaine" class="form-select" required>
+                <option value="">—</option>
+                {% for val, lib in jour_choices %}
+                <option value="{{ val }}">{{ lib }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {# Horaires #}
+        <div class="mb-4">
+          <h6 class="fw-semibold border-bottom pb-1 mb-3" style="color:#0F2137;">Horaires</h6>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Début</label>
+              <input type="time" name="heure_debut" class="form-control" value="19:30" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Fin</label>
+              <input type="time" name="heure_fin" class="form-control" value="22:30" required>
+            </div>
+          </div>
+        </div>
+
+        {# Mois actifs #}
+        <div class="mb-4">
+          <h6 class="fw-semibold border-bottom pb-1 mb-3" style="color:#0F2137;">Mois actifs</h6>
+          <p class="text-muted small mb-2">Laissez vide = toute l'année. Cochez les mois concernés.</p>
+          <div class="d-flex flex-wrap gap-2">
+            {% for num, nom in mois %}
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="checkbox" name="mois_actifs" id="mois_{{ num }}" value="{{ num }}">
+              <label class="form-check-label" for="mois_{{ num }}">{{ nom }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {# Contact #}
+        <div class="mb-4">
+          <h6 class="fw-semibold border-bottom pb-1 mb-3" style="color:#0F2137;">Votre contact</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
+              <input type="text" name="nom_demandeur" class="form-control" required maxlength="100">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+              <input type="email" name="email_demandeur" class="form-control" required maxlength="254">
+            </div>
+          </div>
+        </div>
+
+        {# Commentaire #}
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Commentaire (optionnel)</label>
+          <textarea name="commentaire" class="form-control" rows="3" maxlength="1000"></textarea>
+        </div>
+
+        <div class="alert alert-light border small mb-3">
+          Ces créneaux récurrents ne sont <strong>pas facturés en sus</strong> des cotisations normales.
+          L'administration confirmera la règle dans les meilleurs délais.
+        </div>
+
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-success px-4">Envoyer la demande</button>
+          <a href="{% url 'reservations:choisir_recurrence' %}" class="btn btn-outline-secondary">Annuler</a>
+        </div>
+
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

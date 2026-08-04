@@ -68,9 +68,20 @@ urlpatterns = [
          name="confirmation_contact"),
 
     # Demandes de règles de récurrence
+    path("recurrence/choisir/",
+         views.choisir_recurrence,
+         name="choisir_recurrence"),
     path("recurrence/",
          views.soumettre_demande_recurrence,
          name="demande_recurrence"),
+
+    # Récurrence salle de réunion (formulaire public)
+    path("recurrence-salle/",
+         views.soumettre_demande_recurrence_salle_publique,
+         name="demande_recurrence_salle"),
+    path("recurrence-salle/confirmation/<uuid:uuid>/",
+         views.confirmation_recurrence_salle,
+         name="confirmation_recurrence_salle"),
     path("recurrence/confirmation/<uuid:uuid>/",
          views.confirmation_recurrence,
          name="confirmation_recurrence"),

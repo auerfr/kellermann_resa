@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Demander une récurrence{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-4">
+  <div class="col-lg-8">
+    <h1 class="h3 mb-1">🔁 Demander une récurrence</h1>
+    <p class="text-muted mb-4">
+      La récurrence s'applique aux temples et aux salles de réunion.
+      Choisissez le type de créneau à réserver régulièrement.
+    </p>
+
+    <div class="row g-4">
+      {# Temple #}
+      <div class="col-md-6">
+        <a href="{% url 'reservations:demande_recurrence' %}" class="text-decoration-none">
+          <div class="card shadow-sm border-0 h-100 text-center p-4" style="transition:box-shadow .2s;"
+               onmouseover="this.style.boxShadow='0 4px 20px rgba(15,33,55,.15)'"
+               onmouseout="this.style.boxShadow=''">
+            <div style="font-size:3rem;" class="mb-3">🏛</div>
+            <h5 class="fw-bold" style="color:#0F2137;">Temple</h5>
+            <p class="text-muted small mb-0">
+              Tenue régulière d'une loge (1re, 2e ou 3e degré) — exemple :
+              chaque 1er lundi du mois à 19h30.
+            </p>
+          </div>
+        </a>
+      </div>
+
+      {# Salle de réunion #}
+      <div class="col-md-6">
+        <a href="{% url 'reservations:demande_recurrence_salle' %}" class="text-decoration-none">
+          <div class="card shadow-sm border-0 h-100 text-center p-4" style="transition:box-shadow .2s;"
+               onmouseover="this.style.boxShadow='0 4px 20px rgba(15,33,55,.15)'"
+               onmouseout="this.style.boxShadow=''">
+            <div style="font-size:3rem;" class="mb-3">🪑</div>
+            <h5 class="fw-bold" style="color:#0F2137;">Salle de réunion</h5>
+            <p class="text-muted small mb-0">
+              Réunion interne récurrente — chantier des apprentis, conseil d'officiers,
+              banquet d'ordre — dans une ou plusieurs salles de réunion.
+            </p>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <p class="text-muted small mt-4">
+      Les cabinets de réflexion et les banquets exceptionnels ne font pas l'objet
+      d'une récurrence — utilisez le formulaire de réservation ponctuelle.
+    </p>
+  </div>
+</div>
+{% endblock %}
