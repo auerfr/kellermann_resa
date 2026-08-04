@@ -189,7 +189,7 @@
           <td class="small">{{ d.heure_debut|time:"H\hi" }} – {{ d.heure_fin|time:"H\hi" }}</td>
           <td style="color:#64748B;">{{ d.date_demande|date:"d/m à H:i" }}</td>
           <td class="text-end">
-            <a href="/admin/reservations/demanderecurrence/{{ d.pk }}/change/"
+            <a href="{% url 'administration:valider_demande_recurrence_temple' d.pk %}"
                class="btn btn-sm fw-semibold" style="font-size:12px;background:#EDE9FE;color:#6D28D9;">
               Traiter →
             </a>

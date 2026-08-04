@@ -5625,3 +5625,73 @@ def valider_demande_recurrence_salle(request, pk):
     return render(request, 'administration/valider_demande_recurrence_salle.html', {
         'demande': demande,
     })
+
+
+@staff_required
+def valider_demande_recurrence_temple(request, pk):
+    """L'admin valide ou refuse une demande de règle de récurrence temple soumise depuis le portail."""
+    demande = get_object_or_404(DemandeRegleRecurrence, pk=pk)
+
+    if request.method == 'POST':
+        action            = request.POST.get('action')
+        commentaire_admin = request.POST.get('commentaire_admin', '').strip()
+
+        if action not in ('valider', 'refuser'):
+            messages.error(request, "Action invalide.")
+            return redirect('administration:tableau_de_bord')
+
+        demande.statut            = 'validee' if action == 'valider' else 'refusee'
+        demande.commentaire_admin = commentaire_admin
+        demande.save()
+
+        if action == 'valider':
+            regle = RegleRecurrence.objects.create(
+                loge=demande.loge,
+                temple=demande.temple,
+                jour_semaine=demande.jour_semaine,
+                numero_semaine=demande.numero_semaine,
+                heure_debut=demande.heure_debut,
+                heure_fin=demande.heure_fin,
+                mois_actifs=demande.mois_actifs,
+                actif=True,
+            )
+            demande.regle_creee = regle
+            demande.save(update_fields=['regle_creee'])
+
+            send_mail_kellermann(
+                subject="[Kellermann] Votre demande de récurrence temple a été validée",
+                message=(
+                    f"Bonjour {demande.nom_demandeur},\n\n"
+                    f"Votre demande de règle de récurrence pour le temple {demande.temple} a été validée.\n\n"
+                    f"Temple    : {demande.temple}\n"
+                    f"Fréquence : {regle.get_numero_semaine_display()} {regle.get_jour_semaine_display()}\n"
+                    f"Horaires  : {regle.heure_debut:%H:%M} – {regle.heure_fin:%H:%M}\n"
+                    + (f"\nCommentaire : {commentaire_admin}\n" if commentaire_admin else "")
+                    + f"\nLa règle sera appliquée lors de la prochaine génération des réservations.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[demande.email_demandeur],
+            )
+            log_evenement('validation_regle_temple',
+                f"Règle récurrence temple validée : {demande.loge} — {regle.get_numero_semaine_display()} {regle.get_jour_semaine_display()} — {demande.temple}",
+                request=request, objet=regle)
+            messages.success(request, f"Demande validée — règle de récurrence créée pour {demande.loge} au {demande.temple}.")
+        else:
+            send_mail_kellermann(
+                subject="[Kellermann] Votre demande de récurrence temple",
+                message=(
+                    f"Bonjour {demande.nom_demandeur},\n\n"
+                    f"Votre demande de règle de récurrence pour le temple {demande.temple} n'a pas pu être accordée.\n\n"
+                    + (f"Motif : {commentaire_admin}\n\n" if commentaire_admin else "")
+                    + f"Pour toute question, contactez l'administration.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[demande.email_demandeur],
+            )
+            messages.warning(request, f"Demande refusée — email envoyé à {demande.email_demandeur}.")
+
+        return redirect('administration:tableau_de_bord')
+
+    return render(request, 'administration/valider_demande_recurrence_temple.html', {
+        'demande': demande,
+    })
