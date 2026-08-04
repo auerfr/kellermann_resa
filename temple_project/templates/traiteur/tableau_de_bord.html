@@ -25,37 +25,41 @@
   border-bottom: 1px solid #e5e7eb;
 }
 .evt-row:last-child { border-bottom: none; }
+/* Colonne gauche : date + heure + org + lieu */
+.evt-left  { flex: 1; min-width: 0; }
+/* Colonne droite : badge + couverts */
+.evt-right { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: .2rem; text-align: right; }
 .evt-date {
   font-weight: 700;
-  font-size: 1.05rem;
-  min-width: 80px;
-  white-space: nowrap;
+  font-size: 1rem;
 }
 .evt-heure {
   color: #64748b;
-  font-size: .85rem;
-  min-width: 80px;
-  white-space: nowrap;
+  font-size: .82rem;
 }
 .evt-org {
-  flex: 1;
   font-weight: 600;
   font-size: .95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .evt-lieu {
   color: #64748b;
   font-size: .82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .evt-couverts {
-  min-width: 56px;
-  text-align: center;
   font-size: 1.3rem;
   font-weight: 700;
   line-height: 1;
+  text-align: right;
 }
 .evt-couverts small {
   display: block;
-  font-size: .65rem;
+  font-size: .62rem;
   font-weight: 400;
   color: #64748b;
   line-height: 1.3;
@@ -162,19 +166,13 @@
   <div class="card-body p-0">
     {% if repas_aujourd_hui %}
       {% for r in repas_aujourd_hui %}
-      <div class="evt-row {% if r.agapes_status == 'confirme' %}bg-success bg-opacity-10{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}bg-warning bg-opacity-10{% endif %}">
-        <div class="evt-heure">{{ r.heure_debut|time:"H\hi" }}<br><span style="color:#94a3b8;font-size:.75rem;">→ {{ r.heure_fin|time:"H\hi" }}</span></div>
-        <div style="flex:1;">
+      <div class="evt-row {% if r.type == 'Salle' %}{% elif r.agapes_status == 'confirme' %}bg-success bg-opacity-10{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}bg-warning bg-opacity-10{% endif %}" {% if r.type == 'Salle' %}style="background:#FFFBEB;"{% endif %}>
+        <div class="evt-left">
+          <div class="evt-heure">{{ r.heure_debut|time:"H\hi" }} → {{ r.heure_fin|time:"H\hi" }}</div>
           <div class="evt-org">{{ r.organisation }}</div>
           <div class="evt-lieu">{{ r.lieu }}</div>
         </div>
-        <div class="evt-couverts">
-          {% if r.couverts %}
-            {% if r.estimation %}<em style="color:#94a3b8;">~{{ r.couverts }}</em>{% else %}{{ r.couverts }}{% endif %}
-          {% else %}<span style="color:#cbd5e1;">?</span>{% endif %}
-          <small>couverts</small>
-        </div>
-        <div>
+        <div class="evt-right">
           {% if r.type == 'Salle' %}
             <span class="evt-badge" style="background:#FEF3C7;color:#92400E;">🥂 Banquet</span>
           {% elif r.agapes_status == 'confirme' %}
@@ -184,6 +182,12 @@
           {% elif r.agapes_status == 'probable' %}
             <span class="evt-badge" style="background:#FEF9C3;color:#854D0E;">~ Soir</span>
           {% endif %}
+          <div class="evt-couverts">
+            {% if r.couverts %}
+              {% if r.estimation %}<em style="color:#94a3b8;">~{{ r.couverts }}</em>{% else %}{{ r.couverts }}{% endif %}
+            {% else %}<span style="color:#cbd5e1;">?</span>{% endif %}
+            <small>couverts</small>
+          </div>
         </div>
       </div>
       {% endfor %}
@@ -244,20 +248,13 @@
   <div class="card-body p-0">
     {% if repas_mois %}
       {% for r in repas_mois %}
-      <div class="evt-row {% if r.agapes_status == 'confirme' %}bg-success bg-opacity-10{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}bg-warning bg-opacity-10{% endif %}" style="{% if r.type == 'Salle' %}background:#FFFBEB;{% endif %}">
-        <div class="evt-date">{{ r.date|date:"D d/m" }}</div>
-        <div class="evt-heure">{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</div>
-        <div style="flex:1;">
+      <div class="evt-row {% if r.type == 'Salle' %}{% elif r.agapes_status == 'confirme' %}bg-success bg-opacity-10{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}bg-warning bg-opacity-10{% endif %}" {% if r.type == 'Salle' %}style="background:#FFFBEB;"{% endif %}>
+        <div class="evt-left">
+          <div><span class="evt-date">{{ r.date|date:"D d/m" }}</span> <span class="evt-heure">{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</span></div>
           <div class="evt-org">{{ r.organisation }}</div>
           <div class="evt-lieu">{{ r.lieu }}</div>
         </div>
-        <div class="evt-couverts">
-          {% if r.couverts %}
-            {% if r.estimation %}<em style="color:#94a3b8;">~{{ r.couverts }}</em>{% else %}{{ r.couverts }}{% endif %}
-          {% else %}<span style="color:#cbd5e1;">?</span>{% endif %}
-          <small>couverts</small>
-        </div>
-        <div>
+        <div class="evt-right">
           {% if r.type == 'Salle' %}
             <span class="evt-badge" style="background:#FEF3C7;color:#92400E;">🥂 Banquet</span>
           {% elif r.agapes_status == 'confirme' %}
@@ -267,7 +264,13 @@
           {% elif r.agapes_status == 'probable' %}
             <span class="evt-badge" style="background:#FEF9C3;color:#854D0E;">~ Soir</span>
           {% endif %}
-          {% if r.statut == 'attente' %}<span class="evt-badge ms-1" style="background:#F1F5F9;color:#475569;">⏳</span>{% endif %}
+          {% if r.statut == 'attente' %}<span class="evt-badge" style="background:#F1F5F9;color:#475569;">⏳</span>{% endif %}
+          <div class="evt-couverts">
+            {% if r.couverts %}
+              {% if r.estimation %}<em style="color:#94a3b8;">~{{ r.couverts }}</em>{% else %}{{ r.couverts }}{% endif %}
+            {% else %}<span style="color:#cbd5e1;">?</span>{% endif %}
+            <small>couverts</small>
+          </div>
         </div>
       </div>
       {% endfor %}
