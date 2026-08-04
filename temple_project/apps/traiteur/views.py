@@ -296,11 +296,15 @@ def calendrier(request):
             "actif": m == mois and y == annee,
         })
 
+    # Liste triée (date, evts) pour la vue agenda mobile
+    events_sorted = sorted(events_by_date.items())
+
     return render(request, "traiteur/calendrier.html", {
         "annee": annee, "mois": mois,
         "nom_mois":       premier_jour.strftime("%B %Y").capitalize(),
         "cal":            calendar.monthcalendar(annee, mois),
         "events_by_date": events_by_date,
+        "events_sorted":  events_sorted,
         "today":          today,
         "mois_prec": mois_prec, "annee_prec": annee_prec,
         "mois_suiv": mois_suiv, "annee_suiv": annee_suiv,
