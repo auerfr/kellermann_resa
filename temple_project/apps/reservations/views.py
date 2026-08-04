@@ -99,32 +99,143 @@ Vous pouvez suivre votre demande sur : {lien}""",
 
 
 def soumettre_demande_salle(request):
-    salles_reunion = SalleReunion.objects.filter(type_salle='reunion', actif=True)
-    if request.method == "POST":
-        form = DemandeReservationSalleForm(request.POST)
-        form.fields['salle'].queryset = salles_reunion
-        if form.is_valid():
-            resa = form.save(commit=False)
-            resa.statut = "attente"
-            resa.save()
-            send_mail_kellermann(
-                subject="Confirmation de votre demande de salle",
-                message=(
-                    f"Votre demande de salle pour le {resa.date} a bien ete recue.\n"
-                    f"Salle : {resa.salle}\n"
-                    f"Reference : {resa.uuid}\n"
-                    f"Vous pouvez suivre votre demande sur : "
-                    f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(resa.uuid) + '/')}"
-                ),
-                recipient_list=[resa.email_demandeur],
-            )
-            messages.success(request, "Votre demande de salle a ete soumise avec succes.")
-            return redirect("reservations:confirmation_salle", uuid=resa.uuid)
-    else:
-        form = DemandeReservationSalleForm()
-        form.fields['salle'].queryset = salles_reunion
+    """Réservation publique d'une ou plusieurs salles de réunion (pas de token requis)."""
+    import uuid as uuid_module
+    from datetime import date as date_cls, time as time_cls
+
+    # Salles proposées : réunion + agapes (pas les cabinets, pas les temples)
+    salles_qs = SalleReunion.objects.filter(
+        type_salle__in=['reunion', 'agapes'], actif=True
+    ).order_by('type_salle', 'nom')
+    salles_par_type = {}
+    for s in salles_qs:
+        salles_par_type.setdefault(s.get_type_salle_display(), []).append(s)
+
     loges = Loge.objects.filter(actif=True).order_by('nom')
-    return render(request, "reservations/formulaire_salle.html", {"form": form, "loges": loges})
+
+    if request.method == "POST":
+        salle_pks    = request.POST.getlist('salles')
+        date_str     = request.POST.get('date', '').strip()
+        hd_str       = request.POST.get('heure_debut', '').strip()
+        hf_str       = request.POST.get('heure_fin', '').strip()
+        nom_dem      = request.POST.get('nom_demandeur', '').strip()
+        email_dem    = request.POST.get('email_demandeur', '').strip()
+        loge_pk      = request.POST.get('loge_pk', '').strip()
+        org_libre    = request.POST.get('organisation', '').strip()
+        objet        = request.POST.get('objet', '').strip() or 'Réunion'
+        participants = request.POST.get('nombre_participants', '1').strip()
+        type_reunion = request.POST.get('type_reunion', 'reunion')
+        commentaire  = request.POST.get('commentaire', '').strip()
+
+        errors = []
+        loge = None
+        if loge_pk:
+            try:
+                loge = Loge.objects.get(pk=int(loge_pk))
+            except (Loge.DoesNotExist, ValueError):
+                pass
+        organisation = loge.nom if loge else org_libre
+
+        if not salle_pks:
+            errors.append("Sélectionnez au moins une salle.")
+        if not nom_dem:
+            errors.append("Votre nom est requis.")
+        if not email_dem:
+            errors.append("Votre email est requis.")
+
+        try:
+            date_r = date_cls.fromisoformat(date_str)
+        except (ValueError, TypeError):
+            date_r = None
+            errors.append("Date invalide.")
+        try:
+            hd = time_cls.fromisoformat(hd_str)
+            hf = time_cls.fromisoformat(hf_str)
+            if hf <= hd:
+                errors.append("L'heure de fin doit être après l'heure de début.")
+        except (ValueError, TypeError):
+            hd = hf = None
+            errors.append("Horaires invalides.")
+
+        salles_sel = list(SalleReunion.objects.filter(pk__in=salle_pks, actif=True))
+        conflits = []
+        if not errors and date_r and hd and hf:
+            for salle in salles_sel:
+                occupe = ReservationSalle.objects.filter(
+                    salle=salle, date=date_r,
+                    heure_debut__lt=hf, heure_fin__gt=hd,
+                    statut__in=['attente', 'validee'],
+                ).exists()
+                if occupe:
+                    conflits.append(salle.nom)
+            if conflits:
+                errors.append(f"Conflit sur : {', '.join(conflits)}. Choisissez d'autres créneaux ou d'autres salles.")
+
+        if not errors and salles_sel:
+            try:
+                nb_part = max(1, int(participants))
+            except ValueError:
+                nb_part = 1
+
+            group_id = uuid_module.uuid4() if len(salles_sel) > 1 else None
+            resas = []
+            for salle in salles_sel:
+                r = ReservationSalle.objects.create(
+                    loge=loge,
+                    salle=salle,
+                    date=date_r,
+                    heure_debut=hd,
+                    heure_fin=hf,
+                    statut='attente',
+                    nom_demandeur=nom_dem,
+                    email_demandeur=email_dem,
+                    organisation=organisation,
+                    objet=objet,
+                    nombre_participants=nb_part,
+                    type_reunion=type_reunion,
+                    commentaire=commentaire,
+                    group_uuid=group_id,
+                )
+                resas.append(r)
+
+            noms_salles = ', '.join(s.nom for s in salles_sel)
+            send_mail_kellermann(
+                subject="[Kellermann] Confirmation de votre demande de salle",
+                message=(
+                    f"Bonjour {nom_dem},\n\n"
+                    f"Votre demande de salle a bien été enregistrée.\n\n"
+                    f"Salle(s) : {noms_salles}\n"
+                    f"Date     : {date_r:%d/%m/%Y}\n"
+                    f"Horaires : {hd_str} – {hf_str}\n"
+                    f"Objet    : {objet}\n\n"
+                    f"L'administration vous contactera après validation.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[email_dem],
+            )
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande salle — {organisation or nom_dem}",
+                message=(
+                    f"Nouvelle demande de salle.\n\n"
+                    f"Organisation : {organisation or nom_dem}\n"
+                    f"Contact : {nom_dem} — {email_dem}\n"
+                    f"Salle(s) : {noms_salles}\n"
+                    f"Date : {date_r:%d/%m/%Y} {hd_str}–{hf_str}\n"
+                    f"Type : {dict(ReservationSalle.TYPE_REUNION_CHOICES).get(type_reunion, type_reunion)}\n"
+                ),
+                recipient_list=[get_email_admin()],
+            )
+            messages.success(request, "Demande envoyée — vous recevrez une confirmation par email.")
+            return redirect("reservations:confirmation_salle", uuid=resas[0].uuid)
+
+        for err in errors:
+            messages.error(request, err)
+
+    return render(request, "reservations/formulaire_salle.html", {
+        "loges":                loges,
+        "salles_par_type":      salles_par_type,
+        "type_reunion_choices": ReservationSalle.TYPE_REUNION_CHOICES,
+    })
 
 
 def confirmation(request, uuid):
@@ -134,7 +245,12 @@ def confirmation(request, uuid):
 
 def confirmation_salle(request, uuid):
     resa = get_object_or_404(ReservationSalle, uuid=uuid)
-    return render(request, "reservations/confirmation_salle.html", {"reservation": resa})
+    # Si multi-salles, récupérer toutes les réservations du groupe
+    if resa.group_uuid:
+        groupe = list(ReservationSalle.objects.filter(group_uuid=resa.group_uuid).select_related('salle').order_by('salle__nom'))
+    else:
+        groupe = [resa]
+    return render(request, "reservations/confirmation_salle.html", {"reservation": resa, "groupe": groupe})
 
 
 def suivi_reservation(request, uuid):

@@ -1,199 +1,256 @@
 {% extends "base.html" %}
-{% block title %}Demande de salle de réunion{% endblock %}
+{% block title %}Réserver une ou plusieurs salles{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-7">
+  <div class="col-lg-8">
 
     <div class="mb-4">
-      <h1 class="h3" style="color:#0F2137;">📋 Demande de salle de réunion</h1>
-      <p class="text-muted">Remplissez ce formulaire pour réserver une salle. Vous recevrez une confirmation par email.</p>
+      <h1 class="h3" style="color:#0F2137;">🪑 Réservation de salle(s)</h1>
+      <p class="text-muted mb-0">Sélectionnez une ou plusieurs salles pour le même créneau. Vous recevrez une confirmation par email.</p>
     </div>
 
-    <div class="card shadow-sm border-0">
-      <div class="card-body p-4">
-        <form method="post" novalidate>
-          {% csrf_token %}
+    {% if messages %}
+      {% for msg in messages %}
+        <div class="alert alert-{{ msg.tags|default:'info' }} mb-3">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
 
-          {# Salle + date #}
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Salle souhaitée</label>
-              {{ form.salle }}
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Date</label>
-              {{ form.date }}
-            </div>
-          </div>
+    <form method="post" novalidate>
+      {% csrf_token %}
 
-          {# Horaires #}
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Heure de début</label>
-              {{ form.heure_debut }}
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Heure de fin</label>
-              {{ form.heure_fin }}
-            </div>
-          </div>
-
-          <div id="conflit-message" class="mb-3" style="display: none;"></div>
-
-          {# Demandeur #}
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Votre nom</label>
-              {{ form.nom_demandeur }}
-            </div>
-            <div class="col-md-6">
-              <label class="form-label fw-semibold">Votre email</label>
-              {{ form.email_demandeur }}
-            </div>
-          </div>
-
-          {# Organisation / Loge #}
+      {# ── Salles ───────────────────────────────────────────────── #}
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header" style="background:#0F2137;color:white;">
+          <strong>Salle(s) souhaitée(s)</strong> <span class="opacity-75 small">— cochez une ou plusieurs</span>
+        </div>
+        <div class="card-body">
+          {% for type_label, salles in salles_par_type.items %}
           <div class="mb-3">
-            <label class="form-label fw-semibold">Votre loge / organisation</label>
-            <div id="loge-select-wrapper">
-              <select id="loge-selector" class="form-select" onchange="logeSelectChange(this)">
-                <option value="">— Sélectionner une loge —</option>
-                {% for loge in loges %}
-                  <option value="{{ loge.nom }}">{{ loge }}</option>
-                {% endfor %}
-              </select>
-              <div class="mt-1">
-                <a href="#" class="small text-muted" onclick="basculerOrg(true);return false;">
-                  Mon organisation n'est pas dans la liste →
-                </a>
+            <div class="small fw-semibold text-muted text-uppercase mb-2">{{ type_label }}</div>
+            <div class="row g-2">
+              {% for salle in salles %}
+              <div class="col-sm-6 col-md-4">
+                <label class="salle-label d-flex align-items-center gap-2 border rounded p-2 cursor-pointer w-100"
+                       for="salle_{{ salle.pk }}">
+                  <input type="checkbox" class="form-check-input salle-cb mt-0 flex-shrink-0"
+                         name="salles" value="{{ salle.pk }}" id="salle_{{ salle.pk }}">
+                  <span class="small">{{ salle.nom }}</span>
+                </label>
               </div>
-            </div>
-            <div id="org-libre-wrapper" style="display:none;">
-              {{ form.organisation }}
-              <div class="mt-1">
-                <a href="#" class="small text-muted" onclick="basculerOrg(false);return false;">
-                  ← Choisir dans la liste
-                </a>
-              </div>
+              {% endfor %}
             </div>
           </div>
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Objet de la réunion <span class="text-danger">*</span></label>
-            {{ form.objet }}
-          </div>
-
-          {# Participants #}
-          <div class="mb-3">
-            <label class="form-label fw-semibold">Nombre de participants</label>
-            {{ form.nombre_participants }}
-          </div>
-
-          {# Commentaire #}
-          <div class="mb-4">
-            <label class="form-label fw-semibold">Commentaire</label>
-            {{ form.commentaire }}
-          </div>
-
-          <div class="d-flex gap-3">
-            <button type="submit" class="btn btn-lg px-4"
-              style="background:#0F2137;color:white;">
-              Soumettre la demande
-            </button>
-            <a href="{% url 'calendrier:principal' %}" class="btn btn-outline-secondary btn-lg">
-              Annuler
-            </a>
-          </div>
-        </form>
+          {% endfor %}
+          <div id="conflit-message" class="mt-2" style="display:none;"></div>
+        </div>
       </div>
-    </div>
 
+      {# ── Type de réunion ──────────────────────────────────────── #}
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header" style="background:#0F2137;color:white;">
+          <strong>Type de réunion</strong>
+        </div>
+        <div class="card-body">
+          <div class="d-flex flex-wrap gap-3">
+            {% for value, label in type_reunion_choices %}
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="type_reunion"
+                     id="tr_{{ value }}" value="{{ value }}"
+                     {% if value == 'reunion' %}checked{% endif %}>
+              <label class="form-check-label" for="tr_{{ value }}">{{ label }}</label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      {# ── Date + horaires ──────────────────────────────────────── #}
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header" style="background:#0F2137;color:white;">
+          <strong>Date et horaires</strong>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+              <input type="date" name="date" class="form-control date-trigger" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Heure de début <span class="text-danger">*</span></label>
+              <input type="time" name="heure_debut" class="form-control time-trigger" step="900" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Heure de fin <span class="text-danger">*</span></label>
+              <input type="time" name="heure_fin" class="form-control time-trigger" step="900" required>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Objet + participants ──────────────────────────────────── #}
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header" style="background:#0F2137;color:white;">
+          <strong>Détails de la réunion</strong>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Objet / titre <span class="text-danger">*</span></label>
+            <input type="text" name="objet" class="form-control" placeholder="Ex : Réunion de travail, AG annuelle…" required>
+          </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Nombre de participants</label>
+            <input type="number" name="nombre_participants" class="form-control" min="1" style="max-width:160px;">
+          </div>
+        </div>
+      </div>
+
+      {# ── Loge / organisation ──────────────────────────────────── #}
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header" style="background:#0F2137;color:white;">
+          <strong>Loge / Organisation</strong>
+        </div>
+        <div class="card-body">
+          <div id="loge-select-wrapper">
+            <label class="form-label fw-semibold">Votre loge</label>
+            <select id="loge-selector" name="loge_pk" class="form-select">
+              <option value="">— Sélectionner une loge —</option>
+              {% for loge in loges %}
+                <option value="{{ loge.pk }}">{{ loge }}</option>
+              {% endfor %}
+            </select>
+            <div class="mt-1">
+              <a href="#" class="small text-muted" onclick="basculerOrg(true);return false;">
+                Mon organisation n'est pas dans la liste →
+              </a>
+            </div>
+          </div>
+          <div id="org-libre-wrapper" style="display:none;">
+            <label class="form-label fw-semibold">Nom de l'organisation</label>
+            <input type="text" id="org-libre-input" name="organisation" class="form-control" placeholder="Nom de votre organisation">
+            <div class="mt-1">
+              <a href="#" class="small text-muted" onclick="basculerOrg(false);return false;">
+                ← Choisir dans la liste
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Contact ──────────────────────────────────────────────── #}
+      <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header" style="background:#0F2137;color:white;">
+          <strong>Vos coordonnées</strong>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre nom <span class="text-danger">*</span></label>
+              <input type="text" name="nom_demandeur" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Votre email <span class="text-danger">*</span></label>
+              <input type="email" name="email_demandeur" class="form-control" required>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label fw-semibold">Commentaire</label>
+            <textarea name="commentaire" class="form-control" rows="2" placeholder="Informations complémentaires…"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-3 mb-5">
+        <button type="submit" class="btn btn-lg px-4" style="background:#0F2137;color:white;">
+          ✅ Soumettre la demande
+        </button>
+        <a href="{% url 'calendrier:principal' %}" class="btn btn-outline-secondary btn-lg">
+          Annuler
+        </a>
+      </div>
+
+    </form>
   </div>
 </div>
 
-<script>
-function logeSelectChange(sel) {
-  var orgInput = document.querySelector('[name="organisation"]');
-  if (sel.value) orgInput.value = sel.value;
-}
+<style>
+.salle-label { cursor: pointer; transition: border-color .15s, background .15s; }
+.salle-label:hover { border-color: #0F2137 !important; background: #F8F9FA; }
+.salle-label:has(input:checked) { border-color: #0F2137 !important; background: #EEF2FF; }
+</style>
 
+<script>
+/* ── Loge / org toggle ─────────────────────────────────── */
 function basculerOrg(libre) {
   var selWrap   = document.getElementById('loge-select-wrapper');
   var libreWrap = document.getElementById('org-libre-wrapper');
-  var orgInput  = document.querySelector('[name="organisation"]');
+  var orgFree   = document.getElementById('org-libre-input');
+  var logeSel   = document.getElementById('loge-selector');
   if (libre) {
     selWrap.style.display   = 'none';
     libreWrap.style.display = 'block';
-    orgInput.value = '';
-    if (window.$ && $('#loge-selector').data('select2')) {
-      $('#loge-selector').val(null).trigger('change');
-    } else {
-      document.getElementById('loge-selector').value = '';
-    }
+    logeSel.disabled = true;
+    orgFree.disabled = false;
+    orgFree.value = '';
+    orgFree.focus();
   } else {
     selWrap.style.display   = 'block';
     libreWrap.style.display = 'none';
-    orgInput.value = '';
+    logeSel.disabled = false;
+    orgFree.disabled = true;
+    orgFree.value = '';
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  const conflitMessage = document.getElementById('conflit-message');
-  const salleSelect    = document.querySelector('[name="salle"]');
-  const dateInput      = document.querySelector('[name="date"]');
-  const heureDebutInput = document.querySelector('[name="heure_debut"]');
-  const heureFinInput   = document.querySelector('[name="heure_fin"]');
+/* ── Conflit checker ───────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', function () {
+  var conflitDiv  = document.getElementById('conflit-message');
+  var dateInput   = document.querySelector('[name="date"]');
+  var heureDebut  = document.querySelector('[name="heure_debut"]');
+  var heureFin    = document.querySelector('[name="heure_fin"]');
 
-  function verifierConflitSalle() {
-    const salle     = salleSelect ? salleSelect.value : '';
-    const date      = dateInput.value;
-    const heureDebut = heureDebutInput.value;
-    const heureFin   = heureFinInput.value;
+  function verifier() {
+    var date = dateInput ? dateInput.value : '';
+    var hd   = heureDebut ? heureDebut.value : '';
+    var hf   = heureFin   ? heureFin.value   : '';
+    var checked = document.querySelectorAll('.salle-cb:checked');
 
-    if (!salle || !date || !heureDebut || !heureFin) {
-      conflitMessage.style.display = 'none';
+    if (!date || !hd || !hf || !checked.length) {
+      conflitDiv.style.display = 'none';
       return;
     }
 
-    fetch(`/reservations/api/verifier-conflit/?salle=${encodeURIComponent(salle)}&date=${encodeURIComponent(date)}&heure_debut=${encodeURIComponent(heureDebut)}&heure_fin=${encodeURIComponent(heureFin)}`)
-      .then(r => r.json())
-      .then(data => {
-        let alertClass = 'alert-success';
-        if (data.conflit) {
-          alertClass = data.niveau === 'erreur' ? 'alert-danger' : 'alert-warning';
-        }
-        conflitMessage.innerHTML = `<div class="alert ${alertClass}" role="alert">${data.message}</div>`;
-        conflitMessage.style.display = 'block';
-      })
-      .catch(() => { conflitMessage.style.display = 'none'; });
-  }
-
-  if (salleSelect) salleSelect.addEventListener('change', verifierConflitSalle);
-  if (dateInput)   dateInput.addEventListener('change', verifierConflitSalle);
-  if (heureDebutInput) heureDebutInput.addEventListener('change', verifierConflitSalle);
-  if (heureFinInput)   heureFinInput.addEventListener('change', verifierConflitSalle);
-
-  var orgInput = document.querySelector('[name="organisation"]');
-  if (orgInput && orgInput.value.trim()) {
-    var sel = document.getElementById('loge-selector');
-    var matched = false;
-    for (var i = 0; i < sel.options.length; i++) {
-      if (sel.options[i].value === orgInput.value.trim()) {
-        sel.value = sel.options[i].value;
-        if (window.$) { $(sel).trigger('change'); }
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) { basculerOrg(true); orgInput.value = orgInput.value.trim(); }
-  }
-
-  // Sync Select2 change event
-  if (window.$) {
-    $('#loge-selector').on('select2:select', function(e) {
-      document.querySelector('[name="organisation"]').value = e.params.data.id || '';
+    var promises = Array.from(checked).map(function(cb) {
+      return fetch('/reservations/api/verifier-conflit/?salle=' + encodeURIComponent(cb.value)
+        + '&date=' + encodeURIComponent(date)
+        + '&heure_debut=' + encodeURIComponent(hd)
+        + '&heure_fin=' + encodeURIComponent(hf))
+        .then(function(r) { return r.json(); })
+        .then(function(d) { return { salle: cb.closest('label').querySelector('span').textContent.trim(), data: d }; });
     });
-    $('#loge-selector').on('select2:clear', function() {
-      document.querySelector('[name="organisation"]').value = '';
+
+    Promise.all(promises).then(function(results) {
+      var conflits = results.filter(function(r) { return r.data.conflit; });
+      if (!conflits.length) {
+        conflitDiv.innerHTML = '<div class="alert alert-success py-2">✅ Aucun conflit détecté pour les salles sélectionnées.</div>';
+      } else {
+        var msgs = conflits.map(function(r) {
+          return '<li><strong>' + r.salle + '</strong> — ' + r.data.message + '</li>';
+        });
+        conflitDiv.innerHTML = '<div class="alert alert-warning py-2"><ul class="mb-0">' + msgs.join('') + '</ul></div>';
+      }
+      conflitDiv.style.display = 'block';
+    }).catch(function() { conflitDiv.style.display = 'none'; });
+  }
+
+  document.querySelectorAll('.salle-cb').forEach(function(cb) { cb.addEventListener('change', verifier); });
+  if (dateInput)  dateInput.addEventListener('change', verifier);
+  if (heureDebut) heureDebut.addEventListener('change', verifier);
+  if (heureFin)   heureFin.addEventListener('change', verifier);
+
+  /* Select2 sync */
+  if (window.$) {
+    $('#loge-selector').on('select2:select select2:clear', function() {
+      /* value already on the <select> element — nothing extra needed */
     });
   }
 });

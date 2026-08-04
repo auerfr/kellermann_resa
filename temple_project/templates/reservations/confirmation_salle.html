@@ -6,17 +6,34 @@
     <div class="card shadow-sm border-0 p-5">
       <div style="font-size:48px;" class="mb-3">✅</div>
       <h2 style="color:#0F2137;">Demande reçue !</h2>
-      <p class="text-muted mt-3">
-        Votre demande pour la <strong>{{ reservation.salle }}</strong>
-        le <strong>{{ reservation.date }}</strong>
-        de <strong>{{ reservation.heure_debut }}</strong> à <strong>{{ reservation.heure_fin }}</strong>
-        a bien été enregistrée.
-      </p>
-      <p class="text-muted">Un email de confirmation a été envoyé à <strong>{{ reservation.email_demandeur }}</strong>.</p>
+
+      <div class="text-muted mt-3 text-start">
+        <p class="mb-2">
+          Votre demande pour le <strong>{{ reservation.date|date:"d/m/Y" }}</strong>
+          de <strong>{{ reservation.heure_debut|time:"H\hi" }}</strong>
+          à <strong>{{ reservation.heure_fin|time:"H\hi" }}</strong>
+          a bien été enregistrée.
+        </p>
+
+        {% if groupe|length > 1 %}
+        <p class="mb-2">Salles réservées :</p>
+        <ul class="mb-2">
+          {% for r in groupe %}
+          <li><strong>{{ r.salle }}</strong></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="mb-2">Salle : <strong>{{ reservation.salle }}</strong></p>
+        {% endif %}
+
+        <p class="mb-0">Un email de confirmation a été envoyé à <strong>{{ reservation.email_demandeur }}</strong>.</p>
+      </div>
+
       <div class="alert alert-light mt-3 text-start">
         <small class="text-muted">Référence de votre demande :</small><br>
         <code>{{ reservation.uuid }}</code>
       </div>
+
       <a href="{% url 'calendrier:principal' %}" class="btn mt-3" style="background:#0F2137;color:white;">
         Retour au calendrier
       </a>
