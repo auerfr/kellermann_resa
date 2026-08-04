@@ -13,7 +13,7 @@ from temple_project.apps.reservations.models import (
     Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle,
     DemandeAccesPortail, ValidationSaison, ValidationSaisonLigne,
     Indisponibilite, BlocageCreneaux, RegleRecurrenceSalle,
-    DemandeRegleRecurrenceSalle,
+    DemandeRegleRecurrenceSalle, DemandeRegleRecurrence,
 )
 from temple_project.apps.loges.models import Loge, Obedience
 from .models import Parametres, JournalEvenement, Annonce
@@ -50,6 +50,7 @@ def tableau_de_bord(request):
     ).select_related('salle').order_by('date')
     demandes_portail_attente = DemandeAccesPortail.objects.filter(statut='attente').order_by('created_at')
     demandes_recsalle_attente = DemandeRegleRecurrenceSalle.objects.filter(statut='attente').select_related('loge').order_by('date_demande')
+    demandes_rectemple_attente = DemandeRegleRecurrence.objects.filter(statut='attente').select_related('loge').order_by('date_demande')
     from temple_project.apps.reservations.models import MessageContact
     messages_nouveaux = MessageContact.objects.filter(statut='nouveau').order_by('-created_at')
     context = {
@@ -65,6 +66,8 @@ def tableau_de_bord(request):
         'nb_demandes_portail':      demandes_portail_attente.count(),
         'demandes_recsalle':        demandes_recsalle_attente,
         'nb_demandes_recsalle':     demandes_recsalle_attente.count(),
+        'demandes_rectemple':       demandes_rectemple_attente,
+        'nb_demandes_rectemple':    demandes_rectemple_attente.count(),
         'messages_nouveaux':        messages_nouveaux,
         'nb_messages_nx':           messages_nouveaux.count(),
     }

@@ -367,7 +367,7 @@ def demande_cabinets(request):
                 )
                 reservations_creees.append(resa)
 
-            # Envoyer un email de confirmation
+            # Envoyer un email de confirmation au demandeur
             send_mail_kellermann(
                 subject="Confirmation de votre demande de cabinets de réflexion",
                 message=(
@@ -378,6 +378,18 @@ def demande_cabinets(request):
                     f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(reservations_creees[0].uuid) + '/')}"
                 ),
                 recipient_list=[form.cleaned_data['email_demandeur']],
+            )
+            # Notifier l'admin
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande cabinets — {form.cleaned_data['organisation']}",
+                message=(
+                    f"Nouvelle demande de {nombre_cabinets_demandes} cabinet(s) de réflexion :\n"
+                    f"Organisation : {form.cleaned_data['organisation']}\n"
+                    f"Date : {date} · {heure_debut}–{heure_fin}\n"
+                    f"Demandeur : {form.cleaned_data['nom_demandeur']} <{form.cleaned_data['email_demandeur']}>\n"
+                    f"Référence : {reservations_creees[0].uuid}"
+                ),
+                recipient_list=[get_email_admin()],
             )
 
             messages.success(request, f"Votre demande de {nombre_cabinets_demandes} cabinet(s) a été soumise avec succès.")
@@ -510,6 +522,20 @@ def demande_banquet(request):
                 subject="Confirmation de votre demande de banquet d'ordre",
                 message=message,
                 recipient_list=destinataires,
+            )
+            # Notifier l'admin
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande banquet — {form.cleaned_data.get('loge', 'N/A')}",
+                message=(
+                    f"Nouvelle demande de banquet d'ordre :\n"
+                    f"Loge : {form.cleaned_data.get('loge', '—')}\n"
+                    f"Date : {date:%d/%m/%Y} · {heure_debut}–{heure_fin}\n"
+                    f"Salle : {salle_banquet.nom}\n"
+                    f"Repas : {form.cleaned_data['nombre_repas']}\n"
+                    f"Demandeur : {form.cleaned_data['nom_demandeur']} <{form.cleaned_data['email_demandeur']}>\n"
+                    f"Référence : {resa.uuid}"
+                ),
+                recipient_list=[get_email_admin()],
             )
 
             messages.success(request, "Votre demande de banquet d'ordre a été soumise avec succès.")

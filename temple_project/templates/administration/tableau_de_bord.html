@@ -171,6 +171,37 @@
 </div>
 {% endif %}
 
+{% if demandes_rectemple %}
+<div class="stx-card mb-4" style="border-left:4px solid #6D28D9;overflow:hidden;">
+  <div class="d-flex justify-content-between align-items-center" style="padding:13px 16px;border-bottom:1px solid #F3F5F8;">
+    <span class="stx-h" style="color:#4C1D95;">🏛 Demandes récurrence temple en attente <span class="ms-1" style="background:#EDE9FE;color:#4C1D95;font-size:12px;font-weight:600;padding:3px 9px;border-radius:7px;">{{ nb_demandes_rectemple }}</span></span>
+    <span style="font-size:11px;color:#6D28D9;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Action requise</span>
+  </div>
+  <div class="table-responsive">
+    <table class="stx-tbl">
+      <thead><tr><th>Loge</th><th>Temple</th><th>Fréquence</th><th>Horaires</th><th>Soumis le</th><th></th></tr></thead>
+      <tbody>
+        {% for d in demandes_rectemple %}
+        <tr>
+          <td style="font-weight:600;color:#0F2137;">{{ d.loge }}</td>
+          <td>{{ d.temple }}</td>
+          <td>{{ d.get_numero_semaine_display }} {{ d.get_jour_semaine_display }}</td>
+          <td class="small">{{ d.heure_debut|time:"H\hi" }} – {{ d.heure_fin|time:"H\hi" }}</td>
+          <td style="color:#64748B;">{{ d.date_demande|date:"d/m à H:i" }}</td>
+          <td class="text-end">
+            <a href="/admin/reservations/demanderecurrence/{{ d.pk }}/change/"
+               class="btn btn-sm fw-semibold" style="font-size:12px;background:#EDE9FE;color:#6D28D9;">
+              Traiter →
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {% if demandes_recsalle %}
 <div class="stx-card mb-4" style="border-left:4px solid #8B5CF6;overflow:hidden;">
   <div class="d-flex justify-content-between align-items-center" style="padding:13px 16px;border-bottom:1px solid #F3F5F8;">
