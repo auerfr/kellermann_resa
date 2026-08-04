@@ -5,8 +5,9 @@ from django.db.models import Q
 import calendar
 
 from temple_project.apps.reservations.models import (
-    Reservation, ReservationSalle, SalleReunion, BlocageCreneaux
+    Reservation, ReservationSalle, SalleReunion, BlocageCreneaux, MessageContact
 )
+from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_traiteur
 from temple_project.apps.loges.models import Loge
 from .forms import (
     ReservationDirecteForm, TraiteurReservationDirecteForm,
@@ -585,20 +586,12 @@ def guide_traiteur(request):
 
 @traiteur_required
 def contact_traiteur(request):
-    """Page contacts : coordonnées admin + loges avec tenues à venir."""
+    """Page contacts : formulaires d'envoi de message (loges + admin)."""
     from django.contrib.auth import get_user_model
     User = get_user_model()
 
     today   = date.today()
     horizon = today + timedelta(days=60)
-
-    # Contacts admin (staff)
-    admins = list(
-        User.objects.filter(is_staff=True)
-        .exclude(email="")
-        .values("first_name", "last_name", "email")
-        .order_by("first_name")
-    )
 
     # Loges avec tenues de soir ou agapes dans les 60 prochains jours
     tenues = (
@@ -620,21 +613,65 @@ def contact_traiteur(request):
         loge = t.loge
         if loge.pk not in loges_vues:
             loges_vues[loge.pk] = {
+                "pk":          loge.pk,
                 "nom":         loge.nom,
-                "contact_nom": loge.nom_contact or "",
-                "email":       loge.email or "",
-                "telephone":   loge.telephone or "",
                 "prochaine":   t.date,
-                "agapes":      _agapes_status(t),
+                "has_email":   bool(loge.email),
             }
 
-    contacts_loges = sorted(loges_vues.values(), key=lambda x: x["prochaine"])
+    loges_choices = sorted(loges_vues.values(), key=lambda x: x["prochaine"])
+
+    # Nombre d'admins disponibles
+    nb_admins = User.objects.filter(is_staff=True).exclude(email="").count()
+
+    if request.method == "POST":
+        cible = request.POST.get("cible")
+
+        if cible == "loge":
+            loge_pk = request.POST.get("loge_pk")
+            sujet   = request.POST.get("sujet", "").strip()
+            msg     = request.POST.get("message", "").strip()
+            if not msg:
+                messages.error(request, "Le message ne peut pas être vide.")
+            else:
+                try:
+                    loge = Loge.objects.get(pk=loge_pk)
+                    if loge.email:
+                        send_mail_kellermann(
+                            subject=f"[Kellermann Traiteur] {sujet or 'Message du traiteur'}",
+                            message=(
+                                f"Message transmis par le traiteur des Temples Kellermann :\n\n"
+                                f"{msg}\n\n"
+                                f"(Ce message a été envoyé via l'espace traiteur du site de réservation.)"
+                            ),
+                            recipient_list=[loge.email],
+                        )
+                        messages.success(request, f"Message envoyé à {loge.nom}.")
+                    else:
+                        messages.error(request, f"Aucun e-mail enregistré pour {loge.nom}.")
+                except Loge.DoesNotExist:
+                    messages.error(request, "Loge introuvable.")
+
+        elif cible == "admin":
+            sujet = request.POST.get("sujet", "").strip()
+            msg   = request.POST.get("message", "").strip()
+            if not msg:
+                messages.error(request, "Le message ne peut pas être vide.")
+            else:
+                email_tr = get_email_traiteur() or "traiteur@kellermann.local"
+                MessageContact.objects.create(
+                    nom="Traiteur",
+                    email=email_tr,
+                    sujet=sujet or "Message traiteur",
+                    message=msg,
+                )
+                messages.success(request, "Message envoyé à l'administrateur.")
+
+        return redirect("traiteur:contact")
 
     return render(request, "traiteur/contact.html", {
-        "admins":         admins,
-        "contacts_loges": contacts_loges,
-        "horizon":        horizon,
-        "today":          today,
+        "loges_choices": loges_choices,
+        "nb_admins":     nb_admins,
     })
 
 
