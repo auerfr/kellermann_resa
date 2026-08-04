@@ -173,12 +173,18 @@ def tableau_de_bord(request):
         .order_by("date", "heure_debut")
     )
 
-    repas_a_venir = [_build_repas(r, "Temple") for r in tenues_temple]
-    repas_a_venir += [_build_repas(r, "Salle") for r in tenues_salle]
-    repas_a_venir.sort(key=lambda x: (x["date"], x["heure_debut"]))
+    tous_repas = [_build_repas(r, "Temple") for r in tenues_temple]
+    tous_repas += [_build_repas(r, "Salle") for r in tenues_salle]
+    tous_repas.sort(key=lambda x: (x["date"], x["heure_debut"]))
 
-    nb_confirmes = sum(1 for r in repas_a_venir if r["agapes_status"] == "confirme")
-    nb_probables = sum(1 for r in repas_a_venir if r["agapes_status"] in ("probable", "probable_classique"))
+    horizon_court = today + timedelta(days=15)
+
+    repas_aujourd_hui   = [r for r in tous_repas if r["date"] == today]
+    repas_cette_semaine = [r for r in tous_repas if today < r["date"] <= horizon_court]
+    repas_a_venir       = [r for r in tous_repas if r["date"] > horizon_court]
+
+    nb_confirmes = sum(1 for r in tous_repas if r["agapes_status"] == "confirme")
+    nb_probables = sum(1 for r in tous_repas if r["agapes_status"] in ("probable", "probable_classique"))
 
     blocages = (
         BlocageCreneaux.objects
@@ -194,13 +200,16 @@ def tableau_de_bord(request):
     )
 
     return render(request, "traiteur/tableau_de_bord.html", {
-        "repas_a_venir":    repas_a_venir,
-        "nb_confirmes":     nb_confirmes,
-        "nb_probables":     nb_probables,
-        "blocages":         blocages,
-        "notifications":    notifications,
-        "nb_notifications": notifications.count(),
-        "today":            today,
+        "repas_aujourd_hui":  repas_aujourd_hui,
+        "repas_cette_semaine": repas_cette_semaine,
+        "repas_a_venir":      repas_a_venir,
+        "nb_confirmes":       nb_confirmes,
+        "nb_probables":       nb_probables,
+        "blocages":           blocages,
+        "notifications":      notifications,
+        "nb_notifications":   notifications.count(),
+        "today":              today,
+        "horizon_court":      horizon_court,
     })
 
 

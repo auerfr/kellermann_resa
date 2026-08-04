@@ -1,30 +1,134 @@
 {% extends "base.html" %}
 {% block title %}Traiteur — Tableau de bord{% endblock %}
 
+{% block extra_css %}
+<style>
+/* ── Carte "aujourd'hui" ── */
+.card-auj {
+  border: 2px solid #0F2137;
+  border-radius: 8px;
+}
+.card-auj .card-header {
+  background: #0F2137;
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: .6rem 1rem;
+}
+
+/* ── Ligne événement ── */
+.evt-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .65rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+.evt-row:last-child { border-bottom: none; }
+.evt-date {
+  font-weight: 700;
+  font-size: 1.05rem;
+  min-width: 80px;
+  white-space: nowrap;
+}
+.evt-heure {
+  color: #64748b;
+  font-size: .85rem;
+  min-width: 80px;
+  white-space: nowrap;
+}
+.evt-org {
+  flex: 1;
+  font-weight: 600;
+  font-size: .95rem;
+}
+.evt-lieu {
+  color: #64748b;
+  font-size: .82rem;
+}
+.evt-couverts {
+  min-width: 56px;
+  text-align: center;
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.evt-couverts small {
+  display: block;
+  font-size: .65rem;
+  font-weight: 400;
+  color: #64748b;
+  line-height: 1.3;
+}
+.evt-badge {
+  font-size: .72rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* ── Actions rapides ── */
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .3rem;
+  padding: 1rem .5rem;
+  border-radius: 8px;
+  font-size: .82rem;
+  font-weight: 600;
+  text-decoration: none;
+  text-align: center;
+  line-height: 1.2;
+  transition: opacity .15s;
+}
+.action-btn:hover { opacity: .85; }
+.action-btn .icon { font-size: 1.5rem; }
+
+/* ── Blocage strip ── */
+.blocage-strip {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: .5rem .85rem;
+  font-size: .88rem;
+  color: #7f1d1d;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <h1 class="h3 mb-0">🍽 Espace Traiteur</h1>
+
+<!-- ══ EN-TÊTE ══ -->
+<div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-0">🍽 Espace Traiteur</h1>
+    <p class="text-muted mb-0 small">{{ today|date:"l d F Y" }}</p>
+  </div>
+  <!-- Actions secondaires (admin / navigation) -->
   <div class="d-flex gap-2 flex-wrap">
-    <a href="{% url 'traiteur:reserver' %}"       class="btn btn-sm btn-success">➕ Réserver (1 salle)</a>
-    <a href="{% url 'traiteur:loges_couverts' %}" class="btn btn-sm btn-outline-secondary">👥 Couverts loges</a>
-    <a href="{% url 'traiteur:bloquer' %}"         class="btn btn-sm btn-danger">🔒 Bloquer</a>
-    <a href="{% url 'traiteur:etat_des_lieux' %}" class="btn btn-sm btn-outline-primary">📋 État des lieux</a>
-    <a href="{% url 'traiteur:guide' %}"           class="btn btn-sm btn-outline-secondary">❓ Guide</a>
+    <a href="{% url 'traiteur:calendrier' %}"   class="btn btn-sm btn-outline-secondary">📅 Calendrier</a>
+    <a href="{% url 'traiteur:reserver' %}"     class="btn btn-sm btn-outline-secondary">➕ Réserver</a>
+    <a href="{% url 'traiteur:guide' %}"         class="btn btn-sm btn-outline-secondary">❓ Guide</a>
   </div>
 </div>
 
-{# Alertes notifications couverts #}
+<!-- ══ NOTIFICATIONS COUVERTS ══ -->
 {% if notifications %}
-<div class="mb-4">
+<div class="mb-3">
   {% for notif in notifications %}
   <div class="alert alert-warning d-flex justify-content-between align-items-start gap-2 mb-2" role="alert">
     <div>
-      <strong>🔔 Notification</strong> —
+      <strong>🔔 Notification couverts</strong> —
       <strong>{{ notif.loge }}</strong> —
       Tenue du <strong>{{ notif.date_tenue|date:"d/m/Y" }}</strong> —
       <strong>{{ notif.nombre_couverts }} couverts</strong>
       {% if notif.commentaire %}<br><small class="text-muted">{{ notif.commentaire }}</small>{% endif %}
-      <br><small class="text-muted">Reçu {{ notif.created_at|date:"d/m H\hi" }} · Contact : {{ notif.email_contact }}</small>
+      <br><small class="text-muted">Reçu le {{ notif.created_at|date:"d/m à H\hi" }}</small>
     </div>
     <form method="post" action="{% url 'traiteur:marquer_notification_lue' notif.pk %}" class="flex-shrink-0">
       {% csrf_token %}
@@ -35,160 +139,180 @@
 </div>
 {% endif %}
 
-{# Statistiques #}
-<div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm">
-      <div class="card-body py-3">
-        <div style="font-size:1.8rem;font-weight:700;color:#22C55E;">{{ nb_confirmes }}</div>
-        <div class="text-muted small">Agapes confirmées (30 j.)</div>
-      </div>
-    </div>
+<!-- ══ BLOCAGES EN COURS / À VENIR ══ -->
+{% if blocages %}
+<div class="mb-3">
+  {% for b in blocages %}
+  <div class="blocage-strip mb-1">
+    🔒
+    <strong>Fermé :</strong>
+    {{ b.date|date:"d/m" }}{% if b.date_fin and b.date_fin != b.date %} → {{ b.date_fin|date:"d/m" }}{% endif %}
+    &nbsp;{{ b.heure_debut|time:"H\hi" }}–{{ b.heure_fin|time:"H\hi" }}
+    &nbsp;·&nbsp; {{ b.motif }}
   </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm">
-      <div class="card-body py-3">
-        <div style="font-size:1.8rem;font-weight:700;color:#C8A84B;">{{ nb_probables }}</div>
-        <div class="text-muted small">Tenues soir probables (30 j.)</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm {% if nb_notifications %}border-warning{% endif %}">
-      <div class="card-body py-3">
-        <div style="font-size:1.8rem;font-weight:700;color:{% if nb_notifications %}#D97706{% else %}#94A3B8{% endif %};">
-          {{ nb_notifications }}
-        </div>
-        <div class="text-muted small">Notif. non lues</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm">
-      <div class="card-body py-3">
-        <div style="font-size:1.8rem;font-weight:700;color:#EF4444;">{{ blocages|length }}</div>
-        <div class="text-muted small">Blocages à venir</div>
-      </div>
-    </div>
-  </div>
+  {% endfor %}
 </div>
+{% endif %}
 
-{# Tenues à venir 30 jours #}
-<div class="card shadow-sm mb-4">
-  <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;color:white;">
-    <strong>📅 Tenues à venir — 30 jours</strong>
-    <div class="d-flex gap-1">
-      <span class="badge" style="background:#22C55E;">● Agapes conf.</span>
-      <span class="badge" style="background:#C8A84B;color:#0F2137;">● Soir probable</span>
-    </div>
+<!-- ══ AUJOURD'HUI ══ -->
+<div class="card card-auj mb-4">
+  <div class="card-header">
+    📅 Aujourd'hui — {{ today|date:"l d F" }}
   </div>
   <div class="card-body p-0">
-    {% if repas_a_venir %}
-    <div class="table-responsive">
-      <table class="table table-hover table-sm mb-0">
-        <thead class="table-light">
-          <tr>
-            <th style="width:90px;">Date</th>
-            <th style="width:100px;">Horaires</th>
-            <th>Loge / Organisation</th>
-            <th>Lieu</th>
-            <th class="text-center" style="width:80px;">Couverts</th>
-            <th>Contact</th>
-            <th style="width:70px;">Type</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in repas_a_venir %}
-          <tr {% if r.agapes_status == 'confirme' %}class="table-success"
-              {% elif r.agapes_status == 'probable_classique' %}style="background:#EDE9FE;"
-              {% elif r.agapes_status == 'probable' %}class="table-warning"{% endif %}>
-            <td><strong>{{ r.date|date:"D d/m" }}</strong></td>
-            <td class="text-muted small">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</td>
-            <td>
-              {{ r.organisation }}
-              {% if r.agapes_status == 'confirme' %}
-                <span class="badge" style="background:#22C55E;font-size:9px;">✓ Agapes</span>
-              {% elif r.agapes_status == 'probable_classique' %}
-                <span class="badge" style="background:#7C3AED;color:white;font-size:9px;">~ Classiques</span>
-              {% elif r.agapes_status == 'probable' %}
-                <span class="badge" style="background:#C8A84B;color:#0F2137;font-size:9px;">~ Probable</span>
-              {% endif %}
-              {% if r.statut == 'attente' %}
-                <span class="badge bg-secondary" style="font-size:9px;">⏳ Attente</span>
-              {% endif %}
-            </td>
-            <td class="small">{{ r.lieu }}</td>
-            <td class="text-center">
-              {% if r.couverts %}
-                {% if r.estimation %}
-                  <em class="text-muted small">~{{ r.couverts }}</em>
-                {% else %}
-                  <span class="fw-semibold">{{ r.couverts }}</span>
-                {% endif %}
-              {% else %}
-                <span class="text-muted">?</span>
-              {% endif %}
-            </td>
-            <td class="small">
-              {% if r.contact_nom or r.contact_email or r.contact_tel %}
-                {% if r.contact_nom %}<span>{{ r.contact_nom }}</span>{% endif %}
-                {% if r.contact_email %}<br><a href="mailto:{{ r.contact_email }}" class="text-muted">{{ r.contact_email }}</a>{% endif %}
-                {% if r.contact_tel %}<br><a href="tel:{{ r.contact_tel }}" class="text-muted">{{ r.contact_tel }}</a>{% endif %}
-              {% else %}
-                <span class="text-muted fst-italic">—</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if r.type == "Temple" %}
-                <span class="badge" style="background:#0F2137;">Temple</span>
-              {% else %}
-                <span class="badge" style="background:#3B82F6;">Salle</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+    {% if repas_aujourd_hui %}
+      {% for r in repas_aujourd_hui %}
+      <div class="evt-row {% if r.agapes_status == 'confirme' %}bg-success bg-opacity-10{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}bg-warning bg-opacity-10{% endif %}">
+        <div class="evt-heure">{{ r.heure_debut|time:"H\hi" }}<br><span style="color:#94a3b8;font-size:.75rem;">→ {{ r.heure_fin|time:"H\hi" }}</span></div>
+        <div style="flex:1;">
+          <div class="evt-org">{{ r.organisation }}</div>
+          <div class="evt-lieu">{{ r.lieu }}</div>
+        </div>
+        <div class="evt-couverts">
+          {% if r.couverts %}
+            {% if r.estimation %}<em style="color:#94a3b8;">~{{ r.couverts }}</em>{% else %}{{ r.couverts }}{% endif %}
+          {% else %}<span style="color:#cbd5e1;">?</span>{% endif %}
+          <small>couverts</small>
+        </div>
+        <div>
+          {% if r.type == 'Salle' %}
+            <span class="evt-badge" style="background:#FEF3C7;color:#92400E;">🥂 Banquet</span>
+          {% elif r.agapes_status == 'confirme' %}
+            <span class="evt-badge" style="background:#DCFCE7;color:#166534;">✓ Agapes</span>
+          {% elif r.agapes_status == 'probable_classique' %}
+            <span class="evt-badge" style="background:#EDE9FE;color:#5B21B6;">~ Classiques</span>
+          {% elif r.agapes_status == 'probable' %}
+            <span class="evt-badge" style="background:#FEF9C3;color:#854D0E;">~ Soir</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
     {% else %}
-    <p class="text-muted p-3 mb-0">Aucune tenue prévue dans les 30 prochains jours.</p>
+      <div class="p-3 text-muted text-center">
+        <span style="font-size:1.4rem;">✔</span><br>
+        Aucun repas prévu aujourd'hui.
+      </div>
     {% endif %}
   </div>
 </div>
 
-{# Blocages #}
-{% if blocages %}
+<!-- ══ ACTIONS PRINCIPALES ══ -->
+<div class="row g-3 mb-4">
+  <div class="col-4">
+    <a href="{% url 'traiteur:etat_des_lieux' %}" class="action-btn w-100" style="background:#EFF6FF;color:#1E3A8A;border:1.5px solid #BFDBFE;">
+      <span class="icon">📋</span>
+      Imprimer le planning
+    </a>
+  </div>
+  <div class="col-4">
+    <a href="{% url 'traiteur:loges_couverts' %}" class="action-btn w-100" style="background:#F0FDF4;color:#166534;border:1.5px solid #BBF7D0;">
+      <span class="icon">👥</span>
+      Saisir les couverts
+    </a>
+  </div>
+  <div class="col-4">
+    <a href="{% url 'traiteur:bloquer' %}" class="action-btn w-100" style="background:#FFF1F2;color:#9F1239;border:1.5px solid #FECDD3;">
+      <span class="icon">🔒</span>
+      Fermeture
+    </a>
+  </div>
+</div>
+
+<!-- ══ CETTE SEMAINE ══ -->
 <div class="card shadow-sm mb-4">
-  <div class="card-header" style="background:#7f1d1d;color:white;">
-    <strong>🔒 Créneaux bloqués à venir</strong>
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#1E40AF;color:white;">
+    <strong>📆 À commander — jusqu'au {{ horizon_court|date:"d/m" }}</strong>
+    <div class="d-flex gap-1">
+      <span class="badge" style="background:#22C55E;">● Agapes</span>
+      <span class="badge" style="background:#EAB308;color:#0F2137;">● Soir</span>
+      <span class="badge" style="background:#F59E0B;color:#0F2137;">● Banquet</span>
+    </div>
   </div>
   <div class="card-body p-0">
-    <div class="table-responsive">
-      <table class="table table-sm mb-0">
-        <thead class="table-light">
-          <tr><th>Date</th><th>Horaires</th><th>Salle(s)</th><th>Motif</th></tr>
-        </thead>
-        <tbody>
-          {% for b in blocages %}
-          <tr>
-            <td>
-              {{ b.date|date:"d/m/Y" }}
-              {% if b.date_fin and b.date_fin != b.date %}<br><span class="text-muted small">→ {{ b.date_fin|date:"d/m/Y" }}</span>{% endif %}
-            </td>
-            <td>{{ b.heure_debut|time:"H\hi" }} – {{ b.heure_fin|time:"H\hi" }}</td>
-            <td class="small">{% for s in b.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
-            <td>{{ b.motif }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    {% if repas_cette_semaine %}
+      {% for r in repas_cette_semaine %}
+      <div class="evt-row {% if r.agapes_status == 'confirme' %}bg-success bg-opacity-10{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}bg-warning bg-opacity-10{% endif %}" style="{% if r.type == 'Salle' %}background:#FFFBEB;{% endif %}">
+        <div class="evt-date">{{ r.date|date:"D d/m" }}</div>
+        <div class="evt-heure">{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</div>
+        <div style="flex:1;">
+          <div class="evt-org">{{ r.organisation }}</div>
+          <div class="evt-lieu">{{ r.lieu }}</div>
+        </div>
+        <div class="evt-couverts">
+          {% if r.couverts %}
+            {% if r.estimation %}<em style="color:#94a3b8;">~{{ r.couverts }}</em>{% else %}{{ r.couverts }}{% endif %}
+          {% else %}<span style="color:#cbd5e1;">?</span>{% endif %}
+          <small>couverts</small>
+        </div>
+        <div>
+          {% if r.type == 'Salle' %}
+            <span class="evt-badge" style="background:#FEF3C7;color:#92400E;">🥂 Banquet</span>
+          {% elif r.agapes_status == 'confirme' %}
+            <span class="evt-badge" style="background:#DCFCE7;color:#166534;">✓ Agapes</span>
+          {% elif r.agapes_status == 'probable_classique' %}
+            <span class="evt-badge" style="background:#EDE9FE;color:#5B21B6;">~ Classiques</span>
+          {% elif r.agapes_status == 'probable' %}
+            <span class="evt-badge" style="background:#FEF9C3;color:#854D0E;">~ Soir</span>
+          {% endif %}
+          {% if r.statut == 'attente' %}<span class="evt-badge ms-1" style="background:#F1F5F9;color:#475569;">⏳</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted p-3 mb-0">Aucun repas prévu cette semaine.</p>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ══ LA SUITE (au-delà de 7 jours) ══ -->
+{% if repas_a_venir %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header" style="background:#374151;color:white;">
+    <strong>📅 La suite — jusqu'en fin d'année</strong>
+  </div>
+  <div class="card-body p-0">
+    {% for r in repas_a_venir %}
+    <div class="evt-row" style="{% if r.type == 'Salle' %}background:#FFFBEB;{% elif r.agapes_status == 'confirme' %}background:#F0FDF4;{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}background:#FEFCE8;{% endif %}">
+      <div class="evt-date" style="font-size:.9rem;">{{ r.date|date:"D d/m" }}</div>
+      <div class="evt-heure">{{ r.heure_debut|time:"H\hi" }}</div>
+      <div style="flex:1;">
+        <div style="font-weight:600;font-size:.9rem;">{{ r.organisation }}</div>
+        <div class="evt-lieu">{{ r.lieu }}</div>
+      </div>
+      <div class="evt-couverts" style="font-size:1rem;">
+        {% if r.couverts %}
+          {% if r.estimation %}<em style="color:#94a3b8;">~{{ r.couverts }}</em>{% else %}{{ r.couverts }}{% endif %}
+        {% else %}<span style="color:#cbd5e1;">?</span>{% endif %}
+        <small>cvts</small>
+      </div>
+      <div>
+        {% if r.type == 'Salle' %}
+          <span class="evt-badge" style="background:#FEF3C7;color:#92400E;">🥂</span>
+        {% elif r.agapes_status == 'confirme' %}
+          <span class="evt-badge" style="background:#DCFCE7;color:#166534;">✓</span>
+        {% elif r.agapes_status in 'probable,probable_classique' %}
+          <span class="evt-badge" style="background:#FEF9C3;color:#854D0E;">~</span>
+        {% endif %}
+      </div>
     </div>
+    {% endfor %}
   </div>
 </div>
 {% endif %}
 
-<div class="d-flex gap-2 flex-wrap">
-  <a href="{% url 'traiteur:calendrier' %}" class="btn btn-outline-secondary">📅 Calendrier complet</a>
-  <a href="{% url 'traiteur:planning' %}"   class="btn btn-outline-secondary">📋 Planning mensuel</a>
+<!-- ══ STATISTIQUES (discrètes, en bas) ══ -->
+<div class="d-flex gap-3 flex-wrap text-center mb-4">
+  <div class="text-muted small">
+    <span style="font-size:1.2rem;font-weight:700;color:#22C55E;">{{ nb_confirmes }}</span><br>agapes confirmées (30 j.)
+  </div>
+  <div class="text-muted small">
+    <span style="font-size:1.2rem;font-weight:700;color:#C8A84B;">{{ nb_probables }}</span><br>tenues soir probables
+  </div>
+  {% if nb_notifications %}
+  <div class="text-muted small">
+    <span style="font-size:1.2rem;font-weight:700;color:#D97706;">{{ nb_notifications }}</span><br>notification{{ nb_notifications|pluralize }} non lue{{ nb_notifications|pluralize }}
+  </div>
+  {% endif %}
 </div>
+
 {% endblock %}
