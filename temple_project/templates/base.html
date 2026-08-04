@@ -465,7 +465,11 @@
                 </li>
                 {% endif %}
                 <li class="nav-item">
+                    {% if traiteur_connecte %}
+                    <a class="nav-link" href="{% url 'traiteur:contact' %}">📬 Contact</a>
+                    {% else %}
                     <a class="nav-link" href="{% url 'reservations:contact' %}">📬 Contact</a>
+                    {% endif %}
                 </li>
                 {% if user.is_staff %}
                 <li class="nav-item dropdown">

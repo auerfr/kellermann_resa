@@ -584,6 +584,61 @@ def guide_traiteur(request):
 
 
 @traiteur_required
+def contact_traiteur(request):
+    """Page contacts : coordonnées admin + loges avec tenues à venir."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    today   = date.today()
+    horizon = today + timedelta(days=60)
+
+    # Contacts admin (staff)
+    admins = list(
+        User.objects.filter(is_staff=True)
+        .exclude(email="")
+        .values("first_name", "last_name", "email")
+        .order_by("first_name")
+    )
+
+    # Loges avec tenues de soir ou agapes dans les 60 prochains jours
+    tenues = (
+        Reservation.objects.filter(
+            statut="validee",
+            date__gte=today,
+            date__lte=horizon,
+        )
+        .filter(Q(besoin_agapes=True) | Q(heure_debut__gte=HEURE_SOIR))
+        .select_related("loge", "temple")
+        .order_by("loge__nom", "date")
+    )
+
+    # Dédupliquer par loge, garder la date de prochaine tenue
+    loges_vues = {}
+    for t in tenues:
+        if not t.loge:
+            continue
+        loge = t.loge
+        if loge.pk not in loges_vues:
+            loges_vues[loge.pk] = {
+                "nom":         loge.nom,
+                "contact_nom": loge.nom_contact or "",
+                "email":       loge.email or "",
+                "telephone":   loge.telephone or "",
+                "prochaine":   t.date,
+                "agapes":      _agapes_status(t),
+            }
+
+    contacts_loges = sorted(loges_vues.values(), key=lambda x: x["prochaine"])
+
+    return render(request, "traiteur/contact.html", {
+        "admins":         admins,
+        "contacts_loges": contacts_loges,
+        "horizon":        horizon,
+        "today":          today,
+    })
+
+
+@traiteur_required
 def supprimer_blocage(request, pk):
     blocage = get_object_or_404(BlocageCreneaux, pk=pk)
     if request.method == "POST":

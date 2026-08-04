@@ -55,6 +55,7 @@
           <li><a href="#sec-couverts">6. Gérer les couverts</a></li>
           <li><a href="#sec-blocage">7. Bloquer un créneau</a></li>
           <li><a href="#sec-export">8. Export et états des lieux</a></li>
+          <li><a href="#sec-contact">9. Contacts</a></li>
         </ul>
       </div>
     </div>
@@ -242,9 +243,10 @@
       <p>Deux outils pour extraire les données :</p>
       <ul>
         <li>
-          <strong>📋 État des lieux jusqu'en fin d'année</strong>
+          <strong>📋 Imprimer le planning</strong>
           (<a href="{% url 'traiteur:etat_des_lieux' %}">accéder</a>) —
-          Tableau complet de toutes les tenues et banquets à venir jusqu'au 31 décembre, groupé par mois. Inclut un bouton <em>Export Excel</em> et <em>Imprimer</em>.
+          Tableau complet de toutes les tenues et banquets à venir jusqu'au 31 décembre, groupé par mois. Inclut un bouton <em>Export Excel</em> et <em>🖨 Imprimer</em>.
+          <br><small class="text-muted">Accessible depuis le gros bouton bleu "📋 Imprimer le planning" sur le tableau de bord.</small>
         </li>
         <li>
           <strong>📥 Export Excel</strong> (depuis le Planning mensuel) —
@@ -252,6 +254,29 @@
         </li>
       </ul>
       <p class="mb-0">Pour générer un <strong>PDF imprimable</strong> : utilisez le bouton <em>🖨 Imprimer</em> et sélectionnez "Enregistrer en PDF" dans la boîte de dialogue d'impression de votre navigateur.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 9. Contacts -->
+<div class="guide-section mb-4" id="sec-contact">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>9. Contacts</strong>
+    </div>
+    <div class="card-body">
+      <p>La page <strong>📬 Contact</strong> (dans la barre de navigation en haut) regroupe deux types d'informations :</p>
+      <ul>
+        <li>
+          <strong>🛠 Contacter l'administrateur</strong> — En cas de problème avec le logiciel, d'erreur dans les données, ou de demande de modification, envoyez un e-mail à l'administrateur depuis cette page.
+        </li>
+        <li>
+          <strong>🏛 Contacts des loges</strong> — Liste des loges avec des tenues prévues dans les 60 prochains jours, avec le nom du contact, l'e-mail et le téléphone. Cliquez sur l'adresse e-mail pour ouvrir directement votre messagerie.
+        </li>
+      </ul>
+      <div class="alert alert-light border mb-0" style="font-size:.88rem;">
+        Les contacts de chaque loge sont également visibles dans le planning mensuel (colonne Contact) et dans le détail de chaque événement du calendrier.
+      </div>
     </div>
   </div>
 </div>

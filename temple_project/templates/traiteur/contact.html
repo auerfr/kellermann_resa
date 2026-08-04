@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Contacts — Espace Traiteur{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-0">📬 Contacts</h1>
+    <p class="text-muted mb-0 small">Coordonnées utiles — administration et loges</p>
+  </div>
+  <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+</div>
+
+<!-- ══ ADMINISTRATION ══ -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header" style="background:#0F2137;color:white;">
+    <strong>🛠 Besoin d'aide ? Contacter l'administrateur</strong>
+  </div>
+  <div class="card-body">
+    {% if admins %}
+      <div class="row g-3">
+        {% for admin in admins %}
+        <div class="col-md-6">
+          <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#F8FAFC;border:1px solid #E2E8F0;">
+            <div style="font-size:2rem;">👤</div>
+            <div>
+              <div class="fw-bold">{{ admin.first_name }} {{ admin.last_name }}</div>
+              <div>
+                <a href="mailto:{{ admin.email }}" class="btn btn-sm btn-outline-primary mt-1">
+                  ✉ {{ admin.email }}
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-muted mb-0">Aucun contact administrateur renseigné.</p>
+    {% endif %}
+    <div class="alert alert-light border mt-3 mb-0" style="font-size:.88rem;">
+      Contactez l'administrateur pour toute question sur le logiciel, une erreur dans les données, ou une demande d'ajout/modification.
+    </div>
+  </div>
+</div>
+
+<!-- ══ LOGES À VENIR ══ -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;color:white;">
+    <strong>🏛 Contacts des loges — tenues à venir (60 jours)</strong>
+    <span class="small opacity-75">{{ contacts_loges|length }} loge{{ contacts_loges|length|pluralize }}</span>
+  </div>
+  <div class="card-body p-0">
+    {% if contacts_loges %}
+    <div class="table-responsive">
+      <table class="table table-hover table-sm mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Loge</th>
+            <th>Contact</th>
+            <th>E-mail</th>
+            <th>Téléphone</th>
+            <th style="width:90px;">Prochaine tenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for loge in contacts_loges %}
+          <tr>
+            <td class="fw-semibold">{{ loge.nom }}</td>
+            <td>{{ loge.contact_nom|default:"—" }}</td>
+            <td>
+              {% if loge.email %}
+                <a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if loge.telephone %}
+                <a href="tel:{{ loge.telephone }}" class="text-muted">{{ loge.telephone }}</a>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="small">
+              {{ loge.prochaine|date:"D d/m" }}
+              {% if loge.agapes == 'confirme' %}
+                <span class="badge" style="background:#22C55E;font-size:8px;">✓</span>
+              {% elif loge.agapes == 'probable_classique' %}
+                <span class="badge" style="background:#7C3AED;font-size:8px;">~</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted p-3 mb-0">Aucune tenue avec agapes prévue dans les 60 prochains jours.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
