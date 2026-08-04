@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}Guide Traiteur — Temples Kellermann{% endblock %}
+
+{% block extra_css %}
+<style>
+.guide-section { scroll-margin-top: 70px; }
+.color-dot { display:inline-block; width:14px; height:14px; border-radius:50%; vertical-align:middle; margin-right:6px; }
+.legend-row { display:flex; align-items:center; gap:.5rem; margin-bottom:.4rem; font-size:.92rem; }
+.legend-badge { display:inline-block; padding:3px 10px; border-radius:4px; font-size:.8rem; font-weight:600; }
+@media print {
+  .no-print { display:none !important; }
+  .card { border:1px solid #ddd !important; break-inside:avoid; }
+  h2 { page-break-after:avoid; }
+  body { font-size:11pt; color:#000; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 no-print">
+  <div>
+    <h1 class="h3 mb-0">📖 Guide Traiteur</h1>
+    <p class="text-muted mb-0 small">Manuel d'utilisation de l'espace traiteur — Temples Kellermann</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨 Imprimer / PDF</button>
+    <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Tableau de bord</a>
+  </div>
+</div>
+
+<!-- En-tête imprimable -->
+<div class="d-none d-print-block mb-4 text-center">
+  <h1 style="font-size:1.5rem;">TEMPLES KELLERMANN</h1>
+  <h2 style="font-size:1.2rem;color:#555;">Guide d'utilisation — Espace Traiteur</h2>
+  <hr>
+</div>
+
+<!-- Sommaire -->
+<div class="card shadow-sm mb-4 no-print">
+  <div class="card-header" style="background:#0F2137;color:white;"><strong>📑 Sommaire</strong></div>
+  <div class="card-body py-2">
+    <div class="row">
+      <div class="col-md-6">
+        <ul class="mb-0" style="font-size:.9rem;">
+          <li><a href="#sec-tableau">1. Le tableau de bord</a></li>
+          <li><a href="#sec-calendrier">2. Le calendrier</a></li>
+          <li><a href="#sec-couleurs">3. Code couleur</a></li>
+          <li><a href="#sec-agapes">4. Les agapes</a></li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <ul class="mb-0" style="font-size:.9rem;">
+          <li><a href="#sec-banquets">5. Les banquets d'ordre</a></li>
+          <li><a href="#sec-couverts">6. Gérer les couverts</a></li>
+          <li><a href="#sec-blocage">7. Bloquer un créneau</a></li>
+          <li><a href="#sec-export">8. Export et états des lieux</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 1. Tableau de bord -->
+<div class="guide-section mb-4" id="sec-tableau">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>1. Le tableau de bord</strong>
+    </div>
+    <div class="card-body">
+      <p>Le tableau de bord est la page d'accueil de l'espace traiteur. Il présente :</p>
+      <ul>
+        <li><strong>Les statistiques du mois</strong> : nombre d'agapes confirmées, tenues soir probables, notifications non lues et blocages à venir.</li>
+        <li><strong>Les tenues des 30 prochains jours</strong> : tableau chronologique avec loge, lieu, couverts et contact.</li>
+        <li><strong>Les créneaux bloqués à venir</strong> : périodes pendant lesquelles aucune réservation ne peut être prise.</li>
+      </ul>
+      <div class="alert alert-light border mt-2 mb-0" style="font-size:.88rem;">
+        <strong>🔔 Notifications</strong> — Quand une loge envoie une notification de couverts, elle apparaît en haut du tableau de bord en bandeau jaune. Cliquez <em>✓ Lu</em> pour l'archiver après l'avoir prise en compte.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. Calendrier -->
+<div class="guide-section mb-4" id="sec-calendrier">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>2. Le calendrier</strong>
+    </div>
+    <div class="card-body">
+      <p>Le calendrier est accessible depuis <em>Tableau de bord → 📅 Calendrier complet</em>.</p>
+      <ul>
+        <li><strong>Sur mobile</strong> : vue agenda chronologique, un événement par carte.</li>
+        <li><strong>Sur desktop</strong> : vue grille mensuelle + tableau récapitulatif en dessous.</li>
+      </ul>
+      <p><strong>Navigation</strong> : utilisez les flèches ‹ › ou le sélecteur de mois pour naviguer. Le filtre <em>Agapes</em> n'affiche que les tenues avec agapes confirmées ; <em>Blocages</em> isole les créneaux bloqués.</p>
+      <p class="mb-0"><strong>Cliquer sur un événement</strong> ouvre une fiche détaillée (loge, salle, couverts, contact, statut).</p>
+    </div>
+  </div>
+</div>
+
+<!-- 3. Code couleur -->
+<div class="guide-section mb-4" id="sec-couleurs">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>3. Code couleur</strong>
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="legend-row">
+            <span class="color-dot" style="background:#22C55E;"></span>
+            <span class="legend-badge" style="background:#DCFCE7;color:#166534;border-left:4px solid #22C55E;">Vert — Agapes confirmées</span>
+          </div>
+          <p class="small text-muted ps-4 mb-2">La loge a explicitement confirmé avoir des agapes. Le traiteur doit préparer un repas.</p>
+
+          <div class="legend-row">
+            <span class="color-dot" style="background:#7C3AED;"></span>
+            <span class="legend-badge" style="background:#EDE9FE;color:#5B21B6;border-left:4px solid #7C3AED;">Violet — Agapes classiques probables</span>
+          </div>
+          <p class="small text-muted ps-4 mb-2">Tenue récurrente du soir (≥ 18h) — cette loge a des agapes classiques selon son rythme habituel. À confirmer.</p>
+
+          <div class="legend-row">
+            <span class="color-dot" style="background:#EAB308;"></span>
+            <span class="legend-badge" style="background:#FEF9C3;color:#854D0E;border-left:4px solid #EAB308;">Jaune — Tenue du soir probable</span>
+          </div>
+          <p class="small text-muted ps-4 mb-2">Tenue exceptionnelle débutant après 18h. Des agapes sont possibles mais non confirmées.</p>
+        </div>
+        <div class="col-md-6">
+          <div class="legend-row">
+            <span class="color-dot" style="background:#F59E0B;"></span>
+            <span class="legend-badge" style="background:#FEF3C7;color:#92400E;border-left:4px solid #F59E0B;">Ambre — Banquet d'ordre</span>
+          </div>
+          <p class="small text-muted ps-4 mb-2">Réservation d'une salle d'agapes (Les Gobelets, L'Oie et le Grill) pour un banquet rituel. Le nombre de couverts est précisé.</p>
+
+          <div class="legend-row">
+            <span class="color-dot" style="background:#10B981;"></span>
+            <span class="legend-badge" style="background:#D1FAE5;color:#065F46;border-left:4px solid #10B981;">Émeraude — Salle agapes</span>
+          </div>
+          <p class="small text-muted ps-4 mb-2">Salle d'agapes réservée via le portail (hors banquet d'ordre explicite).</p>
+
+          <div class="legend-row">
+            <span class="color-dot" style="background:#EF4444;"></span>
+            <span class="legend-badge" style="background:#FEE2E2;color:#991B1B;border-left:4px solid #EF4444;">Rouge — Créneau bloqué</span>
+          </div>
+          <p class="small text-muted ps-4 mb-2">Aucune réservation possible pendant cette période. Peut couvrir plusieurs jours.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4. Les agapes -->
+<div class="guide-section mb-4" id="sec-agapes">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>4. Les agapes</strong>
+    </div>
+    <div class="card-body">
+      <p>Les agapes sont le repas servi après une tenue maçonnique au temple. Il en existe deux types principaux :</p>
+      <ul>
+        <li><strong>Agapes confirmées</strong> (vert) : la loge a coché <em>"Besoin d'agapes"</em> lors de sa réservation. Le nombre de couverts est soit renseigné directement, soit transmis via une notification de couverts.</li>
+        <li><strong>Agapes classiques probables</strong> (violet) : tenue récurrente de soir — cette loge fait habituellement des agapes classiques à la même heure chaque semaine/quinzaine. Le chiffre de couverts peut être estimé d'après l'historique de la loge.</li>
+        <li><strong>Soir probable</strong> (jaune) : tenue exceptionnelle en soirée dont les agapes ne sont pas encore confirmées.</li>
+      </ul>
+      <div class="alert alert-info mb-0" style="font-size:.88rem;">
+        <strong>💡 Bon à savoir</strong> — Les agapes classiques ont lieu <strong>entre 22h et 23h</strong> environ, à la suite de la tenue. Le traiteur doit avoir les plats prêts pour cette heure, même si la loge n'a pas encore confirmé par écrit.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. Les banquets -->
+<div class="guide-section mb-4" id="sec-banquets">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>5. Les banquets d'ordre</strong>
+    </div>
+    <div class="card-body">
+      <p>Un banquet d'ordre est un repas ritualisé qui occupe une salle d'agapes dédiée. Il se distingue des agapes de tenue car :</p>
+      <ul>
+        <li>Il est réservé explicitement via une demande de salle de type <em>Banquet</em>.</li>
+        <li>Il se déroule dans <strong>Les Gobelets et les Raisins</strong> (petits comités) ou <strong>L'Oie et le Grill</strong> (grandes assemblées, congrès).</li>
+        <li>Il <strong>débute généralement aux mêmes horaires qu'une tenue de soirée</strong> (19h–20h) et dure 2 à 3 heures.</li>
+        <li>Le nombre de couverts est indiqué à la réservation.</li>
+      </ul>
+      <div class="alert alert-warning mb-0" style="font-size:.88rem;">
+        <strong>⚠ Attention</strong> — Un banquet d'ordre le même soir qu'une tenue temple peut signifier que les frères participent aux deux événements. Vérifiez la salle réservée pour éviter tout conflit logistique.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 6. Couverts -->
+<div class="guide-section mb-4" id="sec-couverts">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>6. Gérer les couverts</strong>
+    </div>
+    <div class="card-body">
+      <p>Deux manières de connaître le nombre de couverts :</p>
+      <ol>
+        <li><strong>Notification de couverts</strong> — Les loges peuvent envoyer une notification via leur portail. Elle apparaît en bandeau orange sur le tableau de bord. Après lecture, marquez-la <em>Lu</em>.</li>
+        <li><strong>Page Couverts loges</strong> (<em>👥 Couverts loges</em>) — Permet de saisir directement le nombre de couverts pour une loge, une date et une heure données, depuis l'espace traiteur.</li>
+      </ol>
+      <p class="mb-0">Les couverts <em>estimés</em> (tilde ~) proviennent de l'historique de la loge. Les couverts <strong>confirmés</strong> (sans tilde) ont été explicitement renseignés.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 7. Blocages -->
+<div class="guide-section mb-4" id="sec-blocage">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>7. Bloquer un créneau</strong>
+    </div>
+    <div class="card-body">
+      <p>Pour empêcher toute réservation sur une période donnée (fermeture, maintenance, congés…) :</p>
+      <ol>
+        <li>Cliquez sur <strong>🔒 Bloquer</strong> dans le tableau de bord ou le calendrier.</li>
+        <li>Renseignez la <strong>date de début</strong> et, si nécessaire, la <strong>date de fin</strong> (le blocage couvre tous les jours de la période).</li>
+        <li>Précisez les horaires et les salles concernées.</li>
+        <li>Ajoutez un <strong>motif</strong> explicite (ex : "Fermeture estivale", "Travaux cuisine").</li>
+      </ol>
+      <p class="mb-0">Le blocage apparaît en rouge sur le calendrier pour tous les jours de la période. Il peut être supprimé à tout moment depuis la page <em>Blocages</em>.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 8. Export -->
+<div class="guide-section mb-4" id="sec-export">
+  <div class="card shadow-sm">
+    <div class="card-header" style="background:#0F2137;color:white;">
+      <strong>8. Export et états des lieux</strong>
+    </div>
+    <div class="card-body">
+      <p>Deux outils pour extraire les données :</p>
+      <ul>
+        <li>
+          <strong>📋 État des lieux jusqu'en fin d'année</strong>
+          (<a href="{% url 'traiteur:etat_des_lieux' %}">accéder</a>) —
+          Tableau complet de toutes les tenues et banquets à venir jusqu'au 31 décembre, groupé par mois. Inclut un bouton <em>Export Excel</em> et <em>Imprimer</em>.
+        </li>
+        <li>
+          <strong>📥 Export Excel</strong> (depuis le Planning mensuel) —
+          Permet de télécharger un fichier Excel sur une période et un type de données au choix (agapes confirmées, tenues soir, banquets, ou tout). Inclut les contacts de chaque loge.
+        </li>
+      </ul>
+      <p class="mb-0">Pour générer un <strong>PDF imprimable</strong> : utilisez le bouton <em>🖨 Imprimer</em> et sélectionnez "Enregistrer en PDF" dans la boîte de dialogue d'impression de votre navigateur.</p>
+    </div>
+  </div>
+</div>
+
+<div class="no-print d-flex gap-2 mt-2 mb-4">
+  <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨 Imprimer ce guide (PDF)</button>
+  <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Tableau de bord</a>
+</div>
+{% endblock %}

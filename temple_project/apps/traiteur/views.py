@@ -473,6 +473,72 @@ def bloquer(request):
 
 
 @traiteur_required
+def etat_des_lieux(request):
+    """Récapitulatif de toutes les tenues + banquets jusqu'en fin d'année courante."""
+    today_d = date.today()
+    fin_annee = date(today_d.year, 12, 31)
+
+    tenues_temple = (
+        Reservation.objects.filter(
+            statut="validee",
+            date__gte=today_d,
+            date__lte=fin_annee,
+        )
+        .filter(Q(besoin_agapes=True) | Q(heure_debut__gte=HEURE_SOIR))
+        .select_related("loge", "temple")
+        .order_by("date", "heure_debut")
+    )
+    banquets_salles = (
+        ReservationSalle.objects.filter(
+            date__gte=today_d,
+            date__lte=fin_annee,
+            statut__in=["attente", "validee"],
+        )
+        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .select_related("loge", "salle")
+        .order_by("date", "heure_debut")
+    )
+
+    repas = [_build_repas(r, "Temple") for r in tenues_temple]
+    repas += [_build_repas(r, "Salle") for r in banquets_salles]
+    repas.sort(key=lambda x: (x["date"], x["heure_debut"]))
+
+    total_agapes  = sum(1 for r in repas if r["agapes_status"] == "confirme")
+    total_probables = sum(1 for r in repas if r["agapes_status"] in ("probable", "probable_classique"))
+    total_couverts = sum(r["couverts"] for r in repas if r["couverts"] and not r["estimation"])
+    total_couverts_est = sum(r["couverts"] for r in repas if r["couverts"] and r["estimation"])
+
+    # Grouper par mois
+    from itertools import groupby
+    def mois_key(r): return (r["date"].year, r["date"].month)
+    par_mois = []
+    for (y, m), items in groupby(repas, mois_key):
+        lst = list(items)
+        par_mois.append({
+            "label": date(y, m, 1).strftime("%B %Y").capitalize(),
+            "repas": lst,
+            "nb_agapes": sum(1 for r in lst if r["agapes_status"] == "confirme"),
+            "nb_couverts": sum(r["couverts"] for r in lst if r["couverts"] and not r["estimation"]),
+        })
+
+    return render(request, "traiteur/etat_des_lieux.html", {
+        "par_mois":         par_mois,
+        "total_agapes":     total_agapes,
+        "total_probables":  total_probables,
+        "total_couverts":   total_couverts,
+        "total_couverts_est": total_couverts_est,
+        "fin_annee":        fin_annee,
+        "today":            today_d,
+        "export_url":       f"/traiteur/export-agapes/?date_debut={today_d}&date_fin={fin_annee}&type_export=soir",
+    })
+
+
+@traiteur_required
+def guide_traiteur(request):
+    return render(request, "traiteur/guide.html", {})
+
+
+@traiteur_required
 def supprimer_blocage(request, pk):
     blocage = get_object_or_404(BlocageCreneaux, pk=pk)
     if request.method == "POST":

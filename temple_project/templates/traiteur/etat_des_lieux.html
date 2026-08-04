@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Traiteur — État des lieux jusqu'au {{ fin_annee|date:"d/m/Y" }}{% endblock %}
+
+{% block extra_css %}
+<style>
+@media print {
+  .no-print { display: none !important; }
+  .card { border: 1px solid #ccc !important; box-shadow: none !important; }
+  body { font-size: 11pt; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 no-print">
+  <div>
+    <h1 class="h3 mb-0">📋 État des lieux — tenues & banquets</h1>
+    <p class="text-muted mb-0 small">Du {{ today|date:"d/m/Y" }} au {{ fin_annee|date:"d/m/Y" }}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ export_url }}" class="btn btn-success btn-sm">📥 Export Excel</a>
+    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨 Imprimer / PDF</button>
+    <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+  </div>
+</div>
+
+<!-- En-tête imprimable -->
+<div class="d-none d-print-block mb-4">
+  <h2>Temples Kellermann — État des lieux traiteur</h2>
+  <p>Du {{ today|date:"d/m/Y" }} au {{ fin_annee|date:"d/m/Y" }}</p>
+  <hr>
+</div>
+
+<!-- Statistiques globales -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 shadow-sm">
+      <div class="card-body py-3">
+        <div style="font-size:1.8rem;font-weight:700;color:#22C55E;">{{ total_agapes }}</div>
+        <div class="text-muted small">Agapes confirmées</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 shadow-sm">
+      <div class="card-body py-3">
+        <div style="font-size:1.8rem;font-weight:700;color:#C8A84B;">{{ total_probables }}</div>
+        <div class="text-muted small">Tenues soir probables</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 shadow-sm">
+      <div class="card-body py-3">
+        <div style="font-size:1.8rem;font-weight:700;color:#0F2137;">{{ total_couverts }}</div>
+        <div class="text-muted small">Couverts confirmés</div>
+      </div>
+    </div>
+  </div>
+  {% if total_couverts_est %}
+  <div class="col-6 col-md-3">
+    <div class="card text-center border-0 shadow-sm border-warning">
+      <div class="card-body py-3">
+        <div style="font-size:1.8rem;font-weight:700;color:#C8A84B;">~{{ total_couverts_est }}</div>
+        <div class="text-muted small">Couverts estimés</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Légende -->
+<div class="d-flex gap-3 flex-wrap mb-3 no-print" style="font-size:.8rem;">
+  <span><span style="color:#22C55E;">■</span> Agapes confirmées</span>
+  <span><span style="color:#7C3AED;">■</span> Classiques probables</span>
+  <span><span style="color:#EAB308;">■</span> Soir probable</span>
+  <span><span style="color:#F59E0B;">■</span> Banquet</span>
+  <span><span style="color:#10B981;">■</span> Salle agapes</span>
+</div>
+
+{% if par_mois %}
+  {% for groupe in par_mois %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center"
+         style="background:#0F2137;color:white;">
+      <strong>{{ groupe.label }}</strong>
+      <span class="small opacity-75">
+        {{ groupe.repas|length }} tenue{{ groupe.repas|length|pluralize }}
+        {% if groupe.nb_couverts %} · {{ groupe.nb_couverts }} couverts conf.{% endif %}
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:90px;">Date</th>
+              <th style="width:95px;">Horaires</th>
+              <th>Loge / Organisation</th>
+              <th>Lieu / Salle</th>
+              <th class="text-center" style="width:80px;">Couverts</th>
+              <th>Contact</th>
+              <th style="width:110px;">Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in groupe.repas %}
+            <tr {% if r.agapes_status == 'confirme' %}style="background:#F0FDF4;"
+                {% elif r.agapes_status == 'probable_classique' %}style="background:#F5F3FF;"
+                {% elif r.agapes_status == 'probable' %}style="background:#FEFCE8;"{% endif %}>
+              <td><strong>{{ r.date|date:"D d/m" }}</strong></td>
+              <td class="small text-muted">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</td>
+              <td>
+                {{ r.organisation }}
+                {% if r.statut == 'attente' %}
+                  <span class="badge bg-secondary" style="font-size:8px;">⏳ Attente</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% if r.type == "Temple" %}
+                  <span class="text-muted">{{ r.lieu }}</span>
+                {% else %}
+                  <strong>{{ r.lieu }}</strong>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if r.couverts %}
+                  {% if r.estimation %}
+                    <em class="text-muted">~{{ r.couverts }}</em>
+                  {% else %}
+                    <strong>{{ r.couverts }}</strong>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted">?</span>
+                {% endif %}
+              </td>
+              <td class="small">
+                {% if r.contact_nom %}<div>{{ r.contact_nom }}</div>{% endif %}
+                {% if r.contact_email %}<a href="mailto:{{ r.contact_email }}" class="text-muted">{{ r.contact_email }}</a>{% endif %}
+                {% if r.contact_tel %} · <a href="tel:{{ r.contact_tel }}" class="text-muted">{{ r.contact_tel }}</a>{% endif %}
+                {% if not r.contact_nom and not r.contact_email %}<span class="text-muted fst-italic">—</span>{% endif %}
+              </td>
+              <td>
+                {% if r.type == "Temple" %}
+                  {% if r.agapes_status == 'confirme' %}
+                    <span class="badge" style="background:#22C55E;font-size:9px;">✓ Agapes</span>
+                  {% elif r.agapes_status == 'probable_classique' %}
+                    <span class="badge" style="background:#7C3AED;color:white;font-size:9px;">~ Classiques</span>
+                  {% elif r.agapes_status == 'probable' %}
+                    <span class="badge" style="background:#EAB308;color:#0F2137;font-size:9px;">~ Soir</span>
+                  {% endif %}
+                  <span class="badge" style="background:#0F2137;font-size:9px;">Temple</span>
+                {% else %}
+                  <span class="badge" style="background:#F59E0B;color:#0F2137;font-size:9px;">🥂 Banquet</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="alert alert-info">Aucune tenue ni banquet prévu jusqu'au {{ fin_annee|date:"d/m/Y" }}.</div>
+{% endif %}
+
+<div class="no-print d-flex gap-2 mt-2">
+  <a href="{{ export_url }}" class="btn btn-success btn-sm">📥 Export Excel complet</a>
+  <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨 Imprimer</button>
+</div>
+{% endblock %}
