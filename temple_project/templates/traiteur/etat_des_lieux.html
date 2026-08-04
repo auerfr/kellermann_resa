@@ -1,92 +1,194 @@
 {% extends "base.html" %}
-{% block title %}Traiteur — État des lieux jusqu'au {{ fin_annee|date:"d/m/Y" }}{% endblock %}
+{% block title %}Traiteur — État des lieux {{ fin_annee|date:"d/m/Y" }}{% endblock %}
 
 {% block extra_css %}
 <style>
+/* ── Print styles ───────────────────────────────────── */
 @media print {
-  .no-print { display: none !important; }
-  .card { border: 1px solid #ccc !important; box-shadow: none !important; }
-  body { font-size: 11pt; }
+  @page { size: A4 portrait; margin: 1.4cm 1.6cm; }
+
+  body { font-size: 9pt; color: #000; background: white; }
+
+  /* Hide screen-only elements */
+  .no-print, nav, footer, .navbar, .breadcrumb { display: none !important; }
+
+  /* Show print-only elements */
+  .d-print-show { display: block !important; }
+
+  /* Reset Bootstrap containers */
+  .container, .container-fluid { padding: 0 !important; max-width: 100% !important; }
+
+  /* Print header */
+  .print-header {
+    border-bottom: 2px solid #0F2137;
+    margin-bottom: 0.5cm;
+    padding-bottom: 0.2cm;
+  }
+  .print-header h1 { font-size: 13pt; font-weight: 700; margin: 0; color: #0F2137; }
+  .print-header p  { font-size: 8pt; color: #555; margin: 1px 0 0; }
+
+  /* Stats row */
+  .print-stats { font-size: 8.5pt; margin-bottom: 0.4cm; color: #333; }
+  .print-stats strong { color: #0F2137; }
+
+  /* Month sections */
+  .month-block { break-inside: avoid; margin-bottom: 0.5cm; }
+  .month-title {
+    background: #0F2137 !important;
+    color: white !important;
+    font-size: 9.5pt;
+    font-weight: 700;
+    padding: 3px 7px;
+    margin-bottom: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .month-sub {
+    font-size: 7.5pt;
+    color: #555;
+    margin-bottom: 1px;
+    padding: 1px 4px;
+    background: #f5f5f5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Planning table */
+  .plan-table { width: 100%; border-collapse: collapse; }
+  .plan-table th {
+    background: #E2E8F0 !important;
+    color: #0F2137 !important;
+    font-size: 7pt;
+    font-weight: 700;
+    padding: 2px 5px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .plan-table td {
+    font-size: 8pt;
+    padding: 2px 5px;
+    border-bottom: 1px solid #e5e5e5;
+    vertical-align: middle;
+  }
+  .plan-table tr.row-agapes   td { background: #F0FDF4; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .plan-table tr.row-classique td { background: #F5F3FF; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .plan-table tr.row-probable  td { background: #FEFCE8; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .plan-table tr.row-banquet   td { background: #FFFBEB; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+  .plan-type {
+    font-size: 7pt; font-weight: 700; padding: 1px 4px;
+    border-radius: 2px; white-space: nowrap;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .pt-agapes    { background:#22C55E; color:white; }
+  .pt-classique { background:#7C3AED; color:white; }
+  .pt-probable  { background:#EAB308; color:#0F2137; }
+  .pt-banquet   { background:#F59E0B; color:#0F2137; }
+  .pt-attente   { background:#94A3B8; color:white; }
+
+  /* Hide screen layout in print */
+  .screen-only { display: none !important; }
+  .print-only  { display: block !important; }
+}
+
+/* ── Screen styles ──────────────────────────────────── */
+@media screen {
+  .print-only { display: none !important; }
+  .screen-only { display: block; }
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 no-print">
-  <div>
-    <h1 class="h3 mb-0">📋 État des lieux — tenues & banquets</h1>
-    <p class="text-muted mb-0 small">Du {{ today|date:"d/m/Y" }} au {{ fin_annee|date:"d/m/Y" }}</p>
+
+<!-- ══ ÉCRAN : en-tête + boutons ══ -->
+<div class="screen-only">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 no-print">
+    <div>
+      <h1 class="h3 mb-0">📋 État des lieux — tenues & banquets</h1>
+      <p class="text-muted mb-0 small">Du {{ today|date:"d/m/Y" }} au {{ fin_annee|date:"d/m/Y" }}</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ export_url }}" class="btn btn-success btn-sm">📥 Export Excel</a>
+      <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨 Imprimer / PDF</button>
+      <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+    </div>
   </div>
-  <div class="d-flex gap-2 flex-wrap">
-    <a href="{{ export_url }}" class="btn btn-success btn-sm">📥 Export Excel</a>
-    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨 Imprimer / PDF</button>
-    <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+
+  <!-- Stats écran -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card text-center border-0 shadow-sm">
+        <div class="card-body py-3">
+          <div style="font-size:1.8rem;font-weight:700;color:#22C55E;">{{ total_agapes }}</div>
+          <div class="text-muted small">Agapes confirmées</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center border-0 shadow-sm">
+        <div class="card-body py-3">
+          <div style="font-size:1.8rem;font-weight:700;color:#C8A84B;">{{ total_probables }}</div>
+          <div class="text-muted small">Tenues soir probables</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center border-0 shadow-sm">
+        <div class="card-body py-3">
+          <div style="font-size:1.8rem;font-weight:700;color:#0F2137;">{{ total_couverts }}</div>
+          <div class="text-muted small">Couverts confirmés</div>
+        </div>
+      </div>
+    </div>
+    {% if total_couverts_est %}
+    <div class="col-6 col-md-3">
+      <div class="card text-center border-0 shadow-sm border-warning">
+        <div class="card-body py-3">
+          <div style="font-size:1.8rem;font-weight:700;color:#C8A84B;">~{{ total_couverts_est }}</div>
+          <div class="text-muted small">Couverts estimés</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Légende écran -->
+  <div class="d-flex gap-3 flex-wrap mb-3" style="font-size:.78rem;">
+    <span><span style="color:#22C55E;">■</span> Agapes conf.</span>
+    <span><span style="color:#7C3AED;">■</span> Classiques</span>
+    <span><span style="color:#EAB308;">■</span> Soir probable</span>
+    <span><span style="color:#F59E0B;">■</span> Banquet</span>
+    <em style="color:#94A3B8;font-style:italic;">~ Estimation</em>
   </div>
 </div>
 
-<!-- En-tête imprimable -->
-<div class="d-none d-print-block mb-4">
-  <h2>Temples Kellermann — État des lieux traiteur</h2>
-  <p>Du {{ today|date:"d/m/Y" }} au {{ fin_annee|date:"d/m/Y" }}</p>
-  <hr>
+<!-- ══ IMPRESSION SEULE : en-tête compact ══ -->
+<div class="print-only print-header">
+  <h1>Temples Kellermann — Planning Traiteur</h1>
+  <p>{{ today|date:"d/m/Y" }} → {{ fin_annee|date:"d/m/Y" }} &nbsp;·&nbsp;
+     Imprimé le {% now "d/m/Y" %}</p>
+</div>
+<div class="print-only print-stats">
+  <strong>{{ total_agapes }}</strong> agapes confirmées &nbsp;·&nbsp;
+  <strong>{{ total_probables }}</strong> tenues soir probables &nbsp;·&nbsp;
+  <strong>{{ total_couverts }}</strong> couverts confirmés{% if total_couverts_est %} &nbsp;·&nbsp; ~<strong>{{ total_couverts_est }}</strong> estimés{% endif %}
 </div>
 
-<!-- Statistiques globales -->
-<div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm">
-      <div class="card-body py-3">
-        <div style="font-size:1.8rem;font-weight:700;color:#22C55E;">{{ total_agapes }}</div>
-        <div class="text-muted small">Agapes confirmées</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm">
-      <div class="card-body py-3">
-        <div style="font-size:1.8rem;font-weight:700;color:#C8A84B;">{{ total_probables }}</div>
-        <div class="text-muted small">Tenues soir probables</div>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm">
-      <div class="card-body py-3">
-        <div style="font-size:1.8rem;font-weight:700;color:#0F2137;">{{ total_couverts }}</div>
-        <div class="text-muted small">Couverts confirmés</div>
-      </div>
-    </div>
-  </div>
-  {% if total_couverts_est %}
-  <div class="col-6 col-md-3">
-    <div class="card text-center border-0 shadow-sm border-warning">
-      <div class="card-body py-3">
-        <div style="font-size:1.8rem;font-weight:700;color:#C8A84B;">~{{ total_couverts_est }}</div>
-        <div class="text-muted small">Couverts estimés</div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-</div>
-
-<!-- Légende -->
-<div class="d-flex gap-3 flex-wrap mb-3 no-print" style="font-size:.8rem;">
-  <span><span style="color:#22C55E;">■</span> Agapes confirmées</span>
-  <span><span style="color:#7C3AED;">■</span> Classiques probables</span>
-  <span><span style="color:#EAB308;">■</span> Soir probable</span>
-  <span><span style="color:#F59E0B;">■</span> Banquet</span>
-  <span><span style="color:#10B981;">■</span> Salle agapes</span>
-</div>
-
+<!-- ══ CONTENU PAR MOIS (commun écran + impression) ══ -->
 {% if par_mois %}
   {% for groupe in par_mois %}
-  <div class="card shadow-sm mb-4">
+
+  <!-- Écran : card Bootstrap -->
+  <div class="card shadow-sm mb-4 screen-only">
     <div class="card-header d-flex justify-content-between align-items-center"
          style="background:#0F2137;color:white;">
       <strong>{{ groupe.label }}</strong>
       <span class="small opacity-75">
         {{ groupe.repas|length }} tenue{{ groupe.repas|length|pluralize }}
-        {% if groupe.nb_couverts %} · {{ groupe.nb_couverts }} couverts conf.{% endif %}
+        {% if groupe.nb_couverts %} · {{ groupe.nb_couverts }} cvts conf.{% endif %}
       </span>
     </div>
     <div class="card-body p-0">
@@ -94,64 +196,48 @@
         <table class="table table-sm table-hover mb-0">
           <thead class="table-light">
             <tr>
-              <th style="width:90px;">Date</th>
-              <th style="width:95px;">Horaires</th>
+              <th style="width:85px;">Date</th>
+              <th style="width:90px;">Horaires</th>
               <th>Loge / Organisation</th>
               <th>Lieu / Salle</th>
-              <th class="text-center" style="width:80px;">Couverts</th>
+              <th class="text-center" style="width:75px;">Couverts</th>
               <th>Contact</th>
-              <th style="width:110px;">Type</th>
+              <th style="width:100px;">Type</th>
             </tr>
           </thead>
           <tbody>
             {% for r in groupe.repas %}
             <tr {% if r.agapes_status == 'confirme' %}style="background:#F0FDF4;"
                 {% elif r.agapes_status == 'probable_classique' %}style="background:#F5F3FF;"
-                {% elif r.agapes_status == 'probable' %}style="background:#FEFCE8;"{% endif %}>
+                {% elif r.agapes_status == 'probable' %}style="background:#FEFCE8;"
+                {% elif r.type == 'Salle' %}style="background:#FFFBEB;"{% endif %}>
               <td><strong>{{ r.date|date:"D d/m" }}</strong></td>
               <td class="small text-muted">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</td>
               <td>
                 {{ r.organisation }}
-                {% if r.statut == 'attente' %}
-                  <span class="badge bg-secondary" style="font-size:8px;">⏳ Attente</span>
-                {% endif %}
+                {% if r.statut == 'attente' %}<span class="badge bg-secondary ms-1" style="font-size:8px;">⏳</span>{% endif %}
               </td>
-              <td class="small">
-                {% if r.type == "Temple" %}
-                  <span class="text-muted">{{ r.lieu }}</span>
-                {% else %}
-                  <strong>{{ r.lieu }}</strong>
-                {% endif %}
-              </td>
+              <td class="small {% if r.type == 'Salle' %}fw-semibold{% else %}text-muted{% endif %}">{{ r.lieu }}</td>
               <td class="text-center">
-                {% if r.couverts %}
-                  {% if r.estimation %}
-                    <em class="text-muted">~{{ r.couverts }}</em>
-                  {% else %}
-                    <strong>{{ r.couverts }}</strong>
-                  {% endif %}
-                {% else %}
-                  <span class="text-muted">?</span>
-                {% endif %}
+                {% if r.couverts %}{% if r.estimation %}<em class="text-muted">~{{ r.couverts }}</em>{% else %}<strong>{{ r.couverts }}</strong>{% endif %}{% else %}<span class="text-muted">?</span>{% endif %}
               </td>
               <td class="small">
-                {% if r.contact_nom %}<div>{{ r.contact_nom }}</div>{% endif %}
+                {% if r.contact_nom %}{{ r.contact_nom }}&nbsp;{% endif %}
                 {% if r.contact_email %}<a href="mailto:{{ r.contact_email }}" class="text-muted">{{ r.contact_email }}</a>{% endif %}
-                {% if r.contact_tel %} · <a href="tel:{{ r.contact_tel }}" class="text-muted">{{ r.contact_tel }}</a>{% endif %}
-                {% if not r.contact_nom and not r.contact_email %}<span class="text-muted fst-italic">—</span>{% endif %}
+                {% if not r.contact_nom and not r.contact_email %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td>
-                {% if r.type == "Temple" %}
-                  {% if r.agapes_status == 'confirme' %}
-                    <span class="badge" style="background:#22C55E;font-size:9px;">✓ Agapes</span>
-                  {% elif r.agapes_status == 'probable_classique' %}
-                    <span class="badge" style="background:#7C3AED;color:white;font-size:9px;">~ Classiques</span>
-                  {% elif r.agapes_status == 'probable' %}
-                    <span class="badge" style="background:#EAB308;color:#0F2137;font-size:9px;">~ Soir</span>
-                  {% endif %}
-                  <span class="badge" style="background:#0F2137;font-size:9px;">Temple</span>
-                {% else %}
+                {% if r.type == 'Salle' %}
                   <span class="badge" style="background:#F59E0B;color:#0F2137;font-size:9px;">🥂 Banquet</span>
+                {% elif r.agapes_status == 'confirme' %}
+                  <span class="badge" style="background:#22C55E;font-size:9px;">✓ Agapes</span>
+                {% elif r.agapes_status == 'probable_classique' %}
+                  <span class="badge" style="background:#7C3AED;color:white;font-size:9px;">~ Classiques</span>
+                {% elif r.agapes_status == 'probable' %}
+                  <span class="badge" style="background:#EAB308;color:#0F2137;font-size:9px;">~ Soir</span>
+                {% endif %}
+                {% if r.type == 'Temple' %}
+                  <span class="badge" style="background:#0F2137;font-size:9px;">Temple</span>
                 {% endif %}
               </td>
             </tr>
@@ -161,13 +247,71 @@
       </div>
     </div>
   </div>
+
+  <!-- Impression : bloc compact mois -->
+  <div class="print-only month-block">
+    <div class="month-title">{{ groupe.label|upper }}
+      &nbsp;—&nbsp; {{ groupe.repas|length }} tenue{{ groupe.repas|length|pluralize }}{% if groupe.nb_couverts %} · {{ groupe.nb_couverts }} couverts{% endif %}
+    </div>
+    <table class="plan-table">
+      <thead>
+        <tr>
+          <th style="width:70px;">Date</th>
+          <th style="width:65px;">Horaires</th>
+          <th>Organisation</th>
+          <th style="width:120px;">Lieu / Salle</th>
+          <th style="width:48px;text-align:center;">Cvts</th>
+          <th style="width:80px;">Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in groupe.repas %}
+        <tr class="{% if r.agapes_status == 'confirme' %}row-agapes{% elif r.agapes_status == 'probable_classique' %}row-classique{% elif r.agapes_status == 'probable' %}row-probable{% elif r.type == 'Salle' %}row-banquet{% endif %}">
+          <td><strong>{{ r.date|date:"D d/m" }}</strong></td>
+          <td>{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</td>
+          <td>{{ r.organisation }}{% if r.statut == 'attente' %} ⏳{% endif %}</td>
+          <td>{{ r.lieu }}</td>
+          <td style="text-align:center;">
+            {% if r.couverts %}{% if r.estimation %}~{{ r.couverts }}{% else %}{{ r.couverts }}{% endif %}{% else %}?{% endif %}
+          </td>
+          <td>
+            {% if r.type == 'Salle' %}
+              <span class="plan-type pt-banquet">🥂 Banquet</span>
+            {% elif r.agapes_status == 'confirme' %}
+              <span class="plan-type pt-agapes">✓ Agapes</span>
+            {% elif r.agapes_status == 'probable_classique' %}
+              <span class="plan-type pt-classique">~ Classiques</span>
+            {% elif r.agapes_status == 'probable' %}
+              <span class="plan-type pt-probable">~ Soir</span>
+            {% endif %}
+            {% if r.statut == 'attente' %}<span class="plan-type pt-attente">Attente</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
   {% endfor %}
 {% else %}
-  <div class="alert alert-info">Aucune tenue ni banquet prévu jusqu'au {{ fin_annee|date:"d/m/Y" }}.</div>
+  <div class="alert alert-info screen-only">Aucune tenue ni banquet prévu jusqu'au {{ fin_annee|date:"d/m/Y" }}.</div>
+  <p class="print-only">Aucune tenue ni banquet prévu jusqu'au {{ fin_annee|date:"d/m/Y" }}.</p>
 {% endif %}
 
-<div class="no-print d-flex gap-2 mt-2">
-  <a href="{{ export_url }}" class="btn btn-success btn-sm">📥 Export Excel complet</a>
-  <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨 Imprimer</button>
+<!-- ══ LÉGENDE D'IMPRESSION ══ -->
+<div class="print-only" style="margin-top:0.6cm;border-top:1px solid #ccc;padding-top:0.3cm;font-size:7.5pt;color:#555;">
+  <strong>Légende :</strong>
+  <span style="background:#DCFCE7;padding:1px 5px;border-radius:2px;">Vert = Agapes confirmées</span> &nbsp;
+  <span style="background:#EDE9FE;padding:1px 5px;border-radius:2px;">Violet = Classiques probables</span> &nbsp;
+  <span style="background:#FEF9C3;padding:1px 5px;border-radius:2px;">Jaune = Soir probable</span> &nbsp;
+  <span style="background:#FEF3C7;padding:1px 5px;border-radius:2px;">Ambre = Banquet d'ordre</span> &nbsp;
+  ~ = Estimation &nbsp;·&nbsp; ⏳ = En attente de validation
 </div>
+
+<!-- ══ BOUTONS BAS DE PAGE (écran) ══ -->
+<div class="screen-only d-flex gap-2 mt-2 mb-4">
+  <a href="{{ export_url }}" class="btn btn-success btn-sm">📥 Export Excel complet</a>
+  <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">🖨 Imprimer / PDF</button>
+</div>
+
 {% endblock %}
