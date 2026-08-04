@@ -218,19 +218,32 @@
   </div>
 </div>
 
-<!-- ══ CETTE SEMAINE ══ -->
+<!-- ══ NAVIGATION MOIS ══ -->
 <div class="card shadow-sm mb-4">
-  <div class="card-header d-flex justify-content-between align-items-center" style="background:#1E40AF;color:white;">
-    <strong>📆 À commander — jusqu'au {{ horizon_court|date:"d/m" }}</strong>
-    <div class="d-flex gap-1">
-      <span class="badge" style="background:#22C55E;">● Agapes</span>
-      <span class="badge" style="background:#EAB308;color:#0F2137;">● Soir</span>
-      <span class="badge" style="background:#F59E0B;color:#0F2137;">● Banquet</span>
+  <div class="card-header p-0">
+    <div class="d-flex align-items-center" style="background:#1E40AF;color:white;border-radius:calc(.375rem - 1px) calc(.375rem - 1px) 0 0;">
+      <a href="?mois={{ mois_prec }}&annee={{ annee_prec }}"
+         class="btn btn-sm px-3 py-2 flex-shrink-0"
+         style="color:white;font-size:1.1rem;background:rgba(255,255,255,.15);border-radius:0;border-right:1px solid rgba(255,255,255,.2);">‹</a>
+      <div class="flex-grow-1 text-center py-2">
+        <strong style="font-size:1rem;">📆 {{ nom_mois }}</strong>
+        {% if est_mois_courant %}
+          <span style="background:rgba(255,255,255,.25);font-size:.7rem;padding:1px 7px;border-radius:10px;margin-left:6px;">Mois en cours</span>
+        {% endif %}
+      </div>
+      <a href="?mois={{ mois_suiv }}&annee={{ annee_suiv }}"
+         class="btn btn-sm px-3 py-2 flex-shrink-0"
+         style="color:white;font-size:1.1rem;background:rgba(255,255,255,.15);border-radius:0;border-left:1px solid rgba(255,255,255,.2);">›</a>
     </div>
+    {% if not est_mois_courant %}
+    <div class="text-center py-1" style="background:#EFF6FF;border-bottom:1px solid #BFDBFE;">
+      <a href="?" class="small text-primary text-decoration-none">↩ Revenir au mois en cours</a>
+    </div>
+    {% endif %}
   </div>
   <div class="card-body p-0">
-    {% if repas_cette_semaine %}
-      {% for r in repas_cette_semaine %}
+    {% if repas_mois %}
+      {% for r in repas_mois %}
       <div class="evt-row {% if r.agapes_status == 'confirme' %}bg-success bg-opacity-10{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}bg-warning bg-opacity-10{% endif %}" style="{% if r.type == 'Salle' %}background:#FFFBEB;{% endif %}">
         <div class="evt-date">{{ r.date|date:"D d/m" }}</div>
         <div class="evt-heure">{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</div>
@@ -259,46 +272,13 @@
       </div>
       {% endfor %}
     {% else %}
-      <p class="text-muted p-3 mb-0">Aucun repas prévu cette semaine.</p>
+      <div class="p-4 text-center text-muted">
+        <span style="font-size:1.5rem;">📭</span><br>
+        Aucun repas prévu en {{ nom_mois }}.
+      </div>
     {% endif %}
   </div>
 </div>
-
-<!-- ══ LA SUITE (au-delà de 7 jours) ══ -->
-{% if repas_a_venir %}
-<div class="card shadow-sm mb-4">
-  <div class="card-header" style="background:#374151;color:white;">
-    <strong>📅 La suite — jusqu'en fin d'année</strong>
-  </div>
-  <div class="card-body p-0">
-    {% for r in repas_a_venir %}
-    <div class="evt-row" style="{% if r.type == 'Salle' %}background:#FFFBEB;{% elif r.agapes_status == 'confirme' %}background:#F0FDF4;{% elif r.agapes_status == 'probable' or r.agapes_status == 'probable_classique' %}background:#FEFCE8;{% endif %}">
-      <div class="evt-date" style="font-size:.9rem;">{{ r.date|date:"D d/m" }}</div>
-      <div class="evt-heure">{{ r.heure_debut|time:"H\hi" }}</div>
-      <div style="flex:1;">
-        <div style="font-weight:600;font-size:.9rem;">{{ r.organisation }}</div>
-        <div class="evt-lieu">{{ r.lieu }}</div>
-      </div>
-      <div class="evt-couverts" style="font-size:1rem;">
-        {% if r.couverts %}
-          {% if r.estimation %}<em style="color:#94a3b8;">~{{ r.couverts }}</em>{% else %}{{ r.couverts }}{% endif %}
-        {% else %}<span style="color:#cbd5e1;">?</span>{% endif %}
-        <small>cvts</small>
-      </div>
-      <div>
-        {% if r.type == 'Salle' %}
-          <span class="evt-badge" style="background:#FEF3C7;color:#92400E;">🥂</span>
-        {% elif r.agapes_status == 'confirme' %}
-          <span class="evt-badge" style="background:#DCFCE7;color:#166534;">✓</span>
-        {% elif r.agapes_status in 'probable,probable_classique' %}
-          <span class="evt-badge" style="background:#FEF9C3;color:#854D0E;">~</span>
-        {% endif %}
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
 
 <!-- ══ STATISTIQUES (discrètes, en bas) ══ -->
 <div class="d-flex gap-3 flex-wrap text-center mb-4">

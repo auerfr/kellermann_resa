@@ -143,32 +143,39 @@ def _build_repas(r, type_label):
 
 @traiteur_required
 def tableau_de_bord(request):
-    today   = date.today()
-    horizon = today + timedelta(days=30)
+    today = date.today()
 
-    # Tenues temple du soir + agapes confirmées (30 j.)
+    # Navigation mensuelle : mois affiché dans le planning
+    mois  = int(request.GET.get("mois",  today.month))
+    annee = int(request.GET.get("annee", today.year))
+
+    premier_jour = date(annee, mois, 1)
+    dernier_jour = date(annee, mois, calendar.monthrange(annee, mois)[1])
+
+    mois_prec, annee_prec, mois_suiv, annee_suiv = _nav_mois(annee, mois)
+    nom_mois = premier_jour.strftime("%B %Y").capitalize()
+    est_mois_courant = (mois == today.month and annee == today.year)
+
+    # Tenues temple du soir + agapes confirmées pour le mois affiché
     tenues_temple = (
         Reservation.objects.filter(
             statut="validee",
-            date__gte=today,
-            date__lte=horizon,
+            date__gte=premier_jour,
+            date__lte=dernier_jour,
         )
         .filter(Q(besoin_agapes=True) | Q(heure_debut__gte=HEURE_SOIR))
         .select_related("loge", "temple")
         .order_by("date", "heure_debut")
     )
 
-    # Banquets/agapes salles (30 j.) : salles agapes + banquets d'ordre en salle réunion.
-    # Inclus même en statut "attente" : le traiteur doit anticiper avant validation admin.
+    # Banquets/agapes salles pour le mois affiché
     tenues_salle = (
         ReservationSalle.objects.filter(
-            date__gte=today,
-            date__lte=horizon,
+            date__gte=premier_jour,
+            date__lte=dernier_jour,
             statut__in=["attente", "validee"],
         )
-        .filter(
-            Q(salle__type_salle="agapes") | Q(type_reunion="banquet")
-        )
+        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -177,11 +184,11 @@ def tableau_de_bord(request):
     tous_repas += [_build_repas(r, "Salle") for r in tenues_salle]
     tous_repas.sort(key=lambda x: (x["date"], x["heure_debut"]))
 
-    horizon_court = today + timedelta(days=15)
-
-    repas_aujourd_hui   = [r for r in tous_repas if r["date"] == today]
-    repas_cette_semaine = [r for r in tous_repas if today < r["date"] <= horizon_court]
-    repas_a_venir       = [r for r in tous_repas if r["date"] > horizon_court]
+    # Séparer aujourd'hui / reste du mois (uniquement si mois courant)
+    repas_aujourd_hui  = [r for r in tous_repas if r["date"] == today] if est_mois_courant else []
+    repas_mois         = [r for r in tous_repas if r["date"] != today or not est_mois_courant]
+    if est_mois_courant:
+        repas_mois = [r for r in tous_repas if r["date"] > today]
 
     nb_confirmes = sum(1 for r in tous_repas if r["agapes_status"] == "confirme")
     nb_probables = sum(1 for r in tous_repas if r["agapes_status"] in ("probable", "probable_classique"))
@@ -200,16 +207,24 @@ def tableau_de_bord(request):
     )
 
     return render(request, "traiteur/tableau_de_bord.html", {
-        "repas_aujourd_hui":  repas_aujourd_hui,
-        "repas_cette_semaine": repas_cette_semaine,
-        "repas_a_venir":      repas_a_venir,
-        "nb_confirmes":       nb_confirmes,
-        "nb_probables":       nb_probables,
-        "blocages":           blocages,
-        "notifications":      notifications,
-        "nb_notifications":   notifications.count(),
-        "today":              today,
-        "horizon_court":      horizon_court,
+        "repas_aujourd_hui": repas_aujourd_hui,
+        "repas_mois":        repas_mois,
+        "nb_confirmes":      nb_confirmes,
+        "nb_probables":      nb_probables,
+        "blocages":          blocages,
+        "notifications":     notifications,
+        "nb_notifications":  notifications.count(),
+        "today":             today,
+        "nom_mois":          nom_mois,
+        "mois":              mois,
+        "annee":             annee,
+        "mois_prec":         mois_prec,
+        "annee_prec":        annee_prec,
+        "mois_suiv":         mois_suiv,
+        "annee_suiv":        annee_suiv,
+        "est_mois_courant":  est_mois_courant,
+        "premier_jour":      premier_jour,
+        "dernier_jour":      dernier_jour,
     })
 
 
@@ -257,9 +272,30 @@ def calendrier(request):
     )
 
     if filtre == "agapes":
-        reservations = reservations.filter(besoin_agapes=True)
-    elif filtre == "soir":
+        # Tout ce qui implique de la nourriture : agapes confirmées + tenues de soir + banquets
         reservations = reservations.filter(Q(besoin_agapes=True) | Q(heure_debut__gte=HEURE_SOIR))
+        # reservations_salles reste (banquets + salles agapes)
+    elif filtre == "classiques":
+        # Loges récurrentes du soir (règle de récurrence) — agapes classiques
+        reservations = reservations.filter(
+            heure_debut__gte=HEURE_SOIR,
+            regle_source__isnull=False,
+            besoin_agapes=False,
+        )
+        reservations_salles = reservations_salles.none()
+    elif filtre == "banquets":
+        # Uniquement les réservations de salles agapes / banquets d'ordre
+        reservations = reservations.none()
+        # reservations_salles reste
+    elif filtre == "soiree":
+        # Réunions exceptionnelles en soirée, hors récurrences et hors agapes conf.
+        # (ex. CAALA, congrès, assemblées exceptionnelles)
+        reservations = reservations.filter(
+            heure_debut__gte=HEURE_SOIR,
+            regle_source__isnull=True,
+            besoin_agapes=False,
+        )
+        reservations_salles = reservations_salles.none()
     elif filtre == "blocages":
         reservations        = reservations.none()
         reservations_salles = reservations_salles.none()

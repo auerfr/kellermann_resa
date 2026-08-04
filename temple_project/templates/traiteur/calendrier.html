@@ -61,11 +61,13 @@
 
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-3 gap-2">
+<div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
   <h1 class="h4 mb-0">📅 {{ nom_mois }}</h1>
-  <div class="d-flex gap-1">
-    <a href="{% url 'traiteur:reserver' %}" class="btn btn-sm btn-success">➕</a>
-    <a href="{% url 'traiteur:bloquer' %}"  class="btn btn-sm btn-danger">🔒</a>
+  <div class="d-flex gap-1 flex-wrap">
+    <a href="{% url 'traiteur:planning' %}?mois={{ mois }}&annee={{ annee }}" class="btn btn-sm btn-outline-secondary">📋 Planning</a>
+    <a href="{% url 'traiteur:loges_couverts' %}" class="btn btn-sm btn-outline-secondary">👥 Couverts</a>
+    <a href="{% url 'traiteur:reserver' %}" class="btn btn-sm btn-success">➕ Réserver</a>
+    <a href="{% url 'traiteur:bloquer' %}"  class="btn btn-sm btn-danger">🔒 Fermer</a>
   </div>
 </div>
 
@@ -91,9 +93,20 @@
       <a href="?mois={{ mois }}&annee={{ annee }}&filtre=tout"
          class="btn btn-sm btn-outline-secondary filtre-btn flex-shrink-0 {% if filtre == 'tout' %}active{% endif %}">Tout</a>
       <a href="?mois={{ mois }}&annee={{ annee }}&filtre=agapes"
-         class="btn btn-sm btn-outline-success filtre-btn flex-shrink-0 {% if filtre == 'agapes' %}active{% endif %}">🍽 Agapes</a>
+         class="btn btn-sm filtre-btn flex-shrink-0 {% if filtre == 'agapes' %}active{% endif %}"
+         style="background:{% if filtre == 'agapes' %}#22C55E{% else %}#F0FDF4{% endif %};color:{% if filtre == 'agapes' %}white{% else %}#166534{% endif %};border:1px solid #22C55E;">🍽 Agapes</a>
+      <a href="?mois={{ mois }}&annee={{ annee }}&filtre=classiques"
+         class="btn btn-sm filtre-btn flex-shrink-0 {% if filtre == 'classiques' %}active{% endif %}"
+         style="background:{% if filtre == 'classiques' %}#7C3AED{% else %}#F5F3FF{% endif %};color:{% if filtre == 'classiques' %}white{% else %}#5B21B6{% endif %};border:1px solid #7C3AED;">~ Classiques</a>
+      <a href="?mois={{ mois }}&annee={{ annee }}&filtre=banquets"
+         class="btn btn-sm filtre-btn flex-shrink-0 {% if filtre == 'banquets' %}active{% endif %}"
+         style="background:{% if filtre == 'banquets' %}#F59E0B{% else %}#FEF3C7{% endif %};color:{% if filtre == 'banquets' %}white{% else %}#92400E{% endif %};border:1px solid #F59E0B;">🥂 Banquets</a>
+      <a href="?mois={{ mois }}&annee={{ annee }}&filtre=soiree"
+         class="btn btn-sm filtre-btn flex-shrink-0 {% if filtre == 'soiree' %}active{% endif %}"
+         style="background:{% if filtre == 'soiree' %}#EAB308{% else %}#FEF9C3{% endif %};color:{% if filtre == 'soiree' %}white{% else %}#854D0E{% endif %};border:1px solid #EAB308;">🌙 Soirées</a>
       <a href="?mois={{ mois }}&annee={{ annee }}&filtre=blocages"
-         class="btn btn-sm btn-outline-danger filtre-btn flex-shrink-0 {% if filtre == 'blocages' %}active{% endif %}">🔒 Blocages</a>
+         class="btn btn-sm filtre-btn flex-shrink-0 {% if filtre == 'blocages' %}active{% endif %}"
+         style="background:{% if filtre == 'blocages' %}#DC2626{% else %}#FEF2F2{% endif %};color:{% if filtre == 'blocages' %}white{% else %}#991B1B{% endif %};border:1px solid #DC2626;">🔒 Fermetures</a>
     </div>
   </div>
 </div>
@@ -300,10 +313,6 @@
     <div class="alert alert-info mt-2">Aucune tenue ce mois-ci pour ce filtre.</div>
   {% endif %}
 
-  <div class="d-flex gap-2 mt-3">
-    <a href="{% url 'traiteur:planning' %}?mois={{ mois }}&annee={{ annee }}" class="btn btn-outline-secondary btn-sm">📋 Planning</a>
-    <a href="{% url 'traiteur:loges_couverts' %}" class="btn btn-outline-secondary btn-sm">👥 Couverts</a>
-  </div>
 </div>
 
 <!-- ════════════ VUE DESKTOP — GRILLE + TABLEAU ════════════ -->
@@ -606,10 +615,6 @@
   <div class="alert alert-info">Aucune tenue ce mois-ci pour ce filtre.</div>
   {% endif %}
 
-  <div class="d-flex gap-2 mt-3">
-    <a href="{% url 'traiteur:planning' %}?mois={{ mois }}&annee={{ annee }}" class="btn btn-outline-secondary btn-sm">📋 Planning mensuel</a>
-    <a href="{% url 'traiteur:loges_couverts' %}" class="btn btn-outline-secondary btn-sm">👥 Couverts loges</a>
-  </div>
 </div>
 
 <!-- Modal détail événement -->
