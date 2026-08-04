@@ -214,9 +214,10 @@ class BlocageCreneauxForm(forms.ModelForm):
 
     class Meta:
         model  = BlocageCreneaux
-        fields = ["date", "heure_debut", "heure_fin", "salles", "motif"]
+        fields = ["date", "date_fin", "heure_debut", "heure_fin", "salles", "motif"]
         widgets = {
             "date":        forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "date_fin":    forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "heure_debut": forms.TimeInput(attrs={"class": "form-control", "type": "time"}),
             "heure_fin":   forms.TimeInput(attrs={"class": "form-control", "type": "time"}),
             "salles":      forms.CheckboxSelectMultiple(),
@@ -224,7 +225,8 @@ class BlocageCreneauxForm(forms.ModelForm):
                                                   "placeholder": "Ex : Fermeture exceptionnelle, Entretien…"}),
         }
         labels = {
-            "date":        "Date",
+            "date":        "Date de début",
+            "date_fin":    "Date de fin (laisser vide = même jour)",
             "heure_debut": "Heure de début",
             "heure_fin":   "Heure de fin",
             "salles":      "Salle(s) d'agapes concernée(s)",
@@ -237,6 +239,10 @@ class BlocageCreneauxForm(forms.ModelForm):
         hf = cleaned.get("heure_fin")
         if hd and hf and hf <= hd:
             self.add_error("heure_fin", "L'heure de fin doit être après l'heure de début.")
+        d = cleaned.get("date")
+        df = cleaned.get("date_fin")
+        if d and df and df < d:
+            self.add_error("date_fin", "La date de fin doit être égale ou postérieure à la date de début.")
         if not cleaned.get("salles"):
             raise forms.ValidationError("Sélectionnez au moins une salle d'agapes à bloquer.")
         return cleaned

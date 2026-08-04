@@ -24,10 +24,16 @@
                     </div>
 
                     <div class="row g-3 mb-3">
-                        <div class="col-12">
+                        <div class="col-6">
                             <label class="form-label fw-semibold">{{ form.date.label }}</label>
                             {{ form.date }}
                             {% if form.date.errors %}<div class="text-danger small">{{ form.date.errors }}</div>{% endif %}
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">{{ form.date_fin.label }}</label>
+                            {{ form.date_fin }}
+                            {% if form.date_fin.errors %}<div class="text-danger small">{{ form.date_fin.errors }}</div>{% endif %}
+                            <div class="form-text">Laisser vide = un seul jour</div>
                         </div>
                         <div class="col-6">
                             <label class="form-label fw-semibold">{{ form.heure_debut.label }}</label>
@@ -80,7 +86,12 @@
                         <tbody>
                             {% for b in blocages %}
                             <tr>
-                                <td><strong>{{ b.date|date:"d/m/Y" }}</strong></td>
+                                <td>
+                                  <strong>{{ b.date|date:"d/m/Y" }}</strong>
+                                  {% if b.date_fin and b.date_fin != b.date %}
+                                  <br><span class="text-muted small">→ {{ b.date_fin|date:"d/m/Y" }}</span>
+                                  {% endif %}
+                                </td>
                                 <td>{{ b.heure_debut|time:"H\hi" }} – {{ b.heure_fin|time:"H\hi" }}</td>
                                 <td>
                                     {% for s in b.salles.all %}

@@ -181,7 +181,8 @@ def tableau_de_bord(request):
     nb_probables = sum(1 for r in repas_a_venir if r["agapes_status"] in ("probable", "probable_classique"))
 
     blocages = (
-        BlocageCreneaux.objects.filter(date__gte=today)
+        BlocageCreneaux.objects
+        .filter(Q(date_fin__gte=today) | Q(date_fin__isnull=True, date__gte=today))
         .prefetch_related("salles")
         .order_by("date")[:5]
     )
@@ -240,7 +241,8 @@ def calendrier(request):
         .order_by("date", "heure_debut")
     )
     blocages = (
-        BlocageCreneaux.objects.filter(date__gte=premier_jour, date__lte=dernier_jour)
+        BlocageCreneaux.objects.filter(date__lte=dernier_jour)
+        .filter(Q(date_fin__gte=premier_jour) | Q(date_fin__isnull=True, date__gte=premier_jour))
         .prefetch_related("salles")
         .order_by("date", "heure_debut")
     )
@@ -281,11 +283,17 @@ def calendrier(request):
             "contact_nom": nom_c, "contact_email": email_c, "contact_tel": tel_c,
         })
     for b in blocages:
-        events_by_date.setdefault(b.date, []).append({
-            "type": "blocage", "obj": b, "agapes": False,
-            "agapes_status": "aucune", "couverts": None, "estimation": False,
-            "contact_nom": "", "contact_email": "", "contact_tel": "",
-        })
+        b_fin = b.date_fin or b.date
+        cur = b.date
+        while cur <= b_fin:
+            if cur.month == mois and cur.year == annee:
+                events_by_date.setdefault(cur, []).append({
+                    "type": "blocage", "obj": b, "agapes": False,
+                    "agapes_status": "aucune", "couverts": None, "estimation": False,
+                    "contact_nom": "", "contact_email": "", "contact_tel": "",
+                })
+            from datetime import timedelta
+            cur += timedelta(days=1)
 
     mois_choices = []
     for delta in range(-3, 15):
@@ -448,11 +456,16 @@ def bloquer(request):
         blocage.created_by = request.user
         blocage.save()
         form.save_m2m()
-        messages.success(request, f"Créneau bloqué : {blocage.date} {blocage.heure_debut}–{blocage.heure_fin}.")
+        periode = f"{blocage.date:%d/%m/%Y}"
+        if blocage.date_fin and blocage.date_fin != blocage.date:
+            periode += f" → {blocage.date_fin:%d/%m/%Y}"
+        messages.success(request, f"Créneau bloqué : {periode} {blocage.heure_debut:%H:%M}–{blocage.heure_fin:%H:%M}.")
         return redirect("traiteur:calendrier")
 
+    today_d = date.today()
     blocages = (
-        BlocageCreneaux.objects.filter(date__gte=date.today())
+        BlocageCreneaux.objects
+        .filter(Q(date_fin__gte=today_d) | Q(date_fin__isnull=True, date__gte=today_d))
         .prefetch_related("salles")
         .order_by("date")
     )

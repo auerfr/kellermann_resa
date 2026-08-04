@@ -128,7 +128,8 @@
          data-hd="{{ evt.obj.heure_debut|time:'H\hi' }}"
          data-hf="{{ evt.obj.heure_fin|time:'H\hi' }}"
          data-motif="{{ evt.obj.motif }}"
-         data-salles="{% for s in evt.obj.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+         data-salles="{% for s in evt.obj.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+         data-date-fin="{{ evt.obj.date_fin|date:'d/m/Y'|default:'' }}">
       <div class="agenda-heure">{{ evt.obj.heure_debut|time:"H\hi" }}</div>
       <div class="agenda-body">
         <div class="agenda-org">🔒 {{ evt.obj.motif }}</div>
@@ -347,6 +348,7 @@
                    data-hf="{{ evt.obj.heure_fin|time:'H\hi' }}"
                    data-motif="{{ evt.obj.motif }}"
                    data-salles="{% for s in evt.obj.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}"
+                   data-date-fin="{{ evt.obj.date_fin|date:'d/m/Y'|default:'' }}"
                    title="{{ evt.obj.motif }}">
                 🔒 {{ evt.obj.heure_debut|time:"H\hi" }} {{ evt.obj.motif|truncatechars:16 }}
               </div>
@@ -661,6 +663,7 @@ document.getElementById('evtModal').addEventListener('show.bs.modal', function(e
   var contactTel  = t.getAttribute('data-contact-tel') || '';
   var motif   = t.getAttribute('data-motif') || '';
   var salles  = t.getAttribute('data-salles') || '';
+  var dateFin = t.getAttribute('data-date-fin') || '';
 
   var header = document.getElementById('evtModalHeader');
   var title  = document.getElementById('evtModalTitle');
@@ -668,7 +671,7 @@ document.getElementById('evtModal').addEventListener('show.bs.modal', function(e
   /* Header color + title */
   if (etype === 'blocage') {
     header.style.borderBottomColor = '#EF4444';
-    title.textContent = '🔒 Créneau bloqué';
+    title.textContent = '🔒 Créneau bloqué — ' + (motif || '');
   } else if (etype === 'banquet') {
     header.style.borderBottomColor = '#F59E0B';
     title.textContent = '🥂 Banquet — ' + org;
@@ -692,25 +695,42 @@ document.getElementById('evtModal').addEventListener('show.bs.modal', function(e
   /* Body */
   var rows = '';
   function row(label, value) {
-    rows += '<tr><td class="text-muted pe-3 fw-semibold text-nowrap">' + label + '</td><td>' + value + '</td></tr>';
+    rows += '<tr><td class="text-muted pe-3 fw-semibold text-nowrap" style="vertical-align:top;">' + label + '</td><td>' + value + '</td></tr>';
   }
 
-  row('Date', esc(date));
-  row('Horaires', esc(hd) + ' – ' + esc(hf));
-
   if (etype === 'blocage') {
+    /* Date or period */
+    if (dateFin && dateFin !== date) {
+      row('Période', esc(date) + ' &rarr; ' + esc(dateFin));
+    } else {
+      row('Date', esc(date));
+    }
+    row('Horaires', esc(hd) + ' – ' + esc(hf));
     if (motif)  row('Motif', esc(motif));
     if (salles) row('Salle(s)', esc(salles));
-  } else if (etype === 'banquet' || etype === 'salle-ag') {
-    if (salle)  row('Salle', '<strong>' + esc(salle) + '</strong>');
-    if (couverts) {
-      row('Couverts', (estimation ? '<em>~' + esc(couverts) + '</em> <small class="text-muted">(estimation)</small>' : '<strong>' + esc(couverts) + '</strong>'));
-    }
+  } else if (etype === 'banquet') {
+    row('Date', esc(date));
+    row('Horaires', esc(hd) + ' – ' + esc(hf));
+    row('Type', '<span class="badge" style="background:#F59E0B;color:#0F2137;font-size:.85rem;">🥂 Banquet d\'ordre</span>');
+    if (salle)    row('Salle', '<strong>' + esc(salle) + '</strong>');
+    if (couverts) row('Couverts', estimation ? '<em>~' + esc(couverts) + '</em> <small class="text-muted">(estimation)</small>' : '<strong>' + esc(couverts) + '</strong>');
     var statutBadge = statut === 'attente'
-      ? '<span class="badge bg-secondary">⏳ En attente de validation</span>'
+      ? '<span class="badge bg-secondary">⏳ En attente</span>'
       : '<span class="badge" style="background:#22C55E;">✓ Validée</span>';
     row('Statut', statutBadge);
+  } else if (etype === 'salle-ag') {
+    row('Date', esc(date));
+    row('Horaires', esc(hd) + ' – ' + esc(hf));
+    row('Type', '<span class="badge" style="background:#10B981;color:white;font-size:.85rem;">🍽 Salle agapes</span>');
+    if (salle)    row('Salle', '<strong>' + esc(salle) + '</strong>');
+    if (couverts) row('Couverts', estimation ? '<em>~' + esc(couverts) + '</em> <small class="text-muted">(estimation)</small>' : '<strong>' + esc(couverts) + '</strong>');
+    var sBadge2 = statut === 'attente'
+      ? '<span class="badge bg-secondary">⏳ En attente</span>'
+      : '<span class="badge" style="background:#22C55E;">✓ Validée</span>';
+    row('Statut', sBadge2);
   } else {
+    row('Date', esc(date));
+    row('Horaires', esc(hd) + ' – ' + esc(hf));
     if (lieu) row('Temple', esc(lieu));
     var agapesBadge = '';
     if (agapes === 'confirme') agapesBadge = '<span class="badge" style="background:#22C55E;">✓ Agapes confirmées</span>';
@@ -718,9 +738,7 @@ document.getElementById('evtModal').addEventListener('show.bs.modal', function(e
     else if (agapes === 'probable') agapesBadge = '<span class="badge" style="background:#EAB308;color:#0F2137;">~ Soir probable</span>';
     else agapesBadge = '<span class="badge bg-secondary">Sans agapes</span>';
     row('Agapes', agapesBadge);
-    if (couverts) {
-      row('Couverts', estimation ? '<em>~' + esc(couverts) + '</em>' : '<strong>' + esc(couverts) + '</strong>');
-    }
+    if (couverts) row('Couverts', estimation ? '<em>~' + esc(couverts) + '</em>' : '<strong>' + esc(couverts) + '</strong>');
   }
 
   if (contactNom || contactEmail || contactTel) {

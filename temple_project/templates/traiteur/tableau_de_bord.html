@@ -169,7 +169,10 @@
         <tbody>
           {% for b in blocages %}
           <tr>
-            <td>{{ b.date|date:"d/m/Y" }}</td>
+            <td>
+              {{ b.date|date:"d/m/Y" }}
+              {% if b.date_fin and b.date_fin != b.date %}<br><span class="text-muted small">→ {{ b.date_fin|date:"d/m/Y" }}</span>{% endif %}
+            </td>
             <td>{{ b.heure_debut|time:"H\hi" }} – {{ b.heure_fin|time:"H\hi" }}</td>
             <td class="small">{% for s in b.salles.all %}{{ s.nom }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
             <td>{{ b.motif }}</td>

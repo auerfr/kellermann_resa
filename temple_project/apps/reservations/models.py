@@ -433,7 +433,8 @@ class DemandeRegleRecurrenceSalle(models.Model):
 
 class BlocageCreneaux(models.Model):
     """Blocage d'un créneau sur une ou plusieurs salles agapes (visible en rouge dans le calendrier)."""
-    date        = models.DateField()
+    date        = models.DateField(verbose_name="Date de début")
+    date_fin    = models.DateField(null=True, blank=True, verbose_name="Date de fin (optionnel)")
     heure_debut = models.TimeField()
     heure_fin   = models.TimeField()
     salles      = models.ManyToManyField(SalleReunion, blank=True, related_name="blocages")
