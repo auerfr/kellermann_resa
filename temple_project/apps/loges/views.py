@@ -143,10 +143,12 @@ def detail_loge(request, pk):
         statut='validee'
     ).order_by('date').first()
 
-    # Token portail loge (dernière demande validée)
-    portail_token = DemandeAccesPortail.objects.filter(
-        loge=loge, statut='validee'
-    ).order_by('-created_at').values_list('token', flat=True).first()
+    # Token portail loge — réservé à l'admin (staff)
+    portail_token = None
+    if request.user.is_staff:
+        portail_token = DemandeAccesPortail.objects.filter(
+            loge=loge, statut='validee'
+        ).order_by('-created_at').values_list('token', flat=True).first()
 
     context = {
         'loge':            loge,

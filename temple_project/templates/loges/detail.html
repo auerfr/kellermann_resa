@@ -42,16 +42,18 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
     <a href="{% url 'loges:modifier' loge.pk %}" class="btn btn-outline-primary btn-sm">✏️ Modifier</a>
     <a href="{% url 'loges:supprimer' loge.pk %}" class="btn btn-outline-danger btn-sm">🗑 Désactiver</a>
     {% endif %}
-    {% if portail_token %}
-    <a href="/reservations/portail/{{ portail_token }}/"
-       class="btn btn-outline-secondary btn-sm" target="_blank">
-      👁 Voir le portail loge
-    </a>
-    {% else %}
-    <button type="button" class="btn btn-outline-secondary btn-sm" disabled
-            data-bs-toggle="tooltip" title="Aucun accès portail actif">
-      👁 Voir le portail loge
-    </button>
+    {% if user.is_staff %}
+      {% if portail_token %}
+      <a href="/reservations/portail/{{ portail_token }}/"
+         class="btn btn-outline-secondary btn-sm" target="_blank">
+        👁 Voir le portail loge
+      </a>
+      {% else %}
+      <button type="button" class="btn btn-outline-secondary btn-sm" disabled
+              data-bs-toggle="tooltip" title="Aucun accès portail actif">
+        👁 Voir le portail loge
+      </button>
+      {% endif %}
     {% endif %}
     <a href="{% url 'loges:liste' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
   </div>
