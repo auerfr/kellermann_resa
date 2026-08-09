@@ -52,7 +52,7 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
         {% csrf_token %}
         <input type="hidden" name="action" value="renvoyer_lien_portail">
         <button type="submit" class="btn btn-outline-secondary btn-sm"
-                onclick="return confirm('Renvoyer le lien portail à {{ loge.email|default:\"(pas d\'email)\" }} ?')"
+                onclick="return confirm('Renvoyer le lien portail à cette loge ?')"
                 {% if not loge.email %}disabled title="Pas d'email renseigné"{% endif %}>
           📧 Renvoyer le lien
         </button>
