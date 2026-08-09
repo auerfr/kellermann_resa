@@ -6,6 +6,8 @@ from django.db.models import Count, Q
 from datetime import date
 from .models import Loge, Obedience
 from temple_project.apps.reservations.models import Reservation, ReservationSalle, Temple, DemandeAccesPortail
+from temple_project.apps.administration.email_utils import send_mail_kellermann
+from temple_project.apps.administration.journal import log_evenement
 
 
 @membre_required
@@ -60,6 +62,37 @@ def liste_loges(request):
 
 @membre_required
 def detail_loge(request, pk):
+    if request.user.is_staff and request.method == 'POST':
+        loge = get_object_or_404(Loge, pk=pk)
+        if request.POST.get('action') == 'renvoyer_lien_portail':
+            demande = DemandeAccesPortail.objects.filter(loge=loge, statut='validee').order_by('-created_at').first()
+            if not demande:
+                messages.error(request, f"Aucun accès portail actif pour {loge.nom}.")
+            elif not loge.email:
+                messages.error(request, f"La loge {loge.nom} n'a pas d'email renseigné.")
+            else:
+                lien = request.build_absolute_uri(f'/reservations/portail/{demande.token}/')
+                send_mail_kellermann(
+                    subject="[Kellermann] Votre lien d'accès au portail loge",
+                    message=(
+                        f"Bonjour,\n\n"
+                        f"Vous trouverez ci-dessous le lien personnel d'accès au portail loge "
+                        f"des Temples Kellermann pour la loge {loge.nom}.\n\n"
+                        f"Lien d'accès :\n{lien}\n\n"
+                        f"Ce lien est personnel et unique à votre loge. "
+                        f"Il vous permet de consulter vos réservations, votre calendrier de saison "
+                        f"et de valider vos tenues.\n\n"
+                        f"En cas de problème, contactez l'administration.\n\n"
+                        f"Fraternellement,\nL'administration des Temples Kellermann"
+                    ),
+                    recipient_list=[loge.email],
+                )
+                messages.success(request, f"Lien portail renvoyé à {loge.email}.")
+                log_evenement('envoi_lien_portail',
+                    f"Lien portail renvoyé depuis fiche loge à {loge.email} pour : {loge.nom}",
+                    request=request, objet=loge)
+        return redirect('loges:detail', pk=pk)
+
     # L'admin peut consulter une loge désactivée ; les autres non
     if request.user.is_staff:
         loge = get_object_or_404(Loge, pk=pk)
