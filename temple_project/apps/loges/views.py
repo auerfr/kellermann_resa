@@ -62,14 +62,21 @@ def liste_loges(request):
 
 @membre_required
 def detail_loge(request, pk):
-    if request.user.is_staff and request.method == 'POST':
+    if request.method == 'POST':
         loge = get_object_or_404(Loge, pk=pk)
-        if request.POST.get('action') == 'renvoyer_lien_portail':
+        action = request.POST.get('action')
+
+        if action in ('renvoyer_lien_portail', 'envoyer_lien_portail'):
+            # renvoyer_lien_portail = staff uniquement ; envoyer_lien_portail = tous membres
+            if action == 'renvoyer_lien_portail' and not request.user.is_staff:
+                messages.error(request, "Action réservée à l'administration.")
+                return redirect('loges:detail', pk=pk)
+
             demande = DemandeAccesPortail.objects.filter(loge=loge, statut='validee').order_by('-created_at').first()
             if not demande:
-                messages.error(request, f"Aucun accès portail actif pour {loge.nom}.")
+                messages.error(request, "Aucun accès portail actif pour cette loge — contactez l'administration.")
             elif not loge.email:
-                messages.error(request, f"La loge {loge.nom} n'a pas d'email renseigné.")
+                messages.error(request, "Aucun email de contact renseigné pour cette loge.")
             else:
                 lien = request.build_absolute_uri(f'/reservations/portail/{demande.token}/')
                 send_mail_kellermann(
@@ -87,9 +94,9 @@ def detail_loge(request, pk):
                     ),
                     recipient_list=[loge.email],
                 )
-                messages.success(request, f"Lien portail renvoyé à {loge.email}.")
+                messages.success(request, f"Lien portail envoyé à {loge.email}.")
                 log_evenement('envoi_lien_portail',
-                    f"Lien portail renvoyé depuis fiche loge à {loge.email} pour : {loge.nom}",
+                    f"Lien portail envoyé à {loge.email} pour : {loge.nom}",
                     request=request, objet=loge)
         return redirect('loges:detail', pk=pk)
 

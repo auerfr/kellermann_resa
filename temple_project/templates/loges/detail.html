@@ -48,20 +48,28 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
          class="btn btn-outline-secondary btn-sm" target="_blank">
         👁 Voir le portail loge
       </a>
+      {% endif %}
+      {# Admin : renvoyer le lien (avec ou sans portail existant) #}
       <form method="post" class="d-inline">
         {% csrf_token %}
         <input type="hidden" name="action" value="renvoyer_lien_portail">
         <button type="submit" class="btn btn-outline-secondary btn-sm"
                 onclick="return confirm('Renvoyer le lien portail à cette loge ?')"
                 {% if not loge.email %}disabled title="Pas d'email renseigné"{% endif %}>
-          📧 Renvoyer le lien
+          📧 Renvoyer le lien (admin)
         </button>
       </form>
-      {% else %}
-      <button type="button" class="btn btn-outline-secondary btn-sm" disabled
-              data-bs-toggle="tooltip" title="Aucun accès portail actif">
-        👁 Voir le portail loge
-      </button>
+    {% else %}
+      {# Membre non-admin : demander l'envoi du lien sur l'email de contact de la loge #}
+      {% if loge.email %}
+      <form method="post" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="envoyer_lien_portail">
+        <button type="submit" class="btn btn-outline-secondary btn-sm"
+                onclick="return confirm('Envoyer le lien portail sur l\'adresse email de cette loge ?')">
+          📧 Recevoir le lien portail
+        </button>
+      </form>
       {% endif %}
     {% endif %}
     <a href="{% url 'loges:liste' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
