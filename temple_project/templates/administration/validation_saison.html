@@ -293,6 +293,93 @@
 
 {% endif %}
 
+{# ── Panneau anomalies à traiter ─────────────────────────────────────────── #}
+{% if lignes_anomalies %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #DC2626;overflow:hidden;">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#FEF2F2;border-bottom:1px solid #FECACA;">
+    <span style="font-weight:700;color:#991B1B;font-size:13px;">⚠ Anomalies signalées par les loges — à traiter</span>
+    <span class="badge" style="background:#FEE2E2;color:#991B1B;font-size:12px;">{{ lignes_anomalies|length }}</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0" style="font-size:13px;">
+      <thead style="background:#FFF5F5;">
+        <tr>
+          <th class="text-muted small ps-3">LOGE</th>
+          <th class="text-muted small">DATE ACTUELLE</th>
+          <th class="text-muted small">TEMPLE</th>
+          <th class="text-muted small">HORAIRES</th>
+          <th class="text-muted small">DEMANDE</th>
+          <th class="text-muted small">COMMENTAIRE LOGE</th>
+          <th class="text-muted small">ACTION</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in lignes_anomalies %}
+        {% with l=item.ligne r=item.resa %}
+        <tr style="background:{% if l.avis == 'annuler' %}#FEF2F2{% else %}#FFFBEB{% endif %};">
+          <td class="fw-semibold ps-3" style="color:#0F2137;">{{ l.validation.loge.abreviation|default:l.validation.loge.nom }}</td>
+          <td>{{ l.date|date:"d/m/Y" }}</td>
+          <td>{{ l.temple_nom }}</td>
+          <td class="text-muted">{{ l.heure_debut|time:"H:i" }}–{{ l.heure_fin|time:"H:i" }}</td>
+          <td>
+            {% if l.avis == 'annuler' %}
+              <span class="badge" style="background:#FEE2E2;color:#991B1B;">✕ Annuler</span>
+            {% else %}
+              <span class="badge" style="background:#FEF9C3;color:#92400E;">↻ Déplacer</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ l.commentaire|default:"—" }}</td>
+          <td>
+            {% if not r %}
+              <span class="text-muted small">Réservation introuvable</span>
+            {% elif l.avis == 'annuler' %}
+              <form method="post" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="annuler_tenue_validation">
+                <input type="hidden" name="ligne_pk" value="{{ l.pk }}">
+                <button type="submit"
+                        class="btn btn-sm btn-danger fw-semibold px-3"
+                        onclick="return confirm('Annuler la tenue du {{ l.date|date:\"d/m/Y\" }} pour {{ l.validation.loge }} ?')">
+                  ✕ Annuler la tenue
+                </button>
+              </form>
+            {% else %}
+              <button class="btn btn-sm btn-warning fw-semibold px-2"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#form-deplacer-{{ l.pk }}">
+                ↻ Déplacer…
+              </button>
+              <div class="collapse mt-2" id="form-deplacer-{{ l.pk }}">
+                <form method="post" class="d-flex gap-2 align-items-end flex-wrap">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="deplacer_tenue_validation">
+                  <input type="hidden" name="ligne_pk" value="{{ l.pk }}">
+                  <div>
+                    <label class="form-label small fw-semibold mb-1">Nouvelle date</label>
+                    <input type="date" name="nouvelle_date" class="form-control form-control-sm" required style="width:140px;">
+                  </div>
+                  <div>
+                    <label class="form-label small fw-semibold mb-1">Temple</label>
+                    <select name="nouveau_temple" class="form-select form-select-sm" style="width:160px;">
+                      {% for t in temples %}
+                      <option value="{{ t.pk }}" {% if t.nom == l.temple_nom %}selected{% endif %}>{{ t.nom }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <button type="submit" class="btn btn-sm btn-warning fw-semibold">↻ Confirmer</button>
+                </form>
+              </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# ── Tableau des validations ─────────────────────────────────────────────── #}
 {% if validations %}
 <div class="card shadow-sm border-0 mb-4">
@@ -384,7 +471,7 @@
               <table class="table table-sm mb-0" style="font-size:12px;">
                 <thead>
                   <tr>
-                    <th>Date</th><th>Temple</th><th>Horaires</th><th>Avis</th><th>Commentaire</th>
+                    <th>Date</th><th>Temple</th><th>Horaires</th><th>Avis</th><th>Commentaire loge</th><th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -405,6 +492,35 @@
                       {% endif %}
                     </td>
                     <td class="text-muted">{{ ligne.commentaire|default:"—" }}</td>
+                    <td>
+                      {% if ligne.avis == 'annuler' %}
+                        <form method="post" class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="annuler_tenue_validation">
+                          <input type="hidden" name="ligne_pk" value="{{ ligne.pk }}">
+                          <button type="submit" class="btn btn-xs btn-danger py-0 px-2"
+                                  onclick="return confirm('Annuler cette tenue ?')">✕ Annuler</button>
+                        </form>
+                      {% elif ligne.avis == 'deplacer' %}
+                        <button class="btn btn-xs btn-warning py-0 px-2"
+                                data-bs-toggle="collapse"
+                                data-bs-target="#fd-{{ ligne.pk }}">↻</button>
+                        <div class="collapse mt-1" id="fd-{{ ligne.pk }}">
+                          <form method="post" class="d-flex gap-1 flex-wrap align-items-end">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="deplacer_tenue_validation">
+                            <input type="hidden" name="ligne_pk" value="{{ ligne.pk }}">
+                            <input type="date" name="nouvelle_date" class="form-control form-control-sm" required style="width:130px;">
+                            <select name="nouveau_temple" class="form-select form-select-sm" style="width:150px;">
+                              {% for t in temples %}
+                              <option value="{{ t.pk }}" {% if t.nom == ligne.temple_nom %}selected{% endif %}>{{ t.nom }}</option>
+                              {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-xs btn-warning py-0 px-2">OK</button>
+                          </form>
+                        </div>
+                      {% endif %}
+                    </td>
                   </tr>
                   {% endfor %}
                 </tbody>

@@ -3130,6 +3130,81 @@ def validation_saison_admin(request):
             messages.success(request, f"Validation de {val.loge} réinitialisée.")
             return redirect(f"{request.path}?annee={annee}")
 
+        elif action == 'annuler_tenue_validation':
+            ligne_pk = request.POST.get('ligne_pk')
+            ligne = get_object_or_404(ValidationSaisonLigne, pk=ligne_pk)
+            annee_cible = ligne.validation.annee
+            resa = Reservation.objects.filter(
+                loge=ligne.validation.loge,
+                date=ligne.date,
+                statut__in=['validee', 'attente'],
+            ).first()
+            if resa:
+                info = f"{ligne.validation.loge} — {ligne.date:%d/%m/%Y} ({ligne.temple_nom})"
+                _exclure_date_regle(resa)
+                log_evenement('modification_reservation',
+                    f"Tenue annulée via validation saison : {info}", request=request, objet=resa)
+                resa.delete()
+                messages.success(request, f"Tenue annulée : {info}")
+            else:
+                messages.warning(request, "Réservation introuvable — déjà supprimée ?")
+            ligne.avis = 'ok'
+            ligne.commentaire = (ligne.commentaire + " [annulée par l'admin]").strip()
+            ligne.save(update_fields=['avis', 'commentaire'])
+            val = ligne.validation
+            if not val.lignes.filter(avis__in=['deplacer', 'annuler']).exists():
+                val.statut = 'traitee'
+                val.save(update_fields=['statut'])
+            return redirect(f"{request.path}?annee={annee_cible}")
+
+        elif action == 'deplacer_tenue_validation':
+            ligne_pk = request.POST.get('ligne_pk')
+            ligne = get_object_or_404(ValidationSaisonLigne, pk=ligne_pk)
+            annee_cible = ligne.validation.annee
+            try:
+                nd = date.fromisoformat(request.POST.get('nouvelle_date', ''))
+            except ValueError:
+                messages.error(request, "Date invalide.")
+                return redirect(f"{request.path}?annee={annee_cible}")
+            resa = Reservation.objects.filter(
+                loge=ligne.validation.loge,
+                date=ligne.date,
+                statut__in=['validee', 'attente'],
+            ).first()
+            if not resa:
+                messages.warning(request, "Réservation introuvable — déjà déplacée ?")
+                return redirect(f"{request.path}?annee={annee_cible}")
+            temple_cible = Temple.objects.filter(pk=request.POST.get('nouveau_temple')).first() or resa.temple
+            conflit = Reservation.objects.filter(
+                temple=temple_cible, date=nd,
+                heure_debut__lt=resa.heure_fin, heure_fin__gt=resa.heure_debut,
+                statut__in=['validee', 'attente'],
+            ).exclude(pk=resa.pk).select_related('loge').first()
+            if conflit:
+                qui = conflit.loge or conflit.nom_organisation or conflit.nom_demandeur
+                messages.warning(request,
+                    f"{temple_cible} est déjà occupé le {nd:%d/%m/%Y} par {qui}. "
+                    "Choisissez une autre date ou un autre temple.")
+                return redirect(f"{request.path}?annee={annee_cible}")
+            ancienne = resa.date
+            note = f"Déplacée du {ancienne:%d/%m/%Y} au {nd:%d/%m/%Y} (demande loge via validation saison)"
+            _exclure_date_regle(resa)
+            resa.date = nd
+            resa.temple = temple_cible
+            resa.regle_source = None
+            resa.commentaire = (resa.commentaire + "\n" if resa.commentaire else "") + note
+            resa.save()
+            log_evenement('modification_reservation', note + f" — {resa.loge}", request=request, objet=resa)
+            messages.success(request, f"Tenue de {resa.loge} déplacée au {nd:%d/%m/%Y}.")
+            ligne.avis = 'ok'
+            ligne.commentaire = (ligne.commentaire + f" [déplacée au {nd:%d/%m/%Y}]").strip()
+            ligne.save(update_fields=['avis', 'commentaire'])
+            val = ligne.validation
+            if not val.lignes.filter(avis__in=['deplacer', 'annuler']).exists():
+                val.statut = 'traitee'
+                val.save(update_fields=['statut'])
+            return redirect(f"{request.path}?annee={annee_cible}")
+
         elif action == 'relancer':
             annee_cible = int(request.POST.get('annee_cible', annee))
             periode_cible = f"01/09/{annee_cible} → 30/06/{annee_cible + 1}"
@@ -3222,6 +3297,22 @@ def validation_saison_admin(request):
     validations_attente_list = [v for v in validations if v.statut == 'attente']
     validations_ouverte_list = [v for v in validations if v.statut == 'ouverte']
 
+    # Anomalies avec leur réservation associée
+    lignes_anomalies = []
+    if nb_anomalies_total > 0:
+        for ligne in ValidationSaisonLigne.objects.filter(
+            validation__annee=annee,
+            avis__in=['deplacer', 'annuler'],
+        ).select_related('validation__loge').order_by('date'):
+            resa = Reservation.objects.filter(
+                loge=ligne.validation.loge,
+                date=ligne.date,
+                statut__in=['validee', 'attente'],
+            ).first()
+            lignes_anomalies.append({'ligne': ligne, 'resa': resa})
+
+    temples = Temple.objects.all().order_by('nom')
+
     return render(request, 'administration/validation_saison.html', {
         'annee':                   annee,
         'annees':                  annees,
@@ -3237,6 +3328,8 @@ def validation_saison_admin(request):
         'nb_traitee':              nb_traitee,
         'nb_anomalies_total':      nb_anomalies_total,
         'loges_manquantes':        loges_manquantes,
+        'lignes_anomalies':        lignes_anomalies,
+        'temples':                 temples,
     })
 
 
