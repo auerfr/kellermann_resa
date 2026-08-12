@@ -138,7 +138,8 @@ def api_evenements(request):
                 if rs.type_reunion == 'banquet':
                     title = f"\U0001f37d {org} \u2013 Banquet"
                 else:
-                    title = f"\U0001f37d {org} \u2013 Salle d\u2019agapes"
+                    title = f"\U0001fa91 {org} \u2013 {rs.get_type_reunion_display()}"
+                    couleur = _COULEURS_SALLE["reunion"][rs.statut]
             else:
                 title = f"\U0001fa91 {org} \u2013 {rs.salle.nom}"
             if a_reconfirmer:

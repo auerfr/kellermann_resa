@@ -1195,6 +1195,8 @@ def portail_loge(request, token):
             'date': r.date, 'heure_debut': r.heure_debut, 'heure_fin': r.heure_fin,
             'statut': r.statut, 'get_statut_display': r.get_statut_display(),
             'type_code': ts, 'type_label': TYPE_SALLE_LABELS.get(ts, ts),
+            'type_reunion': getattr(r, 'type_reunion', ''),
+            'type_reunion_display': r.get_type_reunion_display() if hasattr(r, 'get_type_reunion_display') else '',
             'lieu': str(r.salle) if r.salle else '–',
             'detail': r.objet or '',
             'obj': r,

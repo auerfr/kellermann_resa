@@ -182,7 +182,11 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
                   {% else %}<span class="badge bg-light text-dark">{{ e.type_resa }}</span>{% endif %}
                   {% if e.sous_type %}<span class="badge" style="background:#0ea5e9;color:#fff;" title="Nature de la tenue">{{ e.sous_type }}</span>{% endif %}
                 {% elif e.type_code == 'agapes' %}
-                  <span class="badge" style="background:#92400E;color:white;">Salle d'agapes</span>
+                  {% if e.type_reunion == 'banquet' %}
+                  <span class="badge" style="background:#92400E;color:white;">Banquet</span>
+                  {% else %}
+                  <span class="badge bg-secondary">{{ e.type_reunion_display }}</span>
+                  {% endif %}
                 {% elif e.type_code == 'cabinet_reflexion' %}
                   <span class="badge bg-secondary">Cabinet</span>
                 {% else %}
