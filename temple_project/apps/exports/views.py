@@ -10,7 +10,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from datetime import timedelta
 from temple_project.apps.reservations.models import (
-    Reservation, Temple, DemandeAccesPortail, ValidationSaison,
+    Reservation, Temple, DemandeAccesPortail, ValidationSaison, ReservationSalle,
 )
 
 
