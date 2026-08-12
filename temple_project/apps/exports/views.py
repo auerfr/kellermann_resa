@@ -693,7 +693,16 @@ def _short_heure(t):
     return f"{int(h)}h" if m == '00' else f"{int(h)}h{m}"
 
 
+_SALLE_TYPE_SHORT = {
+    'banquet':  'Banq.',
+    'reunion':  'Réun.',
+    'chantier': 'Chant.',
+    'conseil':  'Cons.',
+}
+
+
 def _resa_par_jour(annee, mois, temple_pk=None, loge=None):
+    # Temple tenues
     qs = Reservation.objects.select_related('loge').filter(
         statut='validee', date__year=annee, date__month=mois,
     )
@@ -706,6 +715,23 @@ def _resa_par_jour(annee, mois, temple_pk=None, loge=None):
         res.setdefault(r.date.day, []).append(
             f"{_short_loge(r)} {_short_heure(r.heure_debut)}"
         )
+
+    # Salle reservations
+    qs_s = ReservationSalle.objects.select_related('loge', 'salle').filter(
+        statut__in=['validee', 'attente'],
+        date__year=annee, date__month=mois,
+    )
+    if loge:
+        qs_s = qs_s.filter(loge=loge)
+    for rs in qs_s.order_by('heure_debut'):
+        if loge:
+            label = _SALLE_TYPE_SHORT.get(rs.type_reunion, 'Salle')
+        else:
+            label = _short_loge(rs)
+        res.setdefault(rs.date.day, []).append(
+            f"{label} {_short_heure(rs.heure_debut)}"
+        )
+
     return res
 
 
