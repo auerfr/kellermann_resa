@@ -1101,12 +1101,20 @@ def planning_loge_pdf(request, token):
         annee = val.annee if val else annee_default
 
     debut_saison = date(annee, 9, 1)
-    fin_saison   = date(annee + 1, 6, 30)
+    fin_saison   = date(annee + 1, 8, 31)
 
     tenues = (
         Reservation.objects
         .select_related('temple')
         .filter(loge=loge, statut='validee',
+                date__gte=debut_saison, date__lte=fin_saison)
+        .order_by('date', 'heure_debut')
+    )
+
+    resas_salle = (
+        ReservationSalle.objects
+        .select_related('salle')
+        .filter(loge=loge, statut__in=['validee', 'attente'],
                 date__gte=debut_saison, date__lte=fin_saison)
         .order_by('date', 'heure_debut')
     )
@@ -1155,51 +1163,90 @@ def planning_loge_pdf(request, token):
     story.append(HRFlowable(width='50%', thickness=0.8,
                              color=colors.HexColor('#C8A84B'), hAlign='CENTER'))
     story.append(Spacer(1, 1 * cm))
-    story.append(Paragraph('Planning des tenues', _sty('lp_titre', 20, bold=True)))
+    story.append(Paragraph('Planning de saison', _sty('lp_titre', 20, bold=True)))
     story.append(Spacer(1, 0.5 * cm))
     story.append(Paragraph(loge.nom, _sty('lp_loge', 14, bold=True, color='#333333')))
     story.append(Spacer(1, 0.3 * cm))
     story.append(Paragraph(f'Saison {annee}\u2013{annee + 1}',
                             _sty('lp_saison', 11, color='#555555')))
-    story.append(Paragraph(f'01/09/{annee} \u2192 30/06/{annee + 1}',
+    story.append(Paragraph(f'01/09/{annee} \u2192 31/08/{annee + 1}',
                             _sty('lp_periode', 9, color='#888888')))
     story.append(Spacer(1, 2.5 * cm))
     story.append(Paragraph(f'G\u00e9n\u00e9r\u00e9 le {today.strftime("%d/%m/%Y")}',
                             _sty('lp_gen', 8, color='#999999')))
     story.append(PageBreak())
 
-    # ── Tableau des tenues ─────────────────────────────────────────────────────
-    nb = tenues.count()
+    # ── Tableau planning (tenues + salles) ──────────────────────────────────────────
+    C_SALLE = colors.HexColor('#EDE9FF')
+
+    lignes = []
+    for t in tenues:
+        lignes.append({
+            'kind': 'temple',
+            'date': t.date,
+            'heure_debut': t.heure_debut,
+            'heure_fin': t.heure_fin,
+            'lieu': str(t.temple) if t.temple else '\u2014',
+            'type': t.get_type_reservation_display(),
+            'note': (f"\u2713 {t.nombre_repas} cvts" if t.besoin_agapes else ''),
+        })
+    for rs in resas_salle:
+        if rs.type_reunion == 'banquet':
+            type_label = 'Banquet'
+        elif hasattr(rs, 'get_type_reunion_display'):
+            type_label = rs.get_type_reunion_display()
+        else:
+            type_label = rs.salle.type_salle if rs.salle else ''
+        lignes.append({
+            'kind': 'salle',
+            'date': rs.date,
+            'heure_debut': rs.heure_debut,
+            'heure_fin': rs.heure_fin,
+            'lieu': str(rs.salle) if rs.salle else '\u2014',
+            'type': type_label,
+            'note': rs.objet or '',
+        })
+    lignes.sort(key=lambda x: (x['date'], x['heure_debut']))
+
+    nb_tenues = sum(1 for l in lignes if l['kind'] == 'temple')
+    nb_salles = sum(1 for l in lignes if l['kind'] == 'salle')
+    nb_total  = len(lignes)
+
     story.append(Paragraph(
         f'Planning saison {annee}\u2013{annee + 1}',
         _sty('lt_h2', 11, bold=True, align=TA_LEFT, after=3),
     ))
+    sous_titre = f'{nb_tenues} tenue{"s" if nb_tenues != 1 else ""} au temple'
+    if nb_salles:
+        sous_titre += (f' \u00b7 {nb_salles} '
+                       f'r\u00e9servation{"s" if nb_salles != 1 else ""} de salle')
     story.append(Paragraph(
-        f'{nb} tenue{"s" if nb != 1 else ""} valid\u00e9e{"s" if nb != 1 else ""}',
+        sous_titre,
         _sty('lt_sub', 9, color='#888888', align=TA_LEFT, after=8),
     ))
 
-    if nb == 0:
+    if nb_total == 0:
         story.append(Paragraph(
-            'Aucune tenue valid\u00e9e pour cette saison.',
+            'Aucune r\u00e9servation pour cette saison.',
             _sty('lt_vide', 9, color='#888888'),
         ))
     else:
         col_widths = [2.2 * cm, 1.3 * cm, 3.8 * cm, 2.8 * cm, 3.8 * cm, 2.5 * cm]
-        rows = [['Date', 'Jour', 'Temple', 'Horaires', 'Type', 'Agapes']]
-        for t in tenues:
-            agapes = f"\u2713 {t.nombre_repas} cvts" if t.besoin_agapes else '\u2014'
+        rows = [['Date', 'Jour', 'Lieu', 'Horaires', 'Type', 'Note']]
+        row_kinds = []
+        for lg in lignes:
             rows.append([
-                t.date.strftime('%d/%m/%Y'),
-                JOURS_FR[t.date.weekday()],
-                str(t.temple) if t.temple else '\u2014',
-                f"{t.heure_debut:%H:%M} \u2013 {t.heure_fin:%H:%M}",
-                t.get_type_reservation_display(),
-                agapes,
+                lg['date'].strftime('%d/%m/%Y'),
+                JOURS_FR[lg['date'].weekday()],
+                lg['lieu'],
+                f"{lg['heure_debut']:%H:%M} \u2013 {lg['heure_fin']:%H:%M}",
+                lg['type'],
+                lg['note'],
             ])
+            row_kinds.append(lg['kind'])
         nr = len(rows)
         tbl = Table(rows, colWidths=col_widths, repeatRows=1)
-        tbl.setStyle(TableStyle([
+        tbl_style = [
             ('BACKGROUND',    (0, 0),   (-1, 0),    C_HEADER),
             ('TEXTCOLOR',     (0, 0),   (-1, 0),    colors.white),
             ('FONTNAME',      (0, 0),   (-1, 0),    'Helvetica-Bold'),
@@ -1208,22 +1255,33 @@ def planning_loge_pdf(request, token):
             ('TOPPADDING',    (0, 0),   (-1, -1),   4),
             ('BOTTOMPADDING', (0, 0),   (-1, -1),   4),
             ('FONTNAME',      (0, 1),   (-1, nr-1), 'Helvetica'),
-            ('ROWBACKGROUNDS',(0, 1),   (-1, nr-1), [colors.white, C_LIGHT]),
             ('ALIGN',         (1, 1),   (1, nr-1),  'CENTER'),
             ('ALIGN',         (3, 1),   (3, nr-1),  'CENTER'),
-            ('ALIGN',         (5, 1),   (5, nr-1),  'CENTER'),
             ('GRID',          (0, 0),   (-1, -1),   0.3, C_BORDER),
             ('BOX',           (0, 0),   (-1, -1),   0.6, colors.HexColor('#666666')),
-        ]))
+        ]
+        for i, kind in enumerate(row_kinds):
+            ri = i + 1
+            if kind == 'salle':
+                tbl_style.append(('BACKGROUND', (0, ri), (-1, ri), C_SALLE))
+            elif i % 2 == 0:
+                tbl_style.append(('BACKGROUND', (0, ri), (-1, ri), colors.white))
+            else:
+                tbl_style.append(('BACKGROUND', (0, ri), (-1, ri), C_LIGHT))
+        tbl.setStyle(TableStyle(tbl_style))
         story.append(tbl)
 
         nb_agapes  = tenues.filter(besoin_agapes=True).count()
         total_cvts = (tenues.filter(besoin_agapes=True)
                              .aggregate(s=Sum('nombre_repas'))['s'] or 0)
         story.append(Spacer(1, 0.4 * cm))
+        resume = f'Total\u00a0: {nb_tenues} tenue(s) au temple'
+        if nb_salles:
+            resume += f' + {nb_salles} r\u00e9servation(s) de salle'
+        if nb_agapes:
+            resume += f'  \u00b7  {nb_agapes} avec agapes ({total_cvts} couverts)'
         story.append(Paragraph(
-            f'Total\u00a0: {nb} tenue(s)  \u00b7  '
-            f'{nb_agapes} avec agapes ({total_cvts} couverts)',
+            resume,
             _sty('lt_resume', 8, color='#777777', align=TA_LEFT, after=0),
         ))
 
