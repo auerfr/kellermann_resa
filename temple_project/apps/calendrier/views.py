@@ -135,7 +135,10 @@ def api_evenements(request):
             if ts == "cabinet_reflexion":
                 title = f"\U0001f6aa {org} \u2013 Cabinets"
             elif ts == "agapes":
-                title = f"\U0001f37d {org} \u2013 Banquet"
+                if rs.type_reunion == 'banquet':
+                    title = f"\U0001f37d {org} \u2013 Banquet"
+                else:
+                    title = f"\U0001f37d {org} \u2013 Salle d\u2019agapes"
             else:
                 title = f"\U0001fa91 {org} \u2013 {rs.salle.nom}"
             if a_reconfirmer:
