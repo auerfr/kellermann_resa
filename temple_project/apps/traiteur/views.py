@@ -120,7 +120,7 @@ def _build_repas(r, type_label):
         org  = loge.nom if loge else (r.organisation or r.nom_demandeur or "—")
         # Banquet d'ordre en salle = agapes confirmées ; salle agapes standard aussi
         tr = getattr(r, 'type_reunion', '')
-        status = "confirme" if (getattr(r.salle, 'type_salle', '') == 'agapes' or tr == 'banquet') else "probable"
+        status = "confirme" if tr == 'banquet' else "probable"
 
     nom_c, email_c, tel_c = _contact_loge(loge)
     return {
@@ -176,7 +176,7 @@ def tableau_de_bord(request):
             date__lte=dernier_jour,
             statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(type_reunion="banquet")
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -261,7 +261,7 @@ def calendrier(request):
             date__gte=premier_jour, date__lte=dernier_jour,
             statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(type_reunion="banquet")
         .select_related("salle", "loge")
         .order_by("date", "heure_debut")
     )
@@ -317,8 +317,7 @@ def calendrier(request):
         couverts, est = _couverts_effectifs(r)
         nom_c, email_c, tel_c = _contact_loge(r.loge)
         tr = getattr(r, 'type_reunion', '')
-        salle_type = getattr(r.salle, 'type_salle', '') if r.salle else ''
-        is_banquet = (salle_type == 'agapes' or tr == 'banquet')
+        is_banquet = (tr == 'banquet')
         salle_status = "confirme" if is_banquet else "probable"
         events_by_date.setdefault(r.date, []).append({
             "type": "salle", "obj": r,
@@ -401,7 +400,7 @@ def planning(request):
             date__gte=premier_jour, date__lte=dernier_jour,
             statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(type_reunion="banquet")
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -540,7 +539,7 @@ def etat_des_lieux(request):
             date__lte=fin_annee,
             statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(type_reunion="banquet")
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -867,7 +866,7 @@ def export_agapes_excel(request):
     if type_export in ('tout', 'banquet', 'soir'):
         for b in (
             ReservationSalle.objects.filter(
-                salle__type_salle='agapes', statut='validee', date__gte=debut, date__lte=fin
+                type_reunion='banquet', statut='validee', date__gte=debut, date__lte=fin
             )
             .select_related('loge', 'salle')
             .order_by('date')
