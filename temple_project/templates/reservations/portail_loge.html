@@ -56,7 +56,7 @@
               </p>
               <div class="input-group mb-2">
                 <input type="text" id="ics-global-https" class="form-control form-control-sm font-monospace"
-                       value="{{ request.build_absolute_uri }}{% url 'ics_global' %}"
+                       value="{{ request.scheme }}://{{ request.get_host }}{% url 'ics_global' %}"
                        readonly>
                 <button class="btn btn-outline-secondary btn-sm"
                         onclick="navigator.clipboard.writeText(document.getElementById('ics-global-https').value);this.textContent='✓ Copié'">
@@ -66,7 +66,7 @@
               <div class="d-flex flex-wrap gap-2">
                 <a href="webcal://{{ request.get_host }}{% url 'ics_global' %}"
                    class="btn btn-sm btn-outline-primary">🍎 Apple / iPhone</a>
-                <a href="https://calendar.google.com/calendar/r?cid={{ request.build_absolute_uri }}{% url 'ics_global' %}"
+                <a href="https://calendar.google.com/calendar/r?cid={{ request.scheme }}://{{ request.get_host }}{% url 'ics_global' %}"
                    target="_blank" class="btn btn-sm btn-outline-danger">🗓 Google Calendar</a>
                 <a href="{% url 'ics_global' %}"
                    class="btn btn-sm btn-outline-secondary">⬇ Télécharger .ics</a>
@@ -82,7 +82,7 @@
               </p>
               <div class="input-group mb-2">
                 <input type="text" id="ics-loge-https" class="form-control form-control-sm font-monospace"
-                       value="{{ request.build_absolute_uri }}{% url 'portail_loge_ics' token=token %}"
+                       value="{{ request.scheme }}://{{ request.get_host }}{% url 'portail_loge_ics' token=token %}"
                        readonly>
                 <button class="btn btn-outline-secondary btn-sm"
                         onclick="navigator.clipboard.writeText(document.getElementById('ics-loge-https').value);this.textContent='✓ Copié'">
@@ -92,7 +92,7 @@
               <div class="d-flex flex-wrap gap-2">
                 <a href="webcal://{{ request.get_host }}{% url 'portail_loge_ics' token=token %}"
                    class="btn btn-sm btn-outline-primary">🍎 Apple / iPhone</a>
-                <a href="https://calendar.google.com/calendar/r?cid={{ request.build_absolute_uri }}{% url 'portail_loge_ics' token=token %}"
+                <a href="https://calendar.google.com/calendar/r?cid={{ request.scheme }}://{{ request.get_host }}{% url 'portail_loge_ics' token=token %}"
                    target="_blank" class="btn btn-sm btn-outline-danger">🗓 Google Calendar</a>
                 <a href="{% url 'portail_loge_ics' token=token %}"
                    class="btn btn-sm btn-outline-secondary">⬇ Télécharger .ics</a>
