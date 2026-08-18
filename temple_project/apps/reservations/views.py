@@ -1624,6 +1624,21 @@ def portail_loge_ics(request, token):
                       .replace(',', '\\,')
                       .replace('\n', '\\n'))
 
+    def _fold(line):
+        enc = line.encode('utf-8')
+        if len(enc) <= 75:
+            return line
+        parts = []
+        while enc:
+            chunk = enc[:75]
+            while len(chunk) > 1 and (chunk[-1] & 0xC0) == 0x80:
+                chunk = chunk[:-1]
+            parts.append(chunk.decode('utf-8'))
+            enc = enc[len(chunk):]
+            if enc:
+                enc = b' ' + enc
+        return '\r\n'.join(parts)
+
     TYPE_REUNION = {
         'banquet':  "Banquet d'ordre",
         'reunion':  'Reunion de travail',
@@ -1637,6 +1652,8 @@ def portail_loge_ics(request, token):
         'PRODID:-//Temples Kellermann//Reservations//FR',
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
+        'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+        'X-PUBLISHED-TTL:PT1H',
         f'X-WR-CALNAME:Kellermann {loge.nom}',
         'X-WR-TIMEZONE:Europe/Paris',
         'X-WR-CALDESC:Planning reservations Temples Kellermann',
@@ -1678,7 +1695,7 @@ def portail_loge_ics(request, token):
 
     lines.append('END:VCALENDAR')
 
-    content  = '\r\n'.join(lines) + '\r\n'
+    content  = '\r\n'.join(_fold(line) for line in lines) + '\r\n'
     response = HttpResponse(content, content_type='text/calendar; charset=utf-8')
     response['Content-Disposition'] = (
         f'inline; filename="kellermann_{loge.abreviation or loge.pk}.ics"'
@@ -1739,6 +1756,21 @@ def ics_global(request):
                       .replace(',', '\\,')
                       .replace('\n', '\\n'))
 
+    def _fold(line):
+        enc = line.encode('utf-8')
+        if len(enc) <= 75:
+            return line
+        parts = []
+        while enc:
+            chunk = enc[:75]
+            while len(chunk) > 1 and (chunk[-1] & 0xC0) == 0x80:
+                chunk = chunk[:-1]
+            parts.append(chunk.decode('utf-8'))
+            enc = enc[len(chunk):]
+            if enc:
+                enc = b' ' + enc
+        return '\r\n'.join(parts)
+
     TYPE_REUNION = {
         'banquet':  "Banquet d'ordre",
         'reunion':  'Reunion de travail',
@@ -1752,6 +1784,8 @@ def ics_global(request):
         'PRODID:-//Temples Kellermann//Reservations//FR',
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
+        'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+        'X-PUBLISHED-TTL:PT1H',
         'X-WR-CALNAME:Temples Kellermann Global',
         'X-WR-TIMEZONE:Europe/Paris',
         'X-WR-CALDESC:Toutes les reservations des Temples Kellermann',
@@ -1764,7 +1798,7 @@ def ics_global(request):
         summary = f'{loge_abbr} - {temple_str}'
         desc = t.get_type_reservation_display()
         if t.besoin_agapes:
-            desc += f'\\nAgapes : {t.nombre_repas} couverts'
+            desc += f'\nAgapes : {t.nombre_repas} couverts'
         lines += [
             'BEGIN:VEVENT',
             f'UID:temple-{t.pk}@kellermann-resa',
@@ -1797,7 +1831,7 @@ def ics_global(request):
 
     lines.append('END:VCALENDAR')
 
-    content  = '\r\n'.join(lines) + '\r\n'
+    content  = '\r\n'.join(_fold(line) for line in lines) + '\r\n'
     response = HttpResponse(content, content_type='text/calendar; charset=utf-8')
     response['Content-Disposition'] = 'inline; filename="kellermann_global.ics"'
     return response
