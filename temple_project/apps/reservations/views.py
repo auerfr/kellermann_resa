@@ -1601,7 +1601,7 @@ def portail_loge_ics(request, token):
 
     def _esc(s):
         return (str(s).replace('\\', '\\\\')
-                      .replace(';', '\;')
+                      .replace(';', '\\;')
                       .replace(',', '\\,')
                       .replace('\n', '\\n'))
 
@@ -1698,7 +1698,7 @@ def ics_global(request):
 
     def _esc(s):
         return (str(s).replace('\\', '\\\\')
-                      .replace(';', '\;')
+                      .replace(';', '\\;')
                       .replace(',', '\\,')
                       .replace('\n', '\\n'))
 
