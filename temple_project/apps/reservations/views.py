@@ -1595,9 +1595,24 @@ def portail_loge_ics(request, token):
     now_utc = tz.now().strftime('%Y%m%dT%H%M%SZ')
 
     def _dt(d, t):
+        from datetime import datetime as _datetime
+        from zoneinfo import ZoneInfo
         h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
         m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
-        return f"{d.strftime('%Y%m%d')}T{h:02d}{m:02d}00"
+        dt_paris = _datetime(d.year, d.month, d.day, h, m,
+                             tzinfo=ZoneInfo('Europe/Paris'))
+        return dt_paris.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')
+
+    def _dt_end(d, t_start, t_end):
+        if t_end:
+            return _dt(d, t_end)
+        from datetime import datetime as _datetime, timedelta
+        from zoneinfo import ZoneInfo
+        h = t_start.hour if hasattr(t_start, 'hour') else int(str(t_start)[:2])
+        m = t_start.minute if hasattr(t_start, 'minute') else int(str(t_start)[3:5])
+        dt_paris = _datetime(d.year, d.month, d.day, h, m,
+                             tzinfo=ZoneInfo('Europe/Paris')) + timedelta(hours=2)
+        return dt_paris.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')
 
     def _esc(s):
         return (str(s).replace('\\', '\\\\')
@@ -1633,9 +1648,9 @@ def portail_loge_ics(request, token):
             'BEGIN:VEVENT',
             f'UID:temple-{t.pk}@kellermann-resa',
             f'DTSTAMP:{now_utc}',
-            f'DTSTART;TZID=Europe/Paris:{_dt(t.date, t.heure_debut)}',
-            f'DTEND;TZID=Europe/Paris:{_dt(t.date, t.heure_fin)}',
-            f'SUMMARY:{_esc(f"T∴ {loge.nom}")}',
+            f'DTSTART:{_dt(t.date, t.heure_debut)}',
+            f'DTEND:{_dt_end(t.date, t.heure_debut, t.heure_fin)}',
+            f'SUMMARY:{_esc("T. " + loge.nom)}',
             f'LOCATION:{_esc(str(t.temple) if t.temple else "")}',
             f'DESCRIPTION:{_esc(chr(10).join(desc_parts))}',
             'END:VEVENT',
@@ -1649,9 +1664,9 @@ def portail_loge_ics(request, token):
             'BEGIN:VEVENT',
             f'UID:salle-{rs.pk}@kellermann-resa',
             f'DTSTAMP:{now_utc}',
-            f'DTSTART;TZID=Europe/Paris:{_dt(rs.date, rs.heure_debut)}',
-            f'DTEND;TZID=Europe/Paris:{_dt(rs.date, rs.heure_fin)}',
-            f'SUMMARY:{_esc(type_label + " – " + salle_name)}',
+            f'DTSTART:{_dt(rs.date, rs.heure_debut)}',
+            f'DTEND:{_dt_end(rs.date, rs.heure_debut, rs.heure_fin)}',
+            f'SUMMARY:{_esc(type_label + " - " + salle_name)}',
             f'LOCATION:{_esc(salle_name)}',
             f'DESCRIPTION:{_esc(desc)}',
             'END:VEVENT',
@@ -1692,9 +1707,24 @@ def ics_global(request):
     now_utc = tz.now().strftime('%Y%m%dT%H%M%SZ')
 
     def _dt(d, t):
+        from datetime import datetime as _datetime
+        from zoneinfo import ZoneInfo
         h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
         m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
-        return f"{d.strftime('%Y%m%d')}T{h:02d}{m:02d}00"
+        dt_paris = _datetime(d.year, d.month, d.day, h, m,
+                             tzinfo=ZoneInfo('Europe/Paris'))
+        return dt_paris.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')
+
+    def _dt_end(d, t_start, t_end):
+        if t_end:
+            return _dt(d, t_end)
+        from datetime import datetime as _datetime, timedelta
+        from zoneinfo import ZoneInfo
+        h = t_start.hour if hasattr(t_start, 'hour') else int(str(t_start)[:2])
+        m = t_start.minute if hasattr(t_start, 'minute') else int(str(t_start)[3:5])
+        dt_paris = _datetime(d.year, d.month, d.day, h, m,
+                             tzinfo=ZoneInfo('Europe/Paris')) + timedelta(hours=2)
+        return dt_paris.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')
 
     def _esc(s):
         return (str(s).replace('\\', '\\\\')
@@ -1715,16 +1745,16 @@ def ics_global(request):
         'PRODID:-//Temples Kellermann//Reservations//FR',
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
-        'X-WR-CALNAME:Temples Kellermann — Planning global',
+        'X-WR-CALNAME:Temples Kellermann - Planning global',
         'X-WR-TIMEZONE:Europe/Paris',
-        'X-WR-CALDESC:Toutes les réservations des Temples Kellermann',
+        'X-WR-CALDESC:Toutes les reservations des Temples Kellermann',
     ]
 
     for t in tenues:
         loge_abbr = (t.loge.abreviation if t.loge and t.loge.abreviation
                      else (t.loge.nom[:8] if t.loge else '?'))
         temple_str = str(t.temple) if t.temple else 'Temple'
-        summary = f'{loge_abbr} — {temple_str}'
+        summary = f'{loge_abbr} - {temple_str}'
         desc = t.get_type_reservation_display()
         if t.besoin_agapes:
             desc += f'\\nAgapes : {t.nombre_repas} couverts'
@@ -1732,8 +1762,8 @@ def ics_global(request):
             'BEGIN:VEVENT',
             f'UID:temple-{t.pk}@kellermann-resa',
             f'DTSTAMP:{now_utc}',
-            f'DTSTART;TZID=Europe/Paris:{_dt(t.date, t.heure_debut)}',
-            f'DTEND;TZID=Europe/Paris:{_dt(t.date, t.heure_fin)}',
+            f'DTSTART:{_dt(t.date, t.heure_debut)}',
+            f'DTEND:{_dt_end(t.date, t.heure_debut, t.heure_fin)}',
             f'SUMMARY:{_esc(summary)}',
             f'LOCATION:{_esc(temple_str)}',
             f'DESCRIPTION:{_esc(desc)}',
@@ -1745,13 +1775,13 @@ def ics_global(request):
                      else (rs.loge.nom[:8] if rs.loge else '?'))
         salle_str = str(rs.salle) if rs.salle else 'Salle'
         type_label = TYPE_REUNION.get(rs.type_reunion, rs.type_reunion)
-        summary = f'{loge_abbr} — {salle_str}'
+        summary = f'{loge_abbr} - {salle_str}'
         lines += [
             'BEGIN:VEVENT',
             f'UID:salle-{rs.pk}@kellermann-resa',
             f'DTSTAMP:{now_utc}',
-            f'DTSTART;TZID=Europe/Paris:{_dt(rs.date, rs.heure_debut)}',
-            f'DTEND;TZID=Europe/Paris:{_dt(rs.date, rs.heure_fin)}',
+            f'DTSTART:{_dt(rs.date, rs.heure_debut)}',
+            f'DTEND:{_dt_end(rs.date, rs.heure_debut, rs.heure_fin)}',
             f'SUMMARY:{_esc(summary)}',
             f'LOCATION:{_esc(salle_str)}',
             f'DESCRIPTION:{_esc(type_label)}',
