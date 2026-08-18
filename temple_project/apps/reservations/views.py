@@ -1316,6 +1316,7 @@ def portail_loge(request, token):
         'today':                 today,
         'rites':                 Loge.RITE_CHOICES,
         'tarifs':                Parametres.get_instance(),
+        'token':                 token,
     })
 
 

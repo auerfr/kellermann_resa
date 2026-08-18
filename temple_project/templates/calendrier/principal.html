@@ -136,7 +136,7 @@
           <div class="d-flex flex-wrap gap-2">
             <a href="webcal://{{ request.get_host }}{% url 'ics_global' %}"
                class="btn btn-sm btn-outline-primary">🍎 Apple / iPhone</a>
-            <a href="https://calendar.google.com/calendar/r?cid={{ request.scheme }}://{{ request.get_host }}{% url 'ics_global' %}"
+            <a href="https://calendar.google.com/calendar/render?cid=webcal%3A%2F%2F{{ request.get_host }}{% url 'ics_global' %}"
                target="_blank" class="btn btn-sm btn-outline-danger">🗓 Google Calendar</a>
             <a href="{% url 'ics_global' %}" class="btn btn-sm btn-outline-secondary">⬇ Télécharger .ics</a>
           </div>
