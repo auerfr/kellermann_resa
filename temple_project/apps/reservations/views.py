@@ -1565,3 +1565,202 @@ def portail_demande_recurrence_salle(request, token):
         'semaine_choices': RegleRecurrenceSalle.SEMAINE_CHOICES,
         'token':           token,
     })
+
+
+def portail_loge_ics(request, token):
+    """Flux iCalendar abonnable pour une loge (via token portail)."""
+    from datetime import date as date_cls, datetime, time as time_cls
+    from django.utils import timezone as tz
+
+    demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    loge    = demande.loge
+
+    today      = date_cls.today()
+    date_debut = date_cls(today.year - 1, 9, 1)
+    date_fin   = date_cls(today.year + 2, 8, 31)
+
+    tenues = (
+        Reservation.objects.select_related('temple')
+        .filter(loge=loge, statut='validee',
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+    resas_salle = (
+        ReservationSalle.objects.select_related('salle')
+        .filter(loge=loge, statut__in=['validee', 'attente'],
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+
+    now_utc = tz.now().strftime('%Y%m%dT%H%M%SZ')
+
+    def _dt(d, t):
+        h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
+        m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
+        return f"{d.strftime('%Y%m%d')}T{h:02d}{m:02d}00"
+
+    def _esc(s):
+        return (str(s).replace('\\', '\\\\')
+                      .replace(';', '\;')
+                      .replace(',', '\\,')
+                      .replace('\n', '\\n'))
+
+    TYPE_REUNION = {
+        'banquet':  "Banquet d'ordre",
+        'reunion':  'Réunion de travail',
+        'chantier': 'Chantier',
+        'conseil':  "Conseil d'officiers",
+    }
+
+    lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Temples Kellermann//Reservations//FR',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        f'X-WR-CALNAME:Kellermann – {loge.nom}',
+        'X-WR-TIMEZONE:Europe/Paris',
+        'X-WR-CALDESC:Planning des réservations aux Temples Kellermann',
+    ]
+
+    for t in tenues:
+        desc_parts = [f'Type : {t.get_type_reservation_display()}']
+        if t.sous_type and t.sous_type != 'standard':
+            desc_parts.append(f'Nature : {t.get_sous_type_display()}')
+        if t.besoin_agapes:
+            desc_parts.append(f'Agapes : {t.nombre_repas} couverts')
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:temple-{t.pk}@kellermann-resa',
+            f'DTSTAMP:{now_utc}',
+            f'DTSTART;TZID=Europe/Paris:{_dt(t.date, t.heure_debut)}',
+            f'DTEND;TZID=Europe/Paris:{_dt(t.date, t.heure_fin)}',
+            f'SUMMARY:{_esc(f"T∴ {loge.nom}")}',
+            f'LOCATION:{_esc(str(t.temple) if t.temple else "")}',
+            f'DESCRIPTION:{_esc(chr(10).join(desc_parts))}',
+            'END:VEVENT',
+        ]
+
+    for rs in resas_salle:
+        type_label = TYPE_REUNION.get(rs.type_reunion, rs.type_reunion)
+        salle_name = str(rs.salle) if rs.salle else 'Salle'
+        desc = rs.objet or ''
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:salle-{rs.pk}@kellermann-resa',
+            f'DTSTAMP:{now_utc}',
+            f'DTSTART;TZID=Europe/Paris:{_dt(rs.date, rs.heure_debut)}',
+            f'DTEND;TZID=Europe/Paris:{_dt(rs.date, rs.heure_fin)}',
+            f'SUMMARY:{_esc(type_label + " – " + salle_name)}',
+            f'LOCATION:{_esc(salle_name)}',
+            f'DESCRIPTION:{_esc(desc)}',
+            'END:VEVENT',
+        ]
+
+    lines.append('END:VCALENDAR')
+
+    content  = '\r\n'.join(lines) + '\r\n'
+    response = HttpResponse(content, content_type='text/calendar; charset=utf-8')
+    response['Content-Disposition'] = (
+        f'inline; filename="kellermann_{loge.abreviation or loge.pk}.ics"'
+    )
+    return response
+
+
+def ics_global(request):
+    """Flux iCalendar public — toutes les réservations de tous les temples."""
+    from datetime import date as date_cls
+    from django.utils import timezone as tz
+
+    today      = date_cls.today()
+    date_debut = date_cls(today.year - 1, 9, 1)
+    date_fin   = date_cls(today.year + 2, 8, 31)
+
+    tenues = (
+        Reservation.objects.select_related('temple', 'loge')
+        .filter(statut='validee',
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+    resas_salle = (
+        ReservationSalle.objects.select_related('salle', 'loge')
+        .filter(statut__in=['validee', 'attente'],
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+
+    now_utc = tz.now().strftime('%Y%m%dT%H%M%SZ')
+
+    def _dt(d, t):
+        h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
+        m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
+        return f"{d.strftime('%Y%m%d')}T{h:02d}{m:02d}00"
+
+    def _esc(s):
+        return (str(s).replace('\\', '\\\\')
+                      .replace(';', '\;')
+                      .replace(',', '\\,')
+                      .replace('\n', '\\n'))
+
+    TYPE_REUNION = {
+        'banquet':  "Banquet d'ordre",
+        'reunion':  'Réunion de travail',
+        'chantier': 'Chantier',
+        'conseil':  "Conseil d'officiers",
+    }
+
+    lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Temples Kellermann//Reservations//FR',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'X-WR-CALNAME:Temples Kellermann — Planning global',
+        'X-WR-TIMEZONE:Europe/Paris',
+        'X-WR-CALDESC:Toutes les réservations des Temples Kellermann',
+    ]
+
+    for t in tenues:
+        loge_abbr = (t.loge.abreviation if t.loge and t.loge.abreviation
+                     else (t.loge.nom[:8] if t.loge else '?'))
+        temple_str = str(t.temple) if t.temple else 'Temple'
+        summary = f'{loge_abbr} — {temple_str}'
+        desc = t.get_type_reservation_display()
+        if t.besoin_agapes:
+            desc += f'\\nAgapes : {t.nombre_repas} couverts'
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:temple-{t.pk}@kellermann-resa',
+            f'DTSTAMP:{now_utc}',
+            f'DTSTART;TZID=Europe/Paris:{_dt(t.date, t.heure_debut)}',
+            f'DTEND;TZID=Europe/Paris:{_dt(t.date, t.heure_fin)}',
+            f'SUMMARY:{_esc(summary)}',
+            f'LOCATION:{_esc(temple_str)}',
+            f'DESCRIPTION:{_esc(desc)}',
+            'END:VEVENT',
+        ]
+
+    for rs in resas_salle:
+        loge_abbr = (rs.loge.abreviation if rs.loge and rs.loge.abreviation
+                     else (rs.loge.nom[:8] if rs.loge else '?'))
+        salle_str = str(rs.salle) if rs.salle else 'Salle'
+        type_label = TYPE_REUNION.get(rs.type_reunion, rs.type_reunion)
+        summary = f'{loge_abbr} — {salle_str}'
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:salle-{rs.pk}@kellermann-resa',
+            f'DTSTAMP:{now_utc}',
+            f'DTSTART;TZID=Europe/Paris:{_dt(rs.date, rs.heure_debut)}',
+            f'DTEND;TZID=Europe/Paris:{_dt(rs.date, rs.heure_fin)}',
+            f'SUMMARY:{_esc(summary)}',
+            f'LOCATION:{_esc(salle_str)}',
+            f'DESCRIPTION:{_esc(type_label)}',
+            'END:VEVENT',
+        ]
+
+    lines.append('END:VCALENDAR')
+
+    content  = '\r\n'.join(lines) + '\r\n'
+    response = HttpResponse(content, content_type='text/calendar; charset=utf-8')
+    response['Content-Disposition'] = 'inline; filename="kellermann_global.ics"'
+    return response

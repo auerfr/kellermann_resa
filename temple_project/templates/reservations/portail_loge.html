@@ -25,8 +25,83 @@
         <h1 class="h3 mb-1" style="color:#0F2137;">⚒ Espace loge</h1>
         <p class="text-muted small mb-0">{{ demande.nom_loge_display }} — T∴F∴ {{ demande.nom_venerable }}</p>
       </div>
-      <a href="{% url 'reservations:demande' %}" class="btn btn-sm fw-semibold"
-         style="background:#0F2137;color:#C8A84B;">+ Nouvelle demande</a>
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="{% url 'reservations:demande' %}" class="btn btn-sm fw-semibold"
+           style="background:#0F2137;color:#C8A84B;">+ Nouvelle demande</a>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                data-bs-toggle="modal" data-bs-target="#modalICS"
+                title="S'abonner au calendrier de vos réservations">
+          📅 Abonnement calendrier
+        </button>
+      </div>
+    </div>
+
+    {# ── Modal abonnement iCalendar ───────────────────────────────────────── #}
+    <div class="modal fade" id="modalICS" tabindex="-1" aria-labelledby="modalICSLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+          <div class="modal-header" style="background:#0F2137;">
+            <h5 class="modal-title text-white" id="modalICSLabel">📅 Abonnement au calendrier</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+
+            {# ── Calendrier global (principal) ── #}
+            <div class="mb-4 p-3 rounded" style="background:#F0FDF4;border:1px solid #86EFAC;">
+              <p class="fw-semibold mb-1" style="color:#166534;">🌐 Calendrier global — tous les temples</p>
+              <p class="small text-muted mb-2">
+                Voit toutes les réservations de tous les temples, mis à jour en temps réel.
+                Idéal pour vérifier les disponibilités avant de faire une demande.
+                Ce lien peut être partagé librement avec les membres de votre loge.
+              </p>
+              <div class="input-group mb-2">
+                <input type="text" id="ics-global-https" class="form-control form-control-sm font-monospace"
+                       value="{{ request.build_absolute_uri }}{% url 'reservations:ics_global' %}"
+                       readonly>
+                <button class="btn btn-outline-secondary btn-sm"
+                        onclick="navigator.clipboard.writeText(document.getElementById('ics-global-https').value);this.textContent='✓ Copié'">
+                  Copier
+                </button>
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <a href="webcal://{{ request.get_host }}{% url 'reservations:ics_global' %}"
+                   class="btn btn-sm btn-outline-primary">🍎 Apple / iPhone</a>
+                <a href="https://calendar.google.com/calendar/r?cid={{ request.build_absolute_uri }}{% url 'reservations:ics_global' %}"
+                   target="_blank" class="btn btn-sm btn-outline-danger">🗓 Google Calendar</a>
+                <a href="{% url 'reservations:ics_global' %}"
+                   class="btn btn-sm btn-outline-secondary">⬇ Télécharger .ics</a>
+              </div>
+            </div>
+
+            {# ── Calendrier loge seule (secondaire) ── #}
+            <div class="p-3 rounded" style="background:#F8FAFC;border:1px solid #CBD5E1;">
+              <p class="fw-semibold mb-1" style="color:#334155;">🏛 Calendrier de votre loge uniquement</p>
+              <p class="small text-muted mb-2">
+                Seulement vos propres réservations (tenues et salles).
+                Lien personnel — ne pas partager.
+              </p>
+              <div class="input-group mb-2">
+                <input type="text" id="ics-loge-https" class="form-control form-control-sm font-monospace"
+                       value="{{ request.build_absolute_uri }}{% url 'reservations:portail_loge_ics' token=token %}"
+                       readonly>
+                <button class="btn btn-outline-secondary btn-sm"
+                        onclick="navigator.clipboard.writeText(document.getElementById('ics-loge-https').value);this.textContent='✓ Copié'">
+                  Copier
+                </button>
+              </div>
+              <div class="d-flex flex-wrap gap-2">
+                <a href="webcal://{{ request.get_host }}{% url 'reservations:portail_loge_ics' token=token %}"
+                   class="btn btn-sm btn-outline-primary">🍎 Apple / iPhone</a>
+                <a href="https://calendar.google.com/calendar/r?cid={{ request.build_absolute_uri }}{% url 'reservations:portail_loge_ics' token=token %}"
+                   target="_blank" class="btn btn-sm btn-outline-danger">🗓 Google Calendar</a>
+                <a href="{% url 'reservations:portail_loge_ics' token=token %}"
+                   class="btn btn-sm btn-outline-secondary">⬇ Télécharger .ics</a>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
     </div>
 
     {# ── Bandeau alerte validation ouverte ────────────────────────────────── #}
