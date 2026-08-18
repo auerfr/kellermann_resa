@@ -1595,24 +1595,27 @@ def portail_loge_ics(request, token):
     now_utc = tz.now().strftime('%Y%m%dT%H%M%SZ')
 
     def _dt(d, t):
-        from datetime import datetime as _datetime
-        from zoneinfo import ZoneInfo
+        from datetime import datetime as _dt_cls, timezone as _utc
         h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
         m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
-        dt_paris = _datetime(d.year, d.month, d.day, h, m,
-                             tzinfo=ZoneInfo('Europe/Paris'))
-        return dt_paris.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')
+        dt_naive = _dt_cls(d.year, d.month, d.day, h, m)
+        dt_aware = tz.make_aware(dt_naive)
+        return dt_aware.astimezone(_utc.utc).strftime('%Y%m%dT%H%M%SZ')
 
     def _dt_end(d, t_start, t_end):
-        if t_end:
-            return _dt(d, t_end)
-        from datetime import datetime as _datetime, timedelta
-        from zoneinfo import ZoneInfo
-        h = t_start.hour if hasattr(t_start, 'hour') else int(str(t_start)[:2])
-        m = t_start.minute if hasattr(t_start, 'minute') else int(str(t_start)[3:5])
-        dt_paris = _datetime(d.year, d.month, d.day, h, m,
-                             tzinfo=ZoneInfo('Europe/Paris')) + timedelta(hours=2)
-        return dt_paris.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')
+        from datetime import datetime as _dt_cls, timedelta, timezone as _utc
+        t = t_end if t_end else None
+        if t:
+            h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
+            m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
+        else:
+            h = t_start.hour if hasattr(t_start, 'hour') else int(str(t_start)[:2])
+            m = t_start.minute if hasattr(t_start, 'minute') else int(str(t_start)[3:5])
+        dt_naive = _dt_cls(d.year, d.month, d.day, h, m)
+        if not t_end:
+            dt_naive += timedelta(hours=2)
+        dt_aware = tz.make_aware(dt_naive)
+        return dt_aware.astimezone(_utc.utc).strftime('%Y%m%dT%H%M%SZ')
 
     def _esc(s):
         return (str(s).replace('\\', '\\\\')
@@ -1622,7 +1625,7 @@ def portail_loge_ics(request, token):
 
     TYPE_REUNION = {
         'banquet':  "Banquet d'ordre",
-        'reunion':  'Réunion de travail',
+        'reunion':  'Reunion de travail',
         'chantier': 'Chantier',
         'conseil':  "Conseil d'officiers",
     }
@@ -1633,9 +1636,9 @@ def portail_loge_ics(request, token):
         'PRODID:-//Temples Kellermann//Reservations//FR',
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
-        f'X-WR-CALNAME:Kellermann – {loge.nom}',
+        f'X-WR-CALNAME:Kellermann {loge.nom}',
         'X-WR-TIMEZONE:Europe/Paris',
-        'X-WR-CALDESC:Planning des réservations aux Temples Kellermann',
+        'X-WR-CALDESC:Planning reservations Temples Kellermann',
     ]
 
     for t in tenues:
@@ -1707,24 +1710,27 @@ def ics_global(request):
     now_utc = tz.now().strftime('%Y%m%dT%H%M%SZ')
 
     def _dt(d, t):
-        from datetime import datetime as _datetime
-        from zoneinfo import ZoneInfo
+        from datetime import datetime as _dt_cls, timezone as _utc
         h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
         m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
-        dt_paris = _datetime(d.year, d.month, d.day, h, m,
-                             tzinfo=ZoneInfo('Europe/Paris'))
-        return dt_paris.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')
+        dt_naive = _dt_cls(d.year, d.month, d.day, h, m)
+        dt_aware = tz.make_aware(dt_naive)
+        return dt_aware.astimezone(_utc.utc).strftime('%Y%m%dT%H%M%SZ')
 
     def _dt_end(d, t_start, t_end):
-        if t_end:
-            return _dt(d, t_end)
-        from datetime import datetime as _datetime, timedelta
-        from zoneinfo import ZoneInfo
-        h = t_start.hour if hasattr(t_start, 'hour') else int(str(t_start)[:2])
-        m = t_start.minute if hasattr(t_start, 'minute') else int(str(t_start)[3:5])
-        dt_paris = _datetime(d.year, d.month, d.day, h, m,
-                             tzinfo=ZoneInfo('Europe/Paris')) + timedelta(hours=2)
-        return dt_paris.astimezone(ZoneInfo('UTC')).strftime('%Y%m%dT%H%M%SZ')
+        from datetime import datetime as _dt_cls, timedelta, timezone as _utc
+        t = t_end if t_end else None
+        if t:
+            h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
+            m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
+        else:
+            h = t_start.hour if hasattr(t_start, 'hour') else int(str(t_start)[:2])
+            m = t_start.minute if hasattr(t_start, 'minute') else int(str(t_start)[3:5])
+        dt_naive = _dt_cls(d.year, d.month, d.day, h, m)
+        if not t_end:
+            dt_naive += timedelta(hours=2)
+        dt_aware = tz.make_aware(dt_naive)
+        return dt_aware.astimezone(_utc.utc).strftime('%Y%m%dT%H%M%SZ')
 
     def _esc(s):
         return (str(s).replace('\\', '\\\\')
@@ -1734,7 +1740,7 @@ def ics_global(request):
 
     TYPE_REUNION = {
         'banquet':  "Banquet d'ordre",
-        'reunion':  'Réunion de travail',
+        'reunion':  'Reunion de travail',
         'chantier': 'Chantier',
         'conseil':  "Conseil d'officiers",
     }
@@ -1745,7 +1751,7 @@ def ics_global(request):
         'PRODID:-//Temples Kellermann//Reservations//FR',
         'CALSCALE:GREGORIAN',
         'METHOD:PUBLISH',
-        'X-WR-CALNAME:Temples Kellermann - Planning global',
+        'X-WR-CALNAME:Temples Kellermann Global',
         'X-WR-TIMEZONE:Europe/Paris',
         'X-WR-CALDESC:Toutes les reservations des Temples Kellermann',
     ]
