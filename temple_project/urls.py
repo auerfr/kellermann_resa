@@ -3,6 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from temple_project.apps.auth_custom.views import bienvenue
+from temple_project.apps.reservations.views import ics_global, portail_loge_ics
 
 handler404 = 'temple_project.views.error_404'
 handler500 = 'temple_project.views.error_500'
@@ -18,4 +19,7 @@ urlpatterns = [
     path("exports/",      include("temple_project.apps.exports.urls")),
     path("admin/",        include("temple_project.apps.administration.urls")),
     path("traiteur/",     include("temple_project.apps.traiteur.urls")),
+    # ICS subscriptions — root-level so URL reversal works regardless of namespace
+    path("ics/global/",             ics_global,         name="ics_global"),
+    path("ics/loge/<uuid:token>/",  portail_loge_ics,   name="portail_loge_ics"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

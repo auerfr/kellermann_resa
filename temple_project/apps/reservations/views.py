@@ -1,7 +1,7 @@
 import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin, get_email_traiteur
 from django.db.models import Q, Sum
 from .emails import envoyer_email_nouvelle_demande
