@@ -63,14 +63,18 @@
                   Copier
                 </button>
               </div>
-              <div class="d-flex flex-wrap gap-2">
+              <div class="d-flex flex-wrap gap-2 mb-2">
                 <a href="webcal://{{ request.get_host }}{% url 'ics_global' %}"
                    class="btn btn-sm btn-outline-primary">🍎 Apple / iPhone</a>
-                <a href="https://calendar.google.com/calendar/render?cid=webcal%3A%2F%2F{{ request.get_host }}{% url 'ics_global' %}"
+                <a href="https://calendar.google.com/calendar/render?cid=https%3A%2F%2F{{ request.get_host }}{% url 'ics_global' %}"
                    target="_blank" class="btn btn-sm btn-outline-danger">🗓 Google Calendar</a>
                 <a href="{% url 'ics_global' %}"
                    class="btn btn-sm btn-outline-secondary">⬇ Télécharger .ics</a>
               </div>
+              <p class="small text-muted mb-0">
+                <strong>Google Agenda :</strong> Autres agendas → <em>Depuis l'URL</em> → coller le lien → Ajouter.
+                <span class="d-block">Google peut mettre jusqu'à 24h pour la première synchronisation.</span>
+              </p>
             </div>
 
             {# ── Calendrier loge seule (secondaire) ── #}
@@ -89,14 +93,18 @@
                   Copier
                 </button>
               </div>
-              <div class="d-flex flex-wrap gap-2">
+              <div class="d-flex flex-wrap gap-2 mb-2">
                 <a href="webcal://{{ request.get_host }}{% url 'portail_loge_ics' token=token %}"
                    class="btn btn-sm btn-outline-primary">🍎 Apple / iPhone</a>
-                <a href="https://calendar.google.com/calendar/render?cid=webcal%3A%2F%2F{{ request.get_host }}{% url 'portail_loge_ics' token=token %}"
+                <a href="https://calendar.google.com/calendar/render?cid=https%3A%2F%2F{{ request.get_host }}{% url 'portail_loge_ics' token=token %}"
                    target="_blank" class="btn btn-sm btn-outline-danger">🗓 Google Calendar</a>
                 <a href="{% url 'portail_loge_ics' token=token %}"
                    class="btn btn-sm btn-outline-secondary">⬇ Télécharger .ics</a>
               </div>
+              <p class="small text-muted mb-0">
+                <strong>Google Agenda :</strong> Autres agendas → <em>Depuis l'URL</em> → coller le lien → Ajouter.
+                <span class="d-block">Google peut mettre jusqu'à 24h pour la première synchronisation.</span>
+              </p>
             </div>
 
           </div>
