@@ -5374,7 +5374,7 @@ def _annee_saison_courante():
     return today.year if today.month >= 9 else today.year - 1
 
 
-def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membres_hg=None, recettes_exc=None):
+def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membres_hg=None, recettes_exc=None, params=None):
     """Moteur de simulation budgétaire.
 
     nb_membres_lb / nb_membres_hg : effectif TOTAL de la catégorie (pas par loge).
@@ -5688,10 +5688,15 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
                       for a in par_loge if a['type_loge'] == 'loge' and a['membre_association'])
     charges_hg  = sum(a['total_cout'] - a['total_agapes'] - a['total_salle']
                       for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
-    # Coûts auto-financés : agapes/salle + coûts des occupants occasionnels
+    # Recettes des occupants occasionnels au tarif voté (congrès, exceptionnel…)
+    # On utilise tarif_reservation() pour refléter exactement ce qui est facturé
+    # (ex. CAALA congrès = 300 €/jour × nb_jours, indépendamment du coût réel).
+    if params is None:
+        params = Parametres.get_instance()
     recettes_occasionnels = sum(
-        a['total_cout'] - a['total_agapes'] - a['total_salle']
-        for a in par_loge if not a['membre_association']
+        tarif_reservation(r, params)
+        for r in resas
+        if r.loge and not r.loge.membre_association
     )
     total_auto_finance = total_agapes + total_salle + recettes_occasionnels
 
@@ -6244,9 +6249,10 @@ def budget_simulation(request):
     pct_lb_raw    = request.GET.get('pct_lb', '').strip()
     pct_lb_custom = _parse_dec_param(pct_lb_raw)
 
+    params = Parametres.get_instance()
     postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
     sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
-                          recettes_exc=recettes_exc) if postes_actifs > 0 else None
+                          recettes_exc=recettes_exc, params=params) if postes_actifs > 0 else None
 
     temples = Temple.objects.all().order_by('nom')
     saisons_dispo = sorted(set(
@@ -6257,7 +6263,6 @@ def budget_simulation(request):
         p.montant_annuel_normalise
         for p in PosteCharge.objects.filter(saison=saison, actif=True, type_charge='fixe')
     )
-    params = Parametres.get_instance()
 
     # Clé de répartition LB/HG par défaut (usage-based, issu de la simulation)
     pct_lb_defaut = None

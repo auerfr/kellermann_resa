@@ -227,8 +227,8 @@
             <td>
               − Recettes auto-financées
               <div class="fw-normal" style="font-size:11px;color:#6B7280;">
-                Cuisine + salles{% if sim.recettes_occasionnels %} + loges occasionnelles{% endif %} — couvertes par leur facturation à la tenue
-                {% if sim.recettes_occasionnels %}<br>dont {{ sim.recettes_occasionnels|floatformat:0 }} € de loges occasionnelles (facturation à la tenue){% endif %}
+                Cuisine + salles{% if sim.recettes_occasionnels %} + loges occasionnelles (congr., excep.){% endif %} — couvertes par leur facturation propre
+                {% if sim.recettes_occasionnels %}<br>dont {{ sim.recettes_occasionnels|floatformat:0 }} € au tarif voté (congrès {{ params.tarif_congres_jour|floatformat:0 }} €/j, exceptionnel…){% endif %}
               </div>
             </td>
             <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.total_auto_finance|floatformat:0 }} €</td>
