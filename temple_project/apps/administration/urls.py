@@ -37,6 +37,7 @@ urlpatterns = [
     path("sante/", views.sante_donnees, name="sante_donnees"),
     path("relance/", views.relance_contacts, name="relance_contacts"),
     path("statistiques/", views.statistiques, name="statistiques"),
+    path("activite-loges/", views.activite_loges, name="activite_loges"),
     path("reset/", views.reset_calendrier, name="reset_calendrier"),
     path("salles/", views.salles_liste, name="salles_liste"),
     path("salles/ajouter/", views.salle_form, name="salle_ajouter"),

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Activité des loges{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📊 Activité des loges</h1>
+    <p class="text-muted small mb-0">Saison {{ annee_saison }}-{{ annee_saison|add:1 }} · {{ nb_loges }} loge{{ nb_loges|pluralize }} active{{ nb_loges|pluralize }}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="?tri=saison" class="btn btn-sm {% if tri == 'saison' %}btn-primary{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Saison en cours</a>
+    <a href="?tri=total" class="btn btn-sm {% if tri == 'total' %}btn-primary{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Total</a>
+    <a href="?tri=attente" class="btn btn-sm {% if tri == 'attente' %}btn-primary{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">En attente</a>
+    <a href="?tri=salle" class="btn btn-sm {% if tri == 'salle' %}btn-primary{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Salles</a>
+  </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+      <thead style="background:#0F2137;color:#C8A84B;">
+        <tr>
+          <th class="ps-3" style="font-weight:600;letter-spacing:.05em;font-size:11px;text-transform:uppercase;">Loge</th>
+          <th class="text-center" style="font-weight:600;letter-spacing:.05em;font-size:11px;text-transform:uppercase;">
+            <a href="?tri=saison" style="color:{% if tri == 'saison' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">Saison {{ annee_saison }}-{{ annee_saison|add:1 }}</a>
+          </th>
+          <th class="text-center" style="font-weight:600;letter-spacing:.05em;font-size:11px;text-transform:uppercase;">
+            <a href="?tri=total" style="color:{% if tri == 'total' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">Total temples</a>
+          </th>
+          <th class="text-center" style="font-weight:600;letter-spacing:.05em;font-size:11px;text-transform:uppercase;">
+            <a href="?tri=salle" style="color:{% if tri == 'salle' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">Salles</a>
+          </th>
+          <th class="text-center" style="font-weight:600;letter-spacing:.05em;font-size:11px;text-transform:uppercase;">
+            <a href="?tri=attente" style="color:{% if tri == 'attente' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">En attente</a>
+          </th>
+          <th class="text-end pe-3" style="font-weight:600;letter-spacing:.05em;font-size:11px;text-transform:uppercase;">Accès rapide</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for loge in loges %}
+        <tr>
+          <td class="ps-3">
+            <div class="fw-semibold" style="color:#0F2137;">{{ loge.nom }}</div>
+            {% if loge.nom_contact %}
+            <div class="text-muted" style="font-size:11px;">{{ loge.nom_contact }}</div>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if loge.nb_saison > 0 %}
+            <span class="badge rounded-pill" style="background:#0F2137;color:#C8A84B;font-size:12px;">{{ loge.nb_saison }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if loge.nb_total > 0 %}
+            <span style="color:#334155;font-weight:600;">{{ loge.nb_total }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% if loge.nb_salle > 0 %}
+            <span style="color:#334155;">{{ loge.nb_salle }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="text-center">
+            {% with total_attente=loge.nb_attente|add:loge.nb_salle_attente %}
+            {% if total_attente > 0 %}
+            <span class="badge rounded-pill bg-warning text-dark" style="font-size:12px;">{{ total_attente }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+            {% endwith %}
+          </td>
+          <td class="text-end pe-3">
+            <div class="d-flex gap-2 justify-content-end">
+              {% if loge.portail_token %}
+              <a href="{% url 'reservations:portail_loge' token=loge.portail_token %}" target="_blank"
+                 class="btn btn-sm fw-semibold"
+                 style="background:#0F2137;color:#C8A84B;border:none;font-size:11px;padding:3px 10px;border-radius:7px;">
+                Portail ↗
+              </a>
+              {% endif %}
+              <a href="{% url 'administration:annuaire' %}?q={{ loge.nom|urlencode }}"
+                 class="btn btn-sm btn-outline-secondary" style="font-size:11px;padding:3px 8px;border-radius:7px;">
+                Fiche
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">Aucune loge active.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -200,6 +200,7 @@ def valider_reservation(request, pk):
         'temples_alternatives': temples_alternatives,
         'occupants_recurrents': occupants_rec,
         'echange_next':         request.get_full_path(),
+        'loge_panel':          _get_loge_panel(resa.loge, exclude_pk=resa.pk, model='temple'),
     })
 
 
@@ -304,6 +305,7 @@ def valider_reservation_salle(request, pk):
         'blocages':         blocages,
         'indisponibilites': indisponibilites,
         'salles_alternatives': salles_alternatives,
+        'loge_panel':       _get_loge_panel(resa.loge, exclude_pk=resa.pk, model='salle'),
     })
 
 
@@ -5911,3 +5913,84 @@ def faq_admin_supprimer(request, pk):
         messages.success(request, "Entrée FAQ supprimée.")
         return redirect('administration:faq_liste')
     return render(request, 'administration/faq_supprimer.html', {'item': item})
+
+
+# ── Panneau loge contextuel (aide à la décision sur les demandes) ─────────────
+
+def _get_loge_panel(loge, exclude_pk=None, model='temple'):
+    """Données contextuelles d'une loge pour les pages de validation."""
+    if not loge:
+        return None
+    from datetime import date as _date
+    today = _date.today()
+    annee = today.year if today.month >= 9 else today.year - 1
+    d1 = _date(annee, 9, 1)
+    d2 = _date(annee + 1, 8, 31)
+    portail = DemandeAccesPortail.objects.filter(loge=loge, statut='validee').first()
+    resa_qs = Reservation.objects.filter(loge=loge, statut='validee', date__gte=today)
+    if model == 'temple' and exclude_pk:
+        resa_qs = resa_qs.exclude(pk=exclude_pk)
+    return {
+        'loge':           loge,
+        'portail_token':  portail.token if portail else None,
+        'prochaines':     list(resa_qs.select_related('temple').order_by('date')[:5]),
+        'en_attente_t':   Reservation.objects.filter(loge=loge, statut='attente').exclude(
+                              pk=exclude_pk if model == 'temple' else None).count(),
+        'en_attente_s':   ReservationSalle.objects.filter(loge=loge, statut='attente').exclude(
+                              pk=exclude_pk if model == 'salle' else None).count(),
+        'nb_saison':      Reservation.objects.filter(loge=loge, statut='validee',
+                              date__gte=d1, date__lte=d2).count(),
+        'annee_saison':   annee,
+    }
+
+
+# ── Activité & statistiques par loge ─────────────────────────────────────────
+
+@staff_required
+def activite_loges(request):
+    """Classement des loges par volume de réservations + accès rapide portail."""
+    from django.db.models import Count, Q
+    from datetime import date as _date
+
+    tri = request.GET.get('tri', 'total')
+    today = _date.today()
+    annee = today.year if today.month >= 9 else today.year - 1
+    d1 = _date(annee, 9, 1)
+    d2 = _date(annee + 1, 8, 31)
+
+    loges = Loge.objects.filter(actif=True).annotate(
+        nb_total=Count('reservation',
+                        filter=Q(reservation__statut='validee'), distinct=True),
+        nb_saison=Count('reservation',
+                         filter=Q(reservation__statut='validee',
+                                  reservation__date__gte=d1,
+                                  reservation__date__lte=d2), distinct=True),
+        nb_attente=Count('reservation',
+                          filter=Q(reservation__statut='attente'), distinct=True),
+        nb_salle=Count('reservationsalle',
+                        filter=Q(reservationsalle__statut='validee'), distinct=True),
+        nb_salle_attente=Count('reservationsalle',
+                                filter=Q(reservationsalle__statut='attente'), distinct=True),
+    )
+
+    ordre = {
+        'total':   '-nb_total',
+        'saison':  '-nb_saison',
+        'salle':   '-nb_salle',
+        'attente': '-nb_attente',
+    }.get(tri, '-nb_total')
+    loges = loges.order_by(ordre, 'nom')
+
+    portails = {p.loge_id: str(p.token)
+                for p in DemandeAccesPortail.objects.filter(statut='validee')}
+
+    loges_list = list(loges)
+    for loge in loges_list:
+        loge.portail_token = portails.get(loge.id)
+
+    return render(request, 'administration/activite_loges.html', {
+        'loges':        loges_list,
+        'tri':          tri,
+        'annee_saison': annee,
+        'nb_loges':     len(loges_list),
+    })
