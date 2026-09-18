@@ -6217,6 +6217,8 @@ def budget_simulation(request):
     nb_membres_lb = _parse_int_param(nb_membres_lb_raw) if nb_membres_lb_raw else (effectif_reel_lb or None)
     nb_membres_hg = _parse_int_param(nb_membres_hg_raw) if nb_membres_hg_raw else (effectif_reel_hg or None)
     recettes_exc  = _parse_dec_param(recettes_exc_raw)
+    pct_lb_raw    = request.GET.get('pct_lb', '').strip()
+    pct_lb_custom = _parse_dec_param(pct_lb_raw)
 
     postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
     sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
@@ -6233,7 +6235,30 @@ def budget_simulation(request):
     )
     params = Parametres.get_instance()
 
-    # Calcul des recettes au tarif voté et à l'équilibre (multiplication décimale impossible en template)
+    # Clé de répartition LB/HG par défaut (usage-based, issu de la simulation)
+    pct_lb_defaut = None
+    net_lb_display = sim.get('net_lb') if sim else None
+    net_hg_display = sim.get('net_hg') if sim else None
+    tarif_eq_lb_display = sim.get('tarif_eq_lb') if sim else None
+    tarif_eq_hg_display = sim.get('tarif_eq_hg') if sim else None
+
+    pct_hg_defaut = None
+    if sim and sim.get('total_global') and sim['total_global'] > 0:
+        pct_lb_defaut = round(float(sim['charges_lb'] / sim['total_global'] * 100), 1)
+        pct_hg_defaut = round(100 - pct_lb_defaut, 1)
+
+    # Si une clé manuelle est fournie, recalculer les tarifs d'équilibre sur cette base
+    if sim and pct_lb_custom is not None:
+        total_nettes = sim['total_global'] - (sim.get('recettes_exc') or Decimal('0'))
+        pct = Decimal(str(max(0, min(100, pct_lb_custom))))
+        net_lb_display = total_nettes * pct / Decimal('100')
+        net_hg_display = total_nettes * (Decimal('100') - pct) / Decimal('100')
+        if sim.get('eff_eq_lb'):
+            tarif_eq_lb_display = net_lb_display / Decimal(str(sim['eff_eq_lb']))
+        if sim.get('eff_eq_hg'):
+            tarif_eq_hg_display = net_hg_display / Decimal(str(sim['eff_eq_hg']))
+
+    # Calcul des recettes au tarif voté (multiplication décimale impossible en template)
     recette_lb_votee = recette_hg_votee = recette_totale_votee = deficit_votee = None
     if sim and sim.get('eff_eq_lb') and params.tarif_membre_loge:
         recette_lb_votee = Decimal(str(params.tarif_membre_loge)) * sim['eff_eq_lb']
@@ -6253,6 +6278,9 @@ def budget_simulation(request):
         'nb_membres_lb': nb_membres_lb or '',
         'nb_membres_hg': nb_membres_hg or '',
         'recettes_exc': recettes_exc_raw,
+        'pct_lb': pct_lb_raw,
+        'pct_lb_defaut': pct_lb_defaut,
+        'pct_hg_defaut': pct_hg_defaut,
         'sim': sim,
         'postes_actifs': postes_actifs,
         'total_fixe_annuel': total_fixe_annuel,
@@ -6262,6 +6290,10 @@ def budget_simulation(request):
         'effectif_reel_hg': effectif_reel_hg,
         'nb_loges_lb': nb_loges_lb,
         'nb_loges_hg': nb_loges_hg,
+        'net_lb_display':        net_lb_display,
+        'net_hg_display':        net_hg_display,
+        'tarif_eq_lb_display':   tarif_eq_lb_display,
+        'tarif_eq_hg_display':   tarif_eq_hg_display,
         'recette_lb_votee':      recette_lb_votee,
         'recette_hg_votee':      recette_hg_votee,
         'recette_totale_votee':  recette_totale_votee,
