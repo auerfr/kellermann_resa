@@ -174,3 +174,27 @@ class Annonce(models.Model):
     def version(self):
         """Identifiant de version pour le sessionStorage (change à chaque modification)."""
         return int(self.updated_at.timestamp()) if self.updated_at else 0
+
+class FAQ(models.Model):
+    """Entrée de FAQ — gérable par l'admin sans toucher au code."""
+    CATEGORIE_CHOICES = [
+        ('connexion', 'Page de connexion (mini FAQ)'),
+        ('membres',   'FAQ membres connectés'),
+        ('traiteur',  'FAQ traiteur'),
+    ]
+    categorie = models.CharField(max_length=20, choices=CATEGORIE_CHOICES, db_index=True)
+    section   = models.CharField(max_length=100, blank=True,
+                                  help_text="Titre de section (ex: Réservations, Calendrier…)")
+    question  = models.CharField(max_length=400)
+    reponse   = models.TextField()
+    ordre     = models.PositiveIntegerField(default=0, help_text="Ordre d'affichage dans la catégorie")
+    actif     = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = "FAQ"
+        verbose_name_plural = "FAQ"
+        ordering = ['categorie', 'ordre', 'pk']
+
+    def __str__(self):
+        return f"[{self.get_categorie_display()}] {self.question[:60]}"

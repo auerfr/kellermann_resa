@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{% if item %}Modifier{% else %}Ajouter{% endif %} une entrée FAQ{% endblock %}
+{% block extra_css %}{% include "_stx_styles.html" %}{% endblock %}
+{% block content %}
+<div class="stx-wrap" style="max-width:680px;">
+
+  <div class="mb-3">
+    <a href="{% url 'administration:faq_liste' %}" class="text-decoration-none" style="color:#64748B;font-size:13px;">← Retour à la FAQ</a>
+  </div>
+
+  <h1 class="mb-4" style="font-size:22px;font-weight:600;color:#0F2137;">
+    {% if item %}Modifier une entrée{% else %}Ajouter une entrée FAQ{% endif %}
+  </h1>
+
+  <div class="stx-card" style="padding:20px 24px;">
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Catégorie <span class="text-danger">*</span></label>
+        <select name="categorie" class="form-select form-select-sm" required>
+          {% for val, lbl in CATEGORIES %}
+          <option value="{{ val }}" {% if item and item.categorie == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Section</label>
+        <input type="text" name="section" class="form-control form-control-sm"
+               value="{{ item.section|default:'' }}"
+               placeholder="ex : Réservations, Calendrier, Accès…" maxlength="100">
+        <div class="form-text" style="font-size:11px;">Les entrées avec la même section sont regroupées.</div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Question <span class="text-danger">*</span></label>
+        <input type="text" name="question" class="form-control form-control-sm"
+               value="{{ item.question|default:'' }}" required maxlength="400">
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Réponse <span class="text-danger">*</span></label>
+        <textarea name="reponse" class="form-control" rows="6" required>{{ item.reponse|default:'' }}</textarea>
+        <div class="form-text" style="font-size:11px;">Les sauts de ligne sont préservés dans l'affichage.</div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-sm-4">
+          <label class="form-label fw-semibold small">Ordre d'affichage</label>
+          <input type="number" name="ordre" class="form-control form-control-sm"
+                 value="{{ item.ordre|default:0 }}" min="0">
+        </div>
+        <div class="col-sm-4 d-flex align-items-end">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="actif" value="1" id="actif"
+                   {% if not item or item.actif %}checked{% endif %}>
+            <label class="form-check-label small fw-semibold" for="actif">Visible (actif)</label>
+          </div>
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-sm fw-semibold"
+                style="background:#0F2137;color:#C8A84B;border:none;padding:7px 18px;border-radius:9px;">
+          {% if item %}Enregistrer les modifications{% else %}Ajouter{% endif %}
+        </button>
+        <a href="{% url 'administration:faq_liste' %}" class="btn btn-sm btn-outline-secondary">Annuler</a>
+      </div>
+    </form>
+  </div>
+
+</div>
+{% endblock %}

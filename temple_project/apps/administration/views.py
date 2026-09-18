@@ -16,7 +16,7 @@ from temple_project.apps.reservations.models import (
     DemandeRegleRecurrenceSalle, DemandeRegleRecurrence,
 )
 from temple_project.apps.loges.models import Loge, Obedience
-from .models import Parametres, JournalEvenement, Annonce
+from .models import Parametres, JournalEvenement, Annonce, FAQ
 from .journal import log_evenement
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -5833,3 +5833,81 @@ def valider_demande_recurrence_temple(request, pk):
     return render(request, 'administration/valider_demande_recurrence_temple.html', {
         'demande': demande,
     })
+
+
+# ── FAQ ──────────────────────────────────────────────────────────────────────
+
+def _faq_sections(qs):
+    """Regroupe un queryset FAQ par section (liste de dicts {titre, items})."""
+    sections = []
+    current = None
+    for item in qs:
+        s = item.section or 'Général'
+        if current is None or current['titre'] != s:
+            current = {'titre': s, 'items': []}
+            sections.append(current)
+        current['items'].append(item)
+    return sections
+
+
+def faq_membres(request):
+    """Page FAQ complète pour les membres connectés."""
+    qs = FAQ.objects.filter(categorie='membres', actif=True)
+    return render(request, 'faq/membres.html', {'sections': _faq_sections(qs)})
+
+
+def faq_traiteur(request):
+    """Page FAQ pour le traiteur."""
+    qs = FAQ.objects.filter(categorie='traiteur', actif=True)
+    return render(request, 'faq/traiteur.html', {'sections': _faq_sections(qs)})
+
+
+@staff_required
+def faq_admin_liste(request):
+    items = FAQ.objects.all()
+    return render(request, 'administration/faq_liste.html', {'items': items})
+
+
+@staff_required
+def faq_admin_form(request, pk=None):
+    item = get_object_or_404(FAQ, pk=pk) if pk else None
+    CATEGORIES = FAQ.CATEGORIE_CHOICES
+    if request.method == 'POST':
+        categorie = request.POST.get('categorie', '')
+        section   = request.POST.get('section', '').strip()
+        question  = request.POST.get('question', '').strip()
+        reponse   = request.POST.get('reponse', '').strip()
+        ordre     = int(request.POST.get('ordre', 0) or 0)
+        actif     = request.POST.get('actif') == '1'
+        if not question or not reponse or not categorie:
+            messages.error(request, "Catégorie, question et réponse sont obligatoires.")
+        else:
+            if item:
+                item.categorie = categorie
+                item.section   = section
+                item.question  = question
+                item.reponse   = reponse
+                item.ordre     = ordre
+                item.actif     = actif
+                item.save()
+                messages.success(request, "Entrée FAQ modifiée.")
+            else:
+                FAQ.objects.create(
+                    categorie=categorie, section=section,
+                    question=question, reponse=reponse,
+                    ordre=ordre, actif=actif,
+                )
+                messages.success(request, "Entrée FAQ ajoutée.")
+            return redirect('administration:faq_liste')
+    return render(request, 'administration/faq_form.html',
+                  {'item': item, 'CATEGORIES': CATEGORIES})
+
+
+@staff_required
+def faq_admin_supprimer(request, pk):
+    item = get_object_or_404(FAQ, pk=pk)
+    if request.method == 'POST':
+        item.delete()
+        messages.success(request, "Entrée FAQ supprimée.")
+        return redirect('administration:faq_liste')
+    return render(request, 'administration/faq_supprimer.html', {'item': item})

@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}FAQ — Aide{% endblock %}
+{% block extra_css %}{% include "_stx_styles.html" %}{% endblock %}
+{% block content %}
+<div class="stx-wrap" style="max-width:820px;">
+
+  <div class="mb-4">
+    <h1 class="mb-1" style="font-size:24px;font-weight:700;color:#0F2137;">❓ Foire aux questions</h1>
+    <div style="font-size:14px;color:#64748B;">Retrouvez ici les réponses aux questions les plus fréquentes sur l'utilisation de l'outil.</div>
+  </div>
+
+  {% if sections %}
+    {% for section in sections %}
+    <div class="mb-4">
+      {% if section.titre != 'Général' %}
+      <div style="font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C8A84B;margin-bottom:10px;padding-bottom:4px;border-bottom:2px solid #C8A84B;">
+        {{ section.titre }}
+      </div>
+      {% endif %}
+      <div class="accordion" id="acc-{{ forloop.counter }}">
+        {% for item in section.items %}
+        <div class="accordion-item border-0 mb-2" style="border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.07);">
+          <h2 class="accordion-header" id="h-{{ forloop.parentloop.counter }}-{{ forloop.counter }}">
+            <button class="accordion-button collapsed" type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#c-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
+                    style="font-weight:600;font-size:14px;color:#0F2137;background:#fff;">
+              {{ item.question }}
+            </button>
+          </h2>
+          <div id="c-{{ forloop.parentloop.counter }}-{{ forloop.counter }}"
+               class="accordion-collapse collapse"
+               data-bs-parent="#acc-{{ forloop.parentloop.counter }}">
+            <div class="accordion-body" style="font-size:14px;color:#334155;line-height:1.7;background:#FAFBFC;">
+              {{ item.reponse|linebreaksbr }}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="stx-card text-center py-5 text-muted">La FAQ est en cours de construction.</div>
+  {% endif %}
+
+  <div class="stx-card mt-4" style="padding:16px 20px;">
+    <div class="d-flex align-items-center gap-3">
+      <span style="font-size:28px;">📬</span>
+      <div>
+        <div style="font-weight:600;font-size:14px;color:#0F2137;">Vous ne trouvez pas votre réponse ?</div>
+        <div style="font-size:13px;color:#64748B;">Contactez l'administrateur via le formulaire de contact.</div>
+      </div>
+      <a href="{% url 'reservations:contact' %}" class="btn btn-sm ms-auto fw-semibold"
+         style="background:#0F2137;color:#C8A84B;border:none;white-space:nowrap;">Nous écrire</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

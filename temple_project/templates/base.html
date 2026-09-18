@@ -440,6 +440,9 @@
                 <li class="nav-item">
                     <a class="nav-link" href="/traiteur/bloquer/">🔒 Bloquer</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'faq_traiteur' %}">❓ Aide</a>
+                </li>
                 {% elif visiteur_connecte or user.is_staff %}
                 {# ── Menu membre / admin ── #}
                 <li class="nav-item">
@@ -466,6 +469,9 @@
                 <li class="nav-item">
                     <a class="nav-link" href="/loges/">🏛 Loges</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'faq_membres' %}">❓ Aide</a>
+                </li>
                 {% endif %}
                 <li class="nav-item">
                     {% if traiteur_connecte %}
@@ -483,10 +489,11 @@
                         <li><h6 class="dropdown-header">Pilotage</h6></li>
                         <li><a class="dropdown-item" href="{% url 'administration:accueil' %}">🏠 Accueil (pilotage)</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:recherche_globale' %}">🔎 Recherche</a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="{% url 'administration:messagerie' %}">
+                        <li><a class="dropdown-item" href="{% url 'administration:messagerie' %}">
                           <span>📨 Messagerie</span>
                           {% if nb_messages_nouveaux %}<span class="badge rounded-pill" style="background:#2563EB;">{{ nb_messages_nouveaux }}</span>{% endif %}
                         </a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:faq_liste' %}">❓ Gestion FAQ</a></li>
                         <li><a class="dropdown-item" href="/admin/">📊 Tableau de bord</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><h6 class="dropdown-header">Loges &amp; contacts</h6></li>

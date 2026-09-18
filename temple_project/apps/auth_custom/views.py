@@ -48,7 +48,12 @@ def login_visiteur(request):
 
         messages.error(request, "Code d'accès incorrect.")
 
-    return render(request, "auth/login_visiteur.html")
+    try:
+        from temple_project.apps.administration.models import FAQ
+        mini_faq = list(FAQ.objects.filter(categorie='connexion', actif=True).order_by('ordre')[:4])
+    except Exception:
+        mini_faq = []
+    return render(request, "auth/login_visiteur.html", {"mini_faq": mini_faq})
 
 
 def lien_portail(request):
