@@ -13,10 +13,12 @@ NEW_ENTRIES = [
          "Depuis votre portail loge, les réservations futures validées affichent un bouton "
          "« Modifier / Annuler ». Cliquez dessus pour soumettre une demande d'annulation ou de "
          "déplacement de date.\n\n"
-         "Important : seules les réservations dont la date est dans le futur peuvent faire l'objet "
-         "d'une demande. Pour un déplacement, indiquez la nouvelle date souhaitée (disponibilité "
-         "vérifiée automatiquement) ainsi qu'un motif. La demande est ensuite validée par "
-         "l'administrateur, qui vous confirmera l'action par email."
+         "Pour un déplacement : sélectionnez la nouvelle date souhaitée. La disponibilité du "
+         "créneau (même temple/salle, même horaire) est vérifiée en temps réel et le résultat "
+         "s'affiche immédiatement sous le champ de date (✓ Créneau disponible, "
+         "⚠ Demande en cours, ou ✗ Créneau occupé).\n\n"
+         "Seules les réservations futures peuvent faire l'objet d'une demande. La réservation "
+         "reste active jusqu'à validation par l'administrateur, qui vous confirmera l'action par email."
      )},
 ]
 
@@ -38,9 +40,9 @@ def add_faq(apps, schema_editor):
             "L'administrateur valide toutes les demandes avant de les appliquer."
         )
     )
-    # Add the new entries (skip if already present to stay idempotent)
+    # Add the new entries (upsert to stay idempotent)
     for item in NEW_ENTRIES:
-        FAQ.objects.get_or_create(
+        obj, created = FAQ.objects.get_or_create(
             categorie=item["categorie"],
             section=item["section"],
             ordre=item["ordre"],
@@ -50,6 +52,10 @@ def add_faq(apps, schema_editor):
                 "actif":    True,
             },
         )
+        if not created:
+            obj.question = item["question"]
+            obj.reponse  = item["reponse"]
+            obj.save(update_fields=["question", "reponse"])
 
 
 def reverse_faq(apps, schema_editor):

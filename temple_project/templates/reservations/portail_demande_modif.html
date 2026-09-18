@@ -56,13 +56,14 @@
             </div>
           </div>
 
-          <div id="bloc-nouvelle-date" style="display:none;" class="mb-4">
+          <div id="bloc-nouvelle-date" style="display:none;" class="mb-4"
+               data-heure-debut="{{ resa.heure_debut|time:'H:i' }}"
+               data-heure-fin="{{ resa.heure_fin|time:'H:i' }}"
+               {% if resa_type == 'temple' %}data-temple="{{ resa.temple_id }}"{% else %}data-salle="{{ resa.salle_id }}"{% endif %}>
             <label class="form-label fw-semibold">Nouvelle date souhaitée <span class="text-danger">*</span></label>
-            <input type="date" name="nouvelle_date" class="form-control" style="max-width:220px;"
+            <input type="date" id="nouvelle-date-input" name="nouvelle_date" class="form-control" style="max-width:220px;"
                    min="{{ today|date:'Y-m-d' }}">
-            <div class="form-text text-muted">
-              L'administration vérifiera la disponibilité du créneau avant de valider.
-            </div>
+            <div id="dispo-feedback" class="mt-2" style="font-size:13px;display:none;"></div>
           </div>
 
           <div class="mb-3">
@@ -92,22 +93,57 @@
 </div>
 
 <script>
-const radios = document.querySelectorAll('input[name="type_demande"]');
+const radios   = document.querySelectorAll('input[name="type_demande"]');
 const blocDate = document.getElementById('bloc-nouvelle-date');
+const dateInput = document.getElementById('nouvelle-date-input');
+const feedback  = document.getElementById('dispo-feedback');
+
+// Show/hide date block + radio visual feedback
 radios.forEach(r => {
   r.addEventListener('change', () => {
     blocDate.style.display = r.value === 'deplacement' ? 'block' : 'none';
+    radios.forEach(rb => rb.nextElementSibling.classList.remove('active'));
+    r.nextElementSibling.classList.add('active');
+    if (r.value !== 'deplacement') { feedback.style.display = 'none'; }
   });
   if (r.checked) r.dispatchEvent(new Event('change'));
 });
-// Radio button visual feedback
-radios.forEach(r => {
-  r.addEventListener('change', () => {
-    radios.forEach(rb => {
-      rb.nextElementSibling.classList.remove('active');
-    });
-    r.nextElementSibling.classList.add('active');
+
+// Real-time availability check
+let checkTimer = null;
+dateInput.addEventListener('change', function () {
+  const date = this.value;
+  if (!date) { feedback.style.display = 'none'; return; }
+
+  feedback.style.display = 'block';
+  feedback.innerHTML = '<span style="color:#64748B;">⏳ Vérification en cours…</span>';
+
+  const bd = blocDate.dataset;
+  const params = new URLSearchParams({
+    date,
+    heure_debut: bd.heureDebut,
+    heure_fin:   bd.heureFin,
   });
+  if (bd.temple) params.append('temple', bd.temple);
+  if (bd.salle)  params.append('salle',  bd.salle);
+
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(() => {
+    fetch('{% url "reservations:api_verifier_conflit" %}?' + params)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.conflit) {
+          feedback.innerHTML = '<span style="color:#16A34A;font-weight:600;">✓ Créneau disponible</span>';
+        } else if (data.niveau === 'avertissement') {
+          feedback.innerHTML = '<span style="color:#D97706;font-weight:600;">⚠ ' + data.message + '</span>';
+        } else {
+          feedback.innerHTML = '<span style="color:#DC2626;font-weight:600;">✗ ' + data.message + '</span>';
+        }
+      })
+      .catch(() => {
+        feedback.innerHTML = '<span style="color:#64748B;">Impossible de vérifier la disponibilité.</span>';
+      });
+  }, 300);
 });
 </script>
 {% endblock %}
