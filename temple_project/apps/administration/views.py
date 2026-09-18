@@ -7049,69 +7049,72 @@ def finance_generer_brouillons(request):
         type_loge = agg.get('type_loge', '')
         effectif  = agg.get('effectif') or 0
 
-        # ── Cotisation membres ─────────────────────────────────────────────
-        if effectif > 0:
-            if type_loge == 'loge':
-                tarif_u = params.tarif_membre_loge
-                type_l  = 'cotisation_lb'
-                lbl     = f"Cotisation annuelle — loge bleue ({effectif} membres × {tarif_u} €)"
-            else:
-                tarif_u = params.tarif_membre_hg
-                type_l  = 'cotisation_hg'
-                lbl     = f"Cotisation annuelle — haut grade ({effectif} membres × {tarif_u} €)"
-            LigneFacture.objects.create(
-                facture=facture, type_ligne=type_l, libelle=lbl,
-                quantite=D(str(effectif)), unite='membre',
-                montant_unitaire=tarif_u,
-                montant_total=tarif_u * D(str(effectif)),
-                ordre=ordre,
-            )
-            ordre += 1
+        # Deux modèles exclusifs :
+        # A) tarif_membre > 0 → cotisation forfaitaire par membre (inclut l'infrastructure)
+        # B) tarif_membre = 0 → imputation au réel par tenue (lignes détaillées)
+        if type_loge == 'loge':
+            tarif_membre = params.tarif_membre_loge
+        else:
+            tarif_membre = params.tarif_membre_hg
 
-        # ── Part infrastructure fixe ───────────────────────────────────────
-        total_fixe = agg.get('total_fixe', D('0'))
-        if total_fixe > 0:
-            nb_t = agg.get('nb_tenues') or 1
-            LigneFacture.objects.create(
-                facture=facture,
-                type_ligne='infrastructure_fixe',
-                libelle=f"Part charges fixes ({nb_t} tenues)",
-                quantite=D(str(nb_t)), unite='tenue',
-                montant_unitaire=(total_fixe / D(str(nb_t))).quantize(D('0.01')),
-                montant_total=total_fixe,
-                ordre=ordre,
-            )
-            ordre += 1
+        modele_forfait = (tarif_membre > 0)
 
-        # ── Part mutualisée ────────────────────────────────────────────────
-        total_mut = agg.get('total_mutualise', D('0'))
-        if total_mut > 0:
+        if modele_forfait:
+            # ── Modèle A : cotisation annuelle forfaitaire ─────────────────
+            if effectif > 0:
+                type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
+                cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
+                LigneFacture.objects.create(
+                    facture=facture, type_ligne=type_l,
+                    libelle=f"Cotisation annuelle — {cat} ({effectif} membres × {tarif_membre} €)",
+                    quantite=D(str(effectif)), unite='membre',
+                    montant_unitaire=tarif_membre,
+                    montant_total=(tarif_membre * D(str(effectif))).quantize(D('0.01')),
+                    ordre=ordre,
+                )
+                ordre += 1
+        else:
+            # ── Modèle B : imputation au réel par tenue ────────────────────
             nb_t = agg.get('nb_tenues') or 1
-            LigneFacture.objects.create(
-                facture=facture,
-                type_ligne='infrastructure_mut',
-                libelle=f"Part charges mutualisées ({nb_t} tenues)",
-                quantite=D(str(nb_t)), unite='tenue',
-                montant_unitaire=(total_mut / D(str(nb_t))).quantize(D('0.01')),
-                montant_total=total_mut,
-                ordre=ordre,
-            )
-            ordre += 1
 
-        # ── Part marginale ─────────────────────────────────────────────────
-        total_marg = agg.get('total_marginal', D('0'))
-        if total_marg > 0:
-            nb_t = agg.get('nb_tenues') or 1
-            LigneFacture.objects.create(
-                facture=facture,
-                type_ligne='infrastructure_marg',
-                libelle=f"Part charges marginales ({nb_t} tenues)",
-                quantite=D(str(nb_t)), unite='tenue',
-                montant_unitaire=(total_marg / D(str(nb_t))).quantize(D('0.01')),
-                montant_total=total_marg,
-                ordre=ordre,
-            )
-            ordre += 1
+            total_fixe = agg.get('total_fixe', D('0'))
+            if total_fixe > 0:
+                LigneFacture.objects.create(
+                    facture=facture,
+                    type_ligne='infrastructure_fixe',
+                    libelle=f"Part charges fixes — {nb_t} tenues",
+                    quantite=D(str(nb_t)), unite='tenue',
+                    montant_unitaire=(total_fixe / D(str(nb_t))).quantize(D('0.01')),
+                    montant_total=total_fixe.quantize(D('0.01')),
+                    ordre=ordre,
+                )
+                ordre += 1
+
+            total_mut = agg.get('total_mutualise', D('0'))
+            if total_mut > 0:
+                LigneFacture.objects.create(
+                    facture=facture,
+                    type_ligne='infrastructure_mut',
+                    libelle=f"Part charges mutualisées — {nb_t} tenues",
+                    quantite=D(str(nb_t)), unite='tenue',
+                    montant_unitaire=(total_mut / D(str(nb_t))).quantize(D('0.01')),
+                    montant_total=total_mut.quantize(D('0.01')),
+                    ordre=ordre,
+                )
+                ordre += 1
+
+            total_marg = agg.get('total_marginal', D('0'))
+            if total_marg > 0:
+                LigneFacture.objects.create(
+                    facture=facture,
+                    type_ligne='infrastructure_marg',
+                    libelle=f"Part charges marginales — {nb_t} tenues",
+                    quantite=D(str(nb_t)), unite='tenue',
+                    montant_unitaire=(total_marg / D(str(nb_t))).quantize(D('0.01')),
+                    montant_total=total_marg.quantize(D('0.01')),
+                    ordre=ordre,
+                )
+                ordre += 1
 
         # ── Usage cuisine / agapes ─────────────────────────────────────────
         total_agapes = agg.get('total_agapes', D('0'))
