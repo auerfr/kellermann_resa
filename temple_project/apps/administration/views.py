@@ -5948,12 +5948,16 @@ def _get_loge_panel(loge, exclude_pk=None, model='temple'):
 
 @staff_required
 def activite_loges(request):
-    """Classement des loges par volume de réservations + accès rapide portail."""
-    from django.db.models import Count, OuterRef, Subquery, IntegerField, Value
+    """Classement des loges par volume de réservations, messages et accès portail."""
+    from django.db.models import Count, OuterRef, Subquery, IntegerField, Value, Q
     from django.db.models.functions import Coalesce
     from datetime import date as _date
+    from temple_project.apps.reservations.models import MessageContact, AccessLog
 
-    tri = request.GET.get('tri', 'saison')
+    tri          = request.GET.get('tri', 'saison')
+    filtre_portail = request.GET.get('portail', '')   # 'actif' | 'non' | ''
+    filtre_attente = request.GET.get('attente', '')   # '1' | ''
+
     today = _date.today()
     annee = today.year if today.month >= 9 else today.year - 1
     d1 = _date(annee, 9, 1)
@@ -5963,53 +5967,96 @@ def activite_loges(request):
         return Coalesce(Subquery(qs.values('loge_id').annotate(c=Count('pk')).values('c')[:1],
                                  output_field=IntegerField()), Value(0))
 
-    loges = Loge.objects.filter(actif=True).annotate(
+    loges = Loge.objects.filter(actif=True).select_related('obedience').annotate(
         nb_saison=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='validee',
                                                   date__gte=d1, date__lte=d2)),
         nb_attente_t=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
         nb_salle_saison=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='validee',
                                                              date__gte=d1, date__lte=d2)),
         nb_salle_attente=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
+        nb_messages_fk=_sq(MessageContact.objects.filter(loge_id=OuterRef('pk'), emis=False)),
     )
 
-    ordre = {
-        'saison':  '-nb_saison',
-        'salle':   '-nb_salle_saison',
-        'attente': '-nb_attente_t',
-        'messages': '-nb_messages_py',  # tri Python post-fetch
-    }.get(tri, '-nb_saison')
-
-    if tri != 'messages':
-        loges = loges.order_by(ordre, 'nom')
-
-    # Portails validés : token + date de validation
+    # Portails validés
     portail_map = {p.loge_id: p for p in DemandeAccesPortail.objects.filter(statut='validee')}
+    portail_ids = set(portail_map.keys())
 
-    # Messages reçus (non émis) groupés par email
-    from temple_project.apps.reservations.models import MessageContact
+    # Visites portail (30 derniers jours et total)
+    from django.utils import timezone as tz
+    depuis_30j = tz.now() - __import__('datetime').timedelta(days=30)
+    visites_total = {}
+    visites_30j   = {}
+    for row in AccessLog.objects.filter(type='portail', loge_id__isnull=False)\
+                                .values('loge_id').annotate(c=Count('pk')):
+        visites_total[row['loge_id']] = row['c']
+    for row in AccessLog.objects.filter(type='portail', loge_id__isnull=False,
+                                        created_at__gte=depuis_30j)\
+                                .values('loge_id').annotate(c=Count('pk')):
+        visites_30j[row['loge_id']] = row['c']
+
+    # Connexions calendrier générales (total + 30j)
+    nb_calendrier_total = AccessLog.objects.filter(type='calendrier').count()
+    nb_calendrier_30j   = AccessLog.objects.filter(type='calendrier', created_at__gte=depuis_30j).count()
+
+    # Messages fallback par email pour les anciens messages sans FK
     msg_by_email = {}
-    for row in MessageContact.objects.filter(emis=False).values('email').annotate(c=Count('pk')):
+    for row in MessageContact.objects.filter(emis=False, loge__isnull=True)\
+                                     .values('email').annotate(c=Count('pk')):
         msg_by_email[row['email'].lower()] = row['c']
+
+    # Appliquer filtres
+    if filtre_portail == 'actif':
+        loges = loges.filter(pk__in=portail_ids)
+    elif filtre_portail == 'non':
+        loges = loges.exclude(pk__in=portail_ids)
+    if filtre_attente == '1':
+        loges = loges.filter(
+            Q(nb_attente_t__gt=0) | Q(nb_salle_attente__gt=0)
+        )
+
+    # Tri ORM
+    tri_orm = {
+        'saison':   '-nb_saison',
+        'salle':    '-nb_salle_saison',
+        'attente':  '-nb_attente_t',
+    }
+    if tri in tri_orm:
+        loges = loges.order_by(tri_orm[tri], 'nom')
+    else:
+        loges = loges.order_by('nom')
 
     loges_list = list(loges)
     for loge in loges_list:
         p = portail_map.get(loge.id)
         loge.portail_token = str(p.token) if p else None
         loge.portail_since = p.created_at if p else None
-        loge.nb_messages = msg_by_email.get(loge.email.lower(), 0) if loge.email else 0
-        loge.nb_attente = loge.nb_attente_t + loge.nb_salle_attente
+        # Messages : FK prioritaire, fallback email pour anciens
+        email_count = msg_by_email.get(loge.email.lower(), 0) if loge.email else 0
+        loge.nb_messages = loge.nb_messages_fk + email_count
+        loge.nb_attente  = loge.nb_attente_t + loge.nb_salle_attente
+        loge.nb_visites  = visites_total.get(loge.id, 0)
+        loge.nb_visites_30j = visites_30j.get(loge.id, 0)
 
+    # Tris post-Python
     if tri == 'messages':
         loges_list.sort(key=lambda l: (-l.nb_messages, l.nom))
+    elif tri == 'visites':
+        loges_list.sort(key=lambda l: (-l.nb_visites, l.nom))
 
-    nb_portail_actif = sum(1 for l in loges_list if l.portail_token)
+    nb_portail_actif = len(portail_ids & {l.id for l in loges_list})
     nb_attente_total = sum(l.nb_attente for l in loges_list)
+    nb_visites_portail_30j = sum(l.nb_visites_30j for l in loges_list)
 
     return render(request, 'administration/activite_loges.html', {
-        'loges':            loges_list,
-        'tri':              tri,
-        'annee_saison':     annee,
-        'nb_loges':         len(loges_list),
-        'nb_portail_actif': nb_portail_actif,
-        'nb_attente_total': nb_attente_total,
+        'loges':                 loges_list,
+        'tri':                   tri,
+        'filtre_portail':        filtre_portail,
+        'filtre_attente':        filtre_attente,
+        'annee_saison':          annee,
+        'nb_loges':              len(loges_list),
+        'nb_portail_actif':      nb_portail_actif,
+        'nb_attente_total':      nb_attente_total,
+        'nb_calendrier_total':   nb_calendrier_total,
+        'nb_calendrier_30j':     nb_calendrier_30j,
+        'nb_visites_portail_30j': nb_visites_portail_30j,
     })

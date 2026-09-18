@@ -540,6 +540,9 @@ class MessageContact(models.Model):
     ]
     nom          = models.CharField(max_length=200)
     email        = models.EmailField()
+    loge         = models.ForeignKey(
+        Loge, null=True, blank=True, on_delete=models.SET_NULL, related_name='messages_contact'
+    )
     sujet        = models.CharField(max_length=200, blank=True)
     message      = models.TextField()
     created_at   = models.DateTimeField(auto_now_add=True)
@@ -560,3 +563,21 @@ class MessageContact(models.Model):
     @property
     def repondu(self):
         return bool(self.reponse)
+
+
+class AccessLog(models.Model):
+    """Trace les accès au site : connexions calendrier (visiteur) et accès portails loges."""
+    TYPE_CHOICES = [
+        ('portail',    'Accès portail loge'),
+        ('calendrier', 'Connexion calendrier'),
+    ]
+    type       = models.CharField(max_length=20, choices=TYPE_CHOICES, db_index=True)
+    loge       = models.ForeignKey(
+        Loge, null=True, blank=True, on_delete=models.SET_NULL, related_name='access_logs'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Log d'accès"
+        verbose_name_plural = "Logs d'accès"
+        ordering = ['-created_at']

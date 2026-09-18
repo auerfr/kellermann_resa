@@ -9,7 +9,7 @@ from .models import (
     Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence,
     RegleRecurrence, RegleRecurrenceSalle, DemandeRegleRecurrenceSalle,
     Temple, DemandeAccesPortail,
-    ValidationSaison, ValidationSaisonLigne, MessageContact,
+    ValidationSaison, ValidationSaisonLigne, MessageContact, AccessLog,
 )
 from temple_project.apps.loges.models import Loge
 from .forms import DemandeReservationForm, DemandeReservationSalleForm, DemandeCabinetsForm, DemandeBanquetForm
@@ -1080,8 +1080,18 @@ def contact_portail(request):
                 messages.error(request, "Nom, email et message sont obligatoires.")
                 return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': 'message'})
 
-            # Enregistre le message (consultable + répondable dans la messagerie admin)
-            MessageContact.objects.create(nom=nom, email=email, sujet=sujet, message=message)
+            loge_msg = None
+            loge_id_msg = request.POST.get('loge_id_message') or None
+            if loge_id_msg:
+                try:
+                    loge_msg = Loge.objects.get(pk=loge_id_msg)
+                except Loge.DoesNotExist:
+                    pass
+            if not loge_msg:
+                # Fallback : tenter de retrouver la loge par email
+                loge_msg = Loge.objects.filter(email__iexact=email, actif=True).first()
+
+            MessageContact.objects.create(nom=nom, email=email, sujet=sujet, message=message, loge=loge_msg)
 
             # Notification à l'admin
             send_mail_kellermann(
@@ -1114,6 +1124,13 @@ def portail_loge(request, token):
     demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
     today   = date_cls.today()
     loge    = demande.loge
+
+    # Log de l'accès portail (GET seulement pour éviter les doublons POST)
+    if request.method == 'GET':
+        try:
+            AccessLog.objects.create(type='portail', loge=loge)
+        except Exception:
+            pass
 
     # ── Mise à jour des informations de la loge par la loge elle-même ──────────
     if request.method == 'POST' and request.POST.get('action') == 'modifier_infos':
