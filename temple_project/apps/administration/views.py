@@ -6313,8 +6313,9 @@ def budget_simulation(request):
             # Loges occasionnelles : pas de modèle cotisation/hybride
             if not l.get('membre_association'):
                 l['cotisation_actuelle'] = None
+                l['cout_equilibre']      = None
                 l['cout_hybride']        = None
-                l['ecart_usage']         = None
+                l['ecart_equilibre']     = None
                 l['ecart_hybride']       = None
                 continue
             # Cotisation actuelle (tarif voté × effectif) — adhérents uniquement
@@ -6325,6 +6326,16 @@ def budget_simulation(request):
                 l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_hg)) * eff
             else:
                 l['cotisation_actuelle'] = None
+            # Tarif d'équilibre (tarif_eq × effectif)
+            if eff:
+                if l['type_loge'] == 'loge' and tarif_eq_lb_display:
+                    l['cout_equilibre'] = tarif_eq_lb_display * eff
+                elif l['type_loge'] == 'haut_grade' and tarif_eq_hg_display:
+                    l['cout_equilibre'] = tarif_eq_hg_display * eff
+                else:
+                    l['cout_equilibre'] = None
+            else:
+                l['cout_equilibre'] = None
             # Modèle hybride
             if tarif_hybride_membre and tarif_hybride_tenue and eff and l.get('nb_tenues'):
                 l['cout_hybride'] = (tarif_hybride_membre * eff
@@ -6333,10 +6344,10 @@ def budget_simulation(request):
                 l['cout_hybride'] = None
             # Écarts vs cotisation actuelle
             if l['cotisation_actuelle']:
-                l['ecart_usage']   = l['cout_usage_pur'] - l['cotisation_actuelle']
-                l['ecart_hybride'] = l['cout_hybride'] - l['cotisation_actuelle'] if l['cout_hybride'] else None
+                l['ecart_equilibre'] = l['cout_equilibre'] - l['cotisation_actuelle'] if l['cout_equilibre'] else None
+                l['ecart_hybride']   = l['cout_hybride']   - l['cotisation_actuelle'] if l['cout_hybride']   else None
             else:
-                l['ecart_usage'] = l['ecart_hybride'] = None
+                l['ecart_equilibre'] = l['ecart_hybride'] = None
 
     # ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ─────────────
     # Les charges fixes sont déjà couvertes par la cotisation des adhérents.

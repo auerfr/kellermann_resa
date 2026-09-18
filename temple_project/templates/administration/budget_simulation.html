@@ -413,8 +413,9 @@
             <th class="text-center">Type</th>
             <th class="text-center">Tenues</th>
             <th class="text-end">Cotisation actuelle</th>
-            <th class="text-end">Usage pur</th>
+            <th class="text-end">Tarif d'équilibre</th>
             <th class="text-end">Hybride ★</th>
+            <th class="text-end">Écart équil.</th>
             <th class="text-end pe-2">Écart hybride</th>
           </tr>
         </thead>
@@ -422,9 +423,7 @@
           {% for l in sim.par_loge %}
           {% if l.membre_association and l.type_loge == 'loge' or l.membre_association and l.type_loge == 'haut_grade' %}
           <tr>
-            <td class="ps-3 fw-semibold" style="color:#0F2137;">
-              {{ l.loge_nom }}
-            </td>
+            <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
             <td class="text-center">
               {% if l.type_loge == 'haut_grade' %}
               <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
@@ -434,15 +433,22 @@
             </td>
             <td class="text-center text-muted">{{ l.nb_tenues }}</td>
             <td class="text-end">
-              {% if not l.membre_association %}<span class="text-muted small">excl. cotis.</span>
-              {% elif l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €
-              {% else %}—{% endif %}
+              {% if l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €{% else %}—{% endif %}
             </td>
-            <td class="text-end">
-              {{ l.cout_usage_pur|floatformat:0 }} €
+            <td class="text-end fw-semibold" style="color:#0F2137;">
+              {% if l.cout_equilibre %}{{ l.cout_equilibre|floatformat:0 }} €{% else %}—{% endif %}
             </td>
             <td class="text-end fw-semibold" style="color:#5B21B6;">
               {% if l.cout_hybride %}{{ l.cout_hybride|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end">
+              {% if l.ecart_equilibre is not None %}
+                {% if l.ecart_equilibre > 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">+{{ l.ecart_equilibre|floatformat:0 }} €</span>
+                {% elif l.ecart_equilibre < 0 %}
+                  <span style="color:#059669;font-weight:600;">{{ l.ecart_equilibre|floatformat:0 }} €</span>
+                {% else %}<span class="text-muted">= 0</span>{% endif %}
+              {% else %}—{% endif %}
             </td>
             <td class="text-end pe-2">
               {% if l.ecart_hybride is not None %}
@@ -450,9 +456,7 @@
                   <span style="color:#B91C1C;font-weight:600;">+{{ l.ecart_hybride|floatformat:0 }} €</span>
                 {% elif l.ecart_hybride < 0 %}
                   <span style="color:#059669;font-weight:600;">{{ l.ecart_hybride|floatformat:0 }} €</span>
-                {% else %}
-                  <span class="text-muted">= 0</span>
-                {% endif %}
+                {% else %}<span class="text-muted">= 0</span>{% endif %}
               {% else %}—{% endif %}
             </td>
           </tr>
@@ -462,9 +466,9 @@
       </table>
     </div>
     <div class="text-muted mt-2" style="font-size:11px;">
-      Écart hybride = différence entre le modèle hybride et la cotisation actuelle.
-      Rouge = la loge paierait plus · Vert = paierait moins.
-      Usage pur et hybride sont calculés hors agapes, salle et loges occasionnelles (auto-financés par leur facturation à la tenue).
+      Tarif d'équilibre = tarif_eq × effectif de la loge · Hybride = cotisation fixe/membre + tarif/tenue.
+      Écart = différence avec la cotisation actuelle. Rouge = paierait plus · Vert = paierait moins.
+      Calculs hors agapes, salle et loges occasionnelles (auto-financés).
     </div>
   </div>
 </div>
