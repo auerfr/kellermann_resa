@@ -8,7 +8,7 @@ Usage :
 """
 from decimal import Decimal
 from django.core.management.base import BaseCommand
-from apps.administration.models import PosteCharge
+from temple_project.apps.administration.models import PosteCharge
 
 
 POSTES = [
