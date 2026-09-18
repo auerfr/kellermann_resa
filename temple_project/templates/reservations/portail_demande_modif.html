@@ -137,7 +137,11 @@ dateInput.addEventListener('change', function () {
         } else if (data.niveau === 'avertissement') {
           feedback.innerHTML = '<span style="color:#D97706;font-weight:600;">⚠ ' + data.message + '</span>';
         } else {
-          feedback.innerHTML = '<span style="color:#DC2626;font-weight:600;">✗ ' + data.message + '</span>';
+          let html = '<span style="color:#DC2626;font-weight:600;">✗ ' + data.message + '</span>';
+          if (data.prochaine_dispo) {
+            html += '<br><span style="color:#64748B;font-size:12px;">Prochaine disponibilité à ce créneau : <strong>' + data.prochaine_dispo + '</strong></span>';
+          }
+          feedback.innerHTML = html;
         }
       })
       .catch(() => {

@@ -798,6 +798,35 @@ def suivi_recurrence(request, uuid):
     return render(request, 'reservations/suivi_recurrence.html', {'demande': demande})
 
 
+def _prochaine_dispo(date_str, heure_debut, heure_fin, temple_id, salle_id, max_days=90):
+    """Retourne la prochaine date libre (jj/mm/aaaa) après date_str, ou None."""
+    from datetime import date as _date, timedelta, datetime as _dt
+    try:
+        start = _dt.strptime(date_str, '%Y-%m-%d').date() + timedelta(days=1)
+    except ValueError:
+        return None
+    end = start + timedelta(days=max_days)
+    chevauchement = Q(heure_debut__lt=heure_fin, heure_fin__gt=heure_debut)
+    if temple_id:
+        occupied = set(
+            Reservation.objects.filter(
+                temple=temple_id, date__gte=start, date__lte=end, statut='validee',
+            ).filter(chevauchement).values_list('date', flat=True)
+        )
+    else:
+        occupied = set(
+            ReservationSalle.objects.filter(
+                salle=salle_id, date__gte=start, date__lte=end, statut='validee',
+            ).filter(chevauchement).values_list('date', flat=True)
+        )
+    current = start
+    while current <= end:
+        if current not in occupied:
+            return current.strftime('%d/%m/%Y')
+        current += timedelta(days=1)
+    return None
+
+
 def api_verifier_conflit(request):
     """API pour vérifier les conflits de réservation en temps réel."""
     date = request.GET.get('date')
@@ -821,10 +850,12 @@ def api_verifier_conflit(request):
         en_attente = base_qs.filter(statut='attente').exists()
 
     if validees:
+        prochaine = _prochaine_dispo(date, heure_debut, heure_fin, temple, salle)
         return JsonResponse({
             'conflit': True,
             'niveau': 'erreur',
             'message': 'Ce créneau est déjà validé et occupé.',
+            'prochaine_dispo': prochaine,
         })
     if en_attente:
         return JsonResponse({
