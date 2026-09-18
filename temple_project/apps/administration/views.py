@@ -5684,6 +5684,59 @@ def budget_simulation_pdf(request):
     ]))
     elems.append(loge_t)
 
+    # ── Avertissement effectif ──
+    elems.append(Spacer(1, 0.4 * cm))
+    avert_style = ParagraphStyle('avert', fontSize=8.5, textColor=colors.HexColor('#92400E'),
+                                 backColor=colors.HexColor('#FFFBEB'), borderPad=6,
+                                 leftIndent=6, rightIndent=6, spaceBefore=4, spaceAfter=4)
+    effectif_note = (
+        "<b>⚠ Attention — effectifs à confirmer.</b> "
+        "Les effectifs indiqués proviennent des fiches loges (champ « Effectif total »). "
+        "Si ce champ n'est pas renseigné, la simulation utilise 30 membres par défaut. "
+        "Le tarif d'équilibre par membre est donc <b>directement fonction de l'effectif saisi</b> : "
+        "un effectif sous-estimé donne un tarif sur-estimé, et inversement. "
+        "Vérifiez les effectifs dans les fiches loges avant de communiquer ces chiffres."
+    )
+    if nb_membres_v:
+        effectif_note = (
+            f"<b>ℹ Effectif forcé à {nb_membres_v} membres</b> pour cette simulation (curseur manuel). "
+            "Les tarifs d'équilibre sont calculés sur cette base et non sur les effectifs réels des loges."
+        )
+    elems.append(Paragraph(effectif_note, avert_style))
+
+    # ── Méthodologie ──
+    elems.append(Spacer(1, 0.6 * cm))
+    elems.append(Paragraph("Méthodologie de calcul", section))
+    meth_style = ParagraphStyle('meth', fontSize=8.5, textColor=colors.HexColor('#1E293B'),
+                                spaceAfter=4, leading=13)
+    bullet = ParagraphStyle('bullet', parent=meth_style, leftIndent=14, firstLineIndent=-10)
+    elems.append(Paragraph(
+        "Les charges sont réparties en trois niveaux :", meth_style))
+    elems.append(Paragraph(
+        "• <b>Charges fixes</b> (loyer, assurances, maintenance) : montant annuel total divisé "
+        "par le nombre de tenues de la saison pour ce temple. Chaque tenue supporte une quote-part égale.",
+        bullet))
+    elems.append(Paragraph(
+        "• <b>Charges mutualisées</b> (chauffage, électricité de base) : coût déjà engagé dès "
+        "qu'une loge est présente. Si plusieurs loges se partagent le même temple le même jour, "
+        "le coût est divisé entre elles. Si une seule loge est présente, elle supporte 100 % du coût.",
+        bullet))
+    elems.append(Paragraph(
+        "• <b>Charges marginales</b> (nettoyage, consommables) : coût fixe par tenue, "
+        "quel que soit le nombre de loges présentes ce jour-là.",
+        bullet))
+    elems.append(Spacer(1, 0.3 * cm))
+    elems.append(Paragraph(
+        "<b>Tarif d'équilibre</b> = total des charges imputées à un type de loge ÷ "
+        "nombre total de membres de ce type. C'est le montant théorique que chaque loge devrait "
+        "verser <i>par membre</i> pour couvrir exactement les charges simulées.",
+        meth_style))
+    elems.append(Paragraph(
+        "<b>Cohabitation</b> : lorsque deux loges ou plus occupent le même temple le même jour, "
+        "la charge mutualisée (déjà allumée pour la première loge) est partagée à parts égales "
+        "entre les occupants simultanés. Cela représente une économie d'échelle réelle.",
+        meth_style))
+
     # ── Pied de page ──
     elems.append(Spacer(1, 0.8 * cm))
     elems.append(HRFlowable(width='100%', thickness=0.5, color=GRIS))

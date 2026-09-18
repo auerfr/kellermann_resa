@@ -22,6 +22,48 @@
 <div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
 {% endfor %}{% endif %}
 
+{# ── Méthodologie (pliable) ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;cursor:pointer;"
+       data-bs-toggle="collapse" data-bs-target="#bloc-methodo">
+    <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">📖 Comment sont calculés les coûts ?</span>
+    <span class="small" style="color:#C8A84B;">Voir ▾</span>
+  </div>
+  <div class="collapse" id="bloc-methodo">
+    <div class="card-body" style="font-size:13.5px;">
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <div class="p-3 rounded" style="background:#F1F5F9;border-left:4px solid #64748B;">
+            <div class="fw-bold mb-1">🏛 Charges fixes</div>
+            <div class="text-muted small">Loyer, assurances, maintenance. Montant annuel divisé <strong>par le nombre de tenues</strong> de la saison. Chaque tenue supporte une quote-part égale, indépendamment de l'heure ou du nombre de loges présentes.</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="p-3 rounded" style="background:#FFFBEB;border-left:4px solid #D97706;">
+            <div class="fw-bold mb-1">⚡ Charges mutualisées</div>
+            <div class="text-muted small">Chauffage, électricité de base. Coût déjà engagé dès qu'une loge est présente. <strong>Si plusieurs loges partagent le temple le même jour</strong>, le coût est divisé entre elles — économie d'échelle réelle.</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="p-3 rounded" style="background:#F5F3FF;border-left:4px solid #7C3AED;">
+            <div class="fw-bold mb-1">🧹 Charges marginales</div>
+            <div class="text-muted small">Nettoyage, consommables. Coût fixe <strong>par tenue</strong>, quel que soit le nombre de loges présentes ce jour-là. Chaque occupation génère ce coût en totalité.</div>
+          </div>
+        </div>
+      </div>
+      <div class="alert alert-info py-2 mb-2" style="font-size:12.5px;">
+        <strong>Tarif d'équilibre</strong> = charges imputées à un type de loge ÷ effectif total de ce type.
+        C'est le montant théorique <em>par membre</em> pour couvrir exactement les charges simulées.
+        Il est <strong>directement lié à l'effectif</strong> saisi dans les fiches loges : vérifiez-le avant de communiquer ces chiffres.
+      </div>
+      <div class="text-muted small">
+        <strong>Cohabitation :</strong> deux loges au même temple le même jour → la charge mutualisée est partagée à parts égales.
+        Le détail de chaque tenue (en bas de page) indique en jaune les jours de cooccupation.
+      </div>
+    </div>
+  </div>
+</div>
+
 {# ── Paramètres de simulation ── #}
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-body py-3">
