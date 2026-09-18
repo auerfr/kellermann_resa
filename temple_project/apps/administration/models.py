@@ -181,6 +181,8 @@ class PosteCharge(models.Model):
         ('fixe',      'Charge fixe (loyer, assurance, maintenance…)'),
         ('mutualise', 'Variable mutualisée (chauffage, électricité de base…)'),
         ('marginal',  'Variable marginale (nettoyage, consommables…)'),
+        ('agapes',    'Usage cuisine / agapes (uniquement si agapes demandées)'),
+        ('salle',     'Salle de réunion / cabinet (par occupation de salle)'),
     ]
     UNITE_CHOICES = [
         ('annuel',        'Par an'),

@@ -45,30 +45,48 @@
 
 {# ── Résumé annuel ── #}
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
+  <div class="col-6 col-md">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body">
         <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Charges fixes / an</div>
-        <div class="fw-bold" style="font-size:1.5rem;color:#0F2137;">{{ total_fixe|floatformat:0 }} €</div>
-        <div class="text-muted small">Loyer, assurances, maintenance</div>
+        <div class="fw-bold" style="font-size:1.4rem;color:#0F2137;">{{ total_fixe|floatformat:0 }} €</div>
+        <div class="text-muted small">Loyer, assurances</div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-6 col-md">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body">
-        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Variable mutualisé / événement</div>
-        <div class="fw-bold" style="font-size:1.5rem;color:#D97706;">{{ total_mutualise|floatformat:2 }} €</div>
-        <div class="text-muted small">Chauffage, électricité (partagés)</div>
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Mutualisé / événement</div>
+        <div class="fw-bold" style="font-size:1.4rem;color:#D97706;">{{ total_mutualise|floatformat:2 }} €</div>
+        <div class="text-muted small">Chauffage, électricité</div>
       </div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-6 col-md">
     <div class="card border-0 shadow-sm h-100">
       <div class="card-body">
-        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Variable marginal / événement</div>
-        <div class="fw-bold" style="font-size:1.5rem;color:#7C3AED;">{{ total_marginal|floatformat:2 }} €</div>
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Marginal / événement</div>
+        <div class="fw-bold" style="font-size:1.4rem;color:#7C3AED;">{{ total_marginal|floatformat:2 }} €</div>
         <div class="text-muted small">Nettoyage, consommables</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Cuisine / agapes</div>
+        <div class="fw-bold" style="font-size:1.4rem;color:#DC2626;">{{ total_agapes|floatformat:2 }} €</div>
+        <div class="text-muted small">Si agapes demandées</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Salle de réunion</div>
+        <div class="fw-bold" style="font-size:1.4rem;color:#0891B2;">{{ total_salle|floatformat:2 }} €</div>
+        <div class="text-muted small">Par occupation cabinet</div>
       </div>
     </div>
   </div>
@@ -99,8 +117,12 @@
             <span class="badge bg-secondary">Fixe</span>
             {% elif p.type_charge == 'mutualise' %}
             <span class="badge" style="background:#FEF3C7;color:#B45309;">Mutualisé</span>
-            {% else %}
+            {% elif p.type_charge == 'marginal' %}
             <span class="badge" style="background:#EDE9FE;color:#5B21B6;">Marginal</span>
+            {% elif p.type_charge == 'agapes' %}
+            <span class="badge" style="background:#FEE2E2;color:#991B1B;">Cuisine/agapes</span>
+            {% elif p.type_charge == 'salle' %}
+            <span class="badge" style="background:#CFFAFE;color:#155E75;">Salle réunion</span>
             {% endif %}
           </td>
           <td class="text-muted small">{{ p.temple|default:"Tous" }}</td>
@@ -190,7 +212,9 @@
       <strong>Rappel :</strong>
       <strong>Fixe</strong> = s'applique toute l'année (loyer, assurance) — divisé par le nombre de tenues de la saison. ·
       <strong>Mutualisé</strong> = s'allume dès qu'une loge est présente, partagé si plusieurs loges ce jour-là. ·
-      <strong>Marginal</strong> = par tenue, quelle que soit la cooccupation.
+      <strong>Marginal</strong> = par tenue, quelle que soit la cooccupation. ·
+      <strong>Cuisine/agapes</strong> = uniquement si la tenue a des agapes demandées (électricité cuisine, gaz, eau chaude, nettoyage cuisine). ·
+      <strong>Salle réunion</strong> = par occupation de cabinet ou salle de réunion, attribué à la loge qui réserve.
     </div>
   </div>
 </div>

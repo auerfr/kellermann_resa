@@ -5387,10 +5387,32 @@ def _simuler_budget(saison, nb_membres_global=None):
             elif p.unite == 'par_heure':
                 total += p.montant * Decimal(str(round(duree_h, 4)))
             elif p.unite in ('annuel', 'mensuel'):
-                # Charge annuelle/mensuelle mutualisée ou marginale : on la répartit
-                # sur le nombre de réservations du temple (ou global si temple=None)
                 denom = nb_resas_temple if p.temple_id is not None else (nb_resas or 1)
                 total += p.montant_annuel_normalise / Decimal(str(denom))
+        return total
+
+    # Réservations de salles (cabinets, réunions) validées sur la saison
+    from temple_project.apps.reservations.models import ReservationSalle
+    resas_salle = list(
+        ReservationSalle.objects
+        .filter(date__gte=debut, date__lte=fin, statut='validee')
+        .select_related('loge', 'salle')
+        .order_by('date', 'heure_debut')
+    )
+    nb_resas_salle = len(resas_salle) or 1
+
+    def _cout_salle(duree_h):
+        """Coût d'une occupation de salle selon les postes type='salle'."""
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != 'salle':
+                continue
+            if p.unite == 'par_evenement':
+                total += p.montant
+            elif p.unite == 'par_heure':
+                total += p.montant * Decimal(str(round(duree_h, 4)))
+            elif p.unite in ('annuel', 'mensuel'):
+                total += p.montant_annuel_normalise / Decimal(str(nb_resas_salle))
         return total
 
     detail = []
@@ -5404,15 +5426,15 @@ def _simuler_budget(saison, nb_membres_global=None):
         nb_resas_temple = len(resas_par_temple[r.temple_id]) or 1
         nb_loges_jour   = len(jour_temple[(r.date, r.temple_id)]) or 1
 
-        # Fixe global (tous temples) : dilué sur le total des réservations
         part_fixe_global  = fixe_global / Decimal(str(nb_resas or 1))
-        # Fixe spécifique temple : dilué sur les réservations de ce temple
         part_fixe_temple  = _fixe_annuel_temple(r.temple_id) / nb_resas_temple
         part_fixe         = part_fixe_global + part_fixe_temple
 
         part_mutualise = _variable('mutualise', r.temple_id, duree_h, nb_resas_temple) / nb_loges_jour
         part_marginal  = _variable('marginal',  r.temple_id, duree_h, nb_resas_temple)
-        cout_total     = part_fixe + part_mutualise + part_marginal
+        # Agapes : cuisine uniquement si la tenue a des agapes
+        part_agapes    = _variable('agapes', r.temple_id, duree_h, nb_resas_temple) if r.besoin_agapes else Decimal('0')
+        cout_total     = part_fixe + part_mutualise + part_marginal + part_agapes
 
         if nb_membres_global:
             effectif = nb_membres_global
@@ -5432,9 +5454,11 @@ def _simuler_budget(saison, nb_membres_global=None):
             'duree_h': round(duree_h, 1),
             'nb_loges_jour': nb_loges_jour,
             'seul': nb_loges_jour == 1,
+            'agapes': r.besoin_agapes,
             'part_fixe': part_fixe,
             'part_mutualise': part_mutualise,
             'part_marginal': part_marginal,
+            'part_agapes': part_agapes,
             'cout_total': cout_total,
             'effectif': effectif,
             'cout_par_membre': cout_par_membre,
@@ -5443,9 +5467,10 @@ def _simuler_budget(saison, nb_membres_global=None):
     # Agréger par loge
     agg = defaultdict(lambda: {
         'loge': None, 'loge_nom': '', 'type_loge': '',
-        'nb_tenues': 0, 'effectif': 0,
+        'nb_tenues': 0, 'nb_salles': 0, 'effectif': 0,
         'total_fixe': Decimal('0'), 'total_mutualise': Decimal('0'),
-        'total_marginal': Decimal('0'), 'total_cout': Decimal('0'),
+        'total_marginal': Decimal('0'), 'total_agapes': Decimal('0'),
+        'total_salle': Decimal('0'), 'total_cout': Decimal('0'),
     })
     for d in detail:
         k = d['loge'].pk if d['loge'] else f"anon_{d['loge_nom']}"
@@ -5458,11 +5483,35 @@ def _simuler_budget(saison, nb_membres_global=None):
         a['total_fixe']      += d['part_fixe']
         a['total_mutualise'] += d['part_mutualise']
         a['total_marginal']  += d['part_marginal']
+        a['total_agapes']    += d['part_agapes']
         a['total_cout']      += d['cout_total']
+
+    # Ajouter les charges de salles de réunion par loge
+    for rs in resas_salle:
+        debut_dt = datetime.combine(rs.date, rs.heure_debut)
+        fin_dt   = datetime.combine(rs.date, rs.heure_fin)
+        if fin_dt <= debut_dt:
+            fin_dt += timedelta(days=1)
+        duree_h = (fin_dt - debut_dt).total_seconds() / 3600
+        cout_s = _cout_salle(duree_h)
+        if cout_s == 0:
+            continue
+        if rs.loge_id:
+            k = rs.loge_id
+            a = agg[k]
+            if a['loge'] is None:
+                a['loge']     = rs.loge
+                a['loge_nom'] = rs.loge.nom
+                a['type_loge'] = rs.loge.type_loge
+            a['nb_salles']   += 1
+            a['total_salle'] += cout_s
+            a['total_cout']  += cout_s
+        # salles sans loge identifiée → ignorées (pas d'imputation possible)
 
     for a in agg.values():
         eff = a['effectif'] or 1
-        a['cout_par_tenue']  = a['total_cout'] / a['nb_tenues'] if a['nb_tenues'] else Decimal('0')
+        nb_t = a['nb_tenues'] or 1
+        a['cout_par_tenue']  = a['total_cout'] / nb_t
         a['cout_par_membre'] = a['total_cout'] / Decimal(str(eff))
 
     par_loge = sorted(agg.values(), key=lambda x: -x['total_cout'])
@@ -5471,6 +5520,9 @@ def _simuler_budget(saison, nb_membres_global=None):
     total_fixe       = sum(d['part_fixe']      for d in detail)
     total_mutualise  = sum(d['part_mutualise'] for d in detail)
     total_marginal   = sum(d['part_marginal']  for d in detail)
+    total_agapes     = sum(d['part_agapes']    for d in detail)
+    total_salle      = sum(a['total_salle']    for a in agg.values())
+    nb_resas_salle_total = len(resas_salle)
 
     # ── Tarif d'équilibre ──────────────────────────────────────────
     # Pour chaque type de loge : charges imputées / effectif total des loges de ce type
@@ -5492,7 +5544,10 @@ def _simuler_budget(saison, nb_membres_global=None):
         'total_fixe':      total_fixe,
         'total_mutualise': total_mutualise,
         'total_marginal':  total_marginal,
+        'total_agapes':    total_agapes,
+        'total_salle':     total_salle,
         'nb_resas':        nb_resas,
+        'nb_resas_salle':  nb_resas_salle_total,
         'cout_moyen_tenue': total_global / nb_resas if nb_resas else Decimal('0'),
         'detail': detail,
         # équilibre
@@ -5802,9 +5857,11 @@ def budget_config(request):
         PosteCharge.objects.values_list('saison', flat=True)
     ) | {saison}, reverse=True)
 
-    total_fixe     = sum(p.montant_annuel_normalise for p in postes if p.type_charge == 'fixe' and p.actif)
+    total_fixe      = sum(p.montant_annuel_normalise for p in postes if p.type_charge == 'fixe' and p.actif)
     total_mutualise = sum(p.montant for p in postes if p.type_charge == 'mutualise' and p.actif)
     total_marginal  = sum(p.montant for p in postes if p.type_charge == 'marginal' and p.actif)
+    total_agapes    = sum(p.montant for p in postes if p.type_charge == 'agapes' and p.actif)
+    total_salle     = sum(p.montant for p in postes if p.type_charge == 'salle' and p.actif)
 
     return render(request, 'administration/budget_config.html', {
         'saison': saison,
@@ -5814,6 +5871,8 @@ def budget_config(request):
         'total_fixe': total_fixe,
         'total_mutualise': total_mutualise,
         'total_marginal': total_marginal,
+        'total_agapes': total_agapes,
+        'total_salle': total_salle,
         'type_choices': PosteCharge.TYPE_CHOICES,
         'unite_choices': PosteCharge.UNITE_CHOICES,
     })
