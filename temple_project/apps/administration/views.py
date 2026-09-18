@@ -5346,27 +5346,44 @@ def _simuler_budget(saison, nb_membres_global=None):
                 'total_marginal': Decimal('0'), 'nb_resas': 0,
                 'cout_moyen_tenue': Decimal('0'), 'detail': []}
 
-    # Grouper par (date, temple) pour trouver les jours partagés
-    jour_temple = defaultdict(list)
-    for r in resas:
-        jour_temple[(r.date, r.temple_id)].append(r)
+    # Réservations de salles validées (hors cabinets de réflexion)
+    from temple_project.apps.reservations.models import ReservationSalle
+    resas_salle = list(
+        ReservationSalle.objects
+        .filter(date__gte=debut, date__lte=fin, statut='validee')
+        .exclude(salle__type_salle='cabinet_reflexion')
+        .select_related('loge', 'salle')
+        .order_by('date', 'heure_debut')
+    )
 
-    # Réservations par temple (pour diluer le fixe)
+    # ── Nombre total d'occupants par jour (tenues temple + salles non-cabinet)
+    # → sert à répartir équitablement les charges mutualisées du bâtiment
+    occupants_par_jour = defaultdict(int)
+    for r in resas:
+        occupants_par_jour[r.date] += 1
+    for rs in resas_salle:
+        occupants_par_jour[rs.date] += 1
+
+    # ── Nombre de tenues avec agapes par jour → partage coût cuisine
+    agapes_par_jour = defaultdict(int)
+    for r in resas:
+        if r.besoin_agapes:
+            agapes_par_jour[r.date] += 1
+
+    # ── Réservations par temple (pour diluer les charges fixes par temple)
     resas_par_temple = defaultdict(list)
     for r in resas:
         resas_par_temple[r.temple_id].append(r)
 
     postes = list(PosteCharge.objects.filter(saison=saison, actif=True).select_related('temple'))
 
-    # Charges fixes globales (temple=None) → divisées par le nb TOTAL de réservations
-    # Charges fixes spécifiques à un temple → divisées par nb réservations de ce temple
+    # Charges fixes globales (temple=None) → divisées par le nb TOTAL de tenues temple
     fixe_global = Decimal('0')
     for p in postes:
         if p.type_charge == 'fixe' and p.temple_id is None:
             fixe_global += p.montant_annuel_normalise
 
     def _fixe_annuel_temple(temple_id):
-        """Charges fixes propres à un temple spécifique."""
         total = Decimal('0')
         for p in postes:
             if p.type_charge != 'fixe' or p.temple_id is None:
@@ -5375,7 +5392,8 @@ def _simuler_budget(saison, nb_membres_global=None):
                 total += p.montant_annuel_normalise
         return total
 
-    def _variable(type_charge, temple_id, duree_h, nb_resas_temple):
+    def _variable_brut(type_charge, temple_id, duree_h, nb_resas_temple):
+        """Coût brut (avant mutualisaton inter-loges) pour un type de charge."""
         total = Decimal('0')
         for p in postes:
             if p.type_charge != type_charge:
@@ -5391,18 +5409,7 @@ def _simuler_budget(saison, nb_membres_global=None):
                 total += p.montant_annuel_normalise / Decimal(str(denom))
         return total
 
-    # Réservations de salles (cabinets, réunions) validées sur la saison
-    from temple_project.apps.reservations.models import ReservationSalle
-    resas_salle = list(
-        ReservationSalle.objects
-        .filter(date__gte=debut, date__lte=fin, statut='validee')
-        .select_related('loge', 'salle')
-        .order_by('date', 'heure_debut')
-    )
-    nb_resas_salle = len(resas_salle) or 1
-
-    def _cout_salle(duree_h):
-        """Coût d'une occupation de salle selon les postes type='salle'."""
+    def _salle_brut(duree_h, nb_resas_salle_tot):
         total = Decimal('0')
         for p in postes:
             if p.type_charge != 'salle':
@@ -5412,8 +5419,10 @@ def _simuler_budget(saison, nb_membres_global=None):
             elif p.unite == 'par_heure':
                 total += p.montant * Decimal(str(round(duree_h, 4)))
             elif p.unite in ('annuel', 'mensuel'):
-                total += p.montant_annuel_normalise / Decimal(str(nb_resas_salle))
+                total += p.montant_annuel_normalise / Decimal(str(nb_resas_salle_tot or 1))
         return total
+
+    nb_resas_salle_tot = len(resas_salle) or 1
 
     detail = []
     for r in resas:
@@ -5424,16 +5433,19 @@ def _simuler_budget(saison, nb_membres_global=None):
         duree_h = (fin_dt - debut_dt).total_seconds() / 3600
 
         nb_resas_temple = len(resas_par_temple[r.temple_id]) or 1
-        nb_loges_jour   = len(jour_temple[(r.date, r.temple_id)]) or 1
+        # Tous les occupants du bâtiment ce jour (tenues + salles)
+        nb_occupants_jour = occupants_par_jour[r.date] or 1
+        nb_agapes_jour    = agapes_par_jour[r.date] or 1
 
-        part_fixe_global  = fixe_global / Decimal(str(nb_resas or 1))
-        part_fixe_temple  = _fixe_annuel_temple(r.temple_id) / nb_resas_temple
-        part_fixe         = part_fixe_global + part_fixe_temple
+        part_fixe_global = fixe_global / Decimal(str(nb_resas or 1))
+        part_fixe_temple = _fixe_annuel_temple(r.temple_id) / nb_resas_temple
+        part_fixe        = part_fixe_global + part_fixe_temple
 
-        part_mutualise = _variable('mutualise', r.temple_id, duree_h, nb_resas_temple) / nb_loges_jour
-        part_marginal  = _variable('marginal',  r.temple_id, duree_h, nb_resas_temple)
-        # Agapes : cuisine uniquement si la tenue a des agapes
-        part_agapes    = _variable('agapes', r.temple_id, duree_h, nb_resas_temple) if r.besoin_agapes else Decimal('0')
+        # Mutualisé : partagé entre TOUS les occupants du jour
+        part_mutualise = _variable_brut('mutualise', r.temple_id, duree_h, nb_resas_temple) / nb_occupants_jour
+        part_marginal  = _variable_brut('marginal',  r.temple_id, duree_h, nb_resas_temple)
+        # Cuisine/agapes : partagée entre toutes les loges avec agapes ce jour
+        part_agapes    = _variable_brut('agapes', r.temple_id, duree_h, nb_resas_temple) / nb_agapes_jour if r.besoin_agapes else Decimal('0')
         cout_total     = part_fixe + part_mutualise + part_marginal + part_agapes
 
         if nb_membres_global:
@@ -5443,8 +5455,6 @@ def _simuler_budget(saison, nb_membres_global=None):
         else:
             effectif = 30
 
-        cout_par_membre = cout_total / Decimal(str(effectif))
-
         detail.append({
             'resa': r,
             'loge_nom': r.loge.nom if r.loge else '— Hors loge (exceptionnelle / congrès)',
@@ -5452,8 +5462,8 @@ def _simuler_budget(saison, nb_membres_global=None):
             'temple': str(r.temple),
             'date': r.date,
             'duree_h': round(duree_h, 1),
-            'nb_loges_jour': nb_loges_jour,
-            'seul': nb_loges_jour == 1,
+            'nb_occupants_jour': nb_occupants_jour,
+            'seul': nb_occupants_jour == 1,
             'agapes': r.besoin_agapes,
             'part_fixe': part_fixe,
             'part_mutualise': part_mutualise,
@@ -5461,10 +5471,10 @@ def _simuler_budget(saison, nb_membres_global=None):
             'part_agapes': part_agapes,
             'cout_total': cout_total,
             'effectif': effectif,
-            'cout_par_membre': cout_par_membre,
+            'cout_par_membre': cout_total / Decimal(str(effectif)),
         })
 
-    # Agréger par loge
+    # Agréger par loge (tenues temple)
     agg = defaultdict(lambda: {
         'loge': None, 'loge_nom': '', 'type_loge': '',
         'nb_tenues': 0, 'nb_salles': 0, 'effectif': 0,
@@ -5478,37 +5488,45 @@ def _simuler_budget(saison, nb_membres_global=None):
         a['loge']      = d['loge']
         a['loge_nom']  = d['loge_nom']
         a['type_loge'] = d['loge'].type_loge if d['loge'] else ''
-        a['nb_tenues'] += 1
-        a['effectif']  = d['effectif']
+        a['nb_tenues']       += 1
+        a['effectif']         = d['effectif']
         a['total_fixe']      += d['part_fixe']
         a['total_mutualise'] += d['part_mutualise']
         a['total_marginal']  += d['part_marginal']
         a['total_agapes']    += d['part_agapes']
         a['total_cout']      += d['cout_total']
 
-    # Jours où chaque loge a déjà une tenue temple (pour éviter double-comptage)
-    tenues_par_loge_jour = set()
+    # Salles de réunion standalone : la loge paie sa part de mutualisé du jour
+    # + les charges spécifiques salle (entretien, etc.)
+    # Si d'autres occupants sont présents ce jour → le mutualisé est déjà dilué
+    tenues_loge_ids_par_jour = defaultdict(set)
     for r in resas:
         if r.loge_id:
-            tenues_par_loge_jour.add((r.loge_id, r.date))
+            tenues_loge_ids_par_jour[r.date].add(r.loge_id)
 
-    # Charges de salles de réunion : exclure cabinets de réflexion (toujours
-    # simultanés à une tenue) et exclure les jours où la loge a déjà une tenue
-    # (les fluides/électricité sont déjà allumés via la tenue temple).
     for rs in resas_salle:
-        # Cabinets de réflexion → toujours liés à une tenue, pas de coût additionnel
-        if rs.salle.type_salle == 'cabinet_reflexion':
-            continue
-        # Si la loge a une tenue temple ce même jour → coûts déjà comptés
-        if rs.loge_id and (rs.loge_id, rs.date) in tenues_par_loge_jour:
+        if not rs.loge_id:
             continue
         debut_dt = datetime.combine(rs.date, rs.heure_debut)
         fin_dt   = datetime.combine(rs.date, rs.heure_fin)
         if fin_dt <= debut_dt:
             fin_dt += timedelta(days=1)
         duree_h = (fin_dt - debut_dt).total_seconds() / 3600
-        cout_s = _cout_salle(duree_h)
-        if cout_s == 0 or not rs.loge_id:
+        nb_occupants_jour = occupants_par_jour[rs.date] or 1
+
+        # Part de mutualisé du bâtiment pour cette occupation de salle
+        cout_mutualise_salle = _variable_brut('mutualise', None, duree_h, 1) / nb_occupants_jour
+        # Charges spécifiques salle (nettoyage salle, etc.)
+        cout_salle_specifique = _salle_brut(duree_h, nb_resas_salle_tot)
+        cout_s = cout_mutualise_salle + cout_salle_specifique
+
+        # Si la loge a déjà une tenue ce jour → elle paie déjà sa part de mutualisé
+        # via la tenue temple ; ne pas doubler la part mutualisé, garder seulement
+        # le coût spécifique salle
+        if rs.loge_id in tenues_loge_ids_par_jour[rs.date]:
+            cout_s = cout_salle_specifique
+
+        if cout_s == 0:
             continue
         k = rs.loge_id
         a = agg[k]
@@ -5522,7 +5540,7 @@ def _simuler_budget(saison, nb_membres_global=None):
 
     for a in agg.values():
         eff = a['effectif'] or 1
-        nb_t = a['nb_tenues'] or 1
+        nb_t = (a['nb_tenues'] + a['nb_salles']) or 1
         a['cout_par_tenue']  = a['total_cout'] / nb_t
         a['cout_par_membre'] = a['total_cout'] / Decimal(str(eff))
 

@@ -316,7 +316,7 @@
               {% if d.seul %}
               <span class="text-muted small">Seule</span>
               {% else %}
-              <span class="badge" style="background:#FEF9C3;color:#92400E;">+{{ d.nb_loges_jour|add:-1 }}</span>
+              <span class="badge" style="background:#FEF9C3;color:#92400E;">+{{ d.nb_occupants_jour|add:-1 }}</span>
               {% endif %}
             </td>
             <td class="text-end text-muted">{{ d.part_fixe|floatformat:0 }} €</td>
