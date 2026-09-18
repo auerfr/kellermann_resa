@@ -25,8 +25,6 @@
 {# ── Tri ── #}
 <div class="d-flex gap-2 flex-wrap mb-3">
   <span class="text-muted small me-1 align-self-center">Trier par :</span>
-  {% for key, label in "saison:Tenues saison,salle:Salles saison,attente:En attente,messages:Messages"|split:"," %}
-  {% endfor %}
   <a href="?tri=saison"   class="btn btn-sm {% if tri == 'saison'   %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Tenues saison</a>
   <a href="?tri=salle"    class="btn btn-sm {% if tri == 'salle'    %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Salles saison</a>
   <a href="?tri=attente"  class="btn btn-sm {% if tri == 'attente'  %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">En attente</a>
