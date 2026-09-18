@@ -265,6 +265,89 @@
       <div class="card-body text-muted small" style="white-space:pre-line;">{{ facture.notes }}</div>
     </div>
     {% endif %}
+
+    {% if facture.statut == 'brouillon' and resas_saison %}
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header temple-header d-flex justify-content-between align-items-center"
+           style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#bloc-resas-reclasser">
+        <span>Reclasser les tenues de la saison</span>
+        <span class="small" style="color:#C8A84B;">▾</span>
+      </div>
+      <div class="collapse" id="bloc-resas-reclasser">
+        <div class="card-body pb-1 pt-2">
+          <p class="text-muted small mb-2">
+            Modifiez le type d'une tenue mal classée (ex. régulière facturée en exceptionnelle).
+            La facture sera recalculée immédiatement.
+          </p>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+            <thead>
+              <tr>
+                <th class="ps-3">Date</th>
+                <th>Temple</th>
+                <th>Type actuel</th>
+                <th class="text-end pe-3">Reclasser en</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in resas_saison %}
+              <tr>
+                <td class="ps-3">{{ r.date|date:"d/m/Y" }}</td>
+                <td class="text-muted">{{ r.temple.nom|default:"—" }}</td>
+                <td>
+                  {% if r.type_reservation == 'reguliere' %}
+                    <span class="badge bg-secondary">Régulière</span>
+                  {% elif r.type_reservation == 'exceptionnelle' %}
+                    <span class="badge" style="background:#FEF3C7;color:#B45309;">Exceptionnelle</span>
+                  {% elif r.type_reservation == 'congres' %}
+                    <span class="badge" style="background:#DBEAFE;color:#1E40AF;">Congrès</span>
+                  {% else %}
+                    <span class="badge bg-light text-muted">{{ r.type_reservation }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-end pe-3">
+                  <div class="d-flex gap-1 justify-content-end flex-wrap">
+                    {% if r.type_reservation != 'reguliere' %}
+                    <form method="post" action="{% url 'administration:finance_resa_reclasser' facture.pk r.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="nouveau_type" value="reguliere">
+                      <button class="btn btn-sm btn-outline-secondary" style="font-size:11px;padding:2px 8px;"
+                              onclick="return confirm('Reclasser cette tenue en Régulière ?')">
+                        → Régulière
+                      </button>
+                    </form>
+                    {% endif %}
+                    {% if r.type_reservation != 'exceptionnelle' %}
+                    <form method="post" action="{% url 'administration:finance_resa_reclasser' facture.pk r.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="nouveau_type" value="exceptionnelle">
+                      <button class="btn btn-sm btn-outline-warning" style="font-size:11px;padding:2px 8px;"
+                              onclick="return confirm('Reclasser cette tenue en Exceptionnelle ?')">
+                        → Exceptionnelle
+                      </button>
+                    </form>
+                    {% endif %}
+                    {% if r.type_reservation != 'congres' %}
+                    <form method="post" action="{% url 'administration:finance_resa_reclasser' facture.pk r.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="nouveau_type" value="congres">
+                      <button class="btn btn-sm btn-outline-primary" style="font-size:11px;padding:2px 8px;"
+                              onclick="return confirm('Reclasser cette tenue en Congrès ?')">
+                        → Congrès
+                      </button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 

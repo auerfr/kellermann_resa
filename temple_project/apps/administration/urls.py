@@ -82,6 +82,7 @@ urlpatterns = [
     path("finance/facture/<int:pk>/paiement/", views.finance_facture_paiement, name="finance_facture_paiement"),
     path("finance/facture/<int:pk>/pdf/", views.finance_facture_pdf, name="finance_facture_pdf"),
     path("finance/facture/<int:pk>/envoyer/", views.finance_facture_envoyer, name="finance_facture_envoyer"),
+    path("finance/facture/<int:pk>/resa/<int:resa_pk>/reclasser/", views.finance_resa_reclasser, name="finance_resa_reclasser"),
     path("reservation/<int:pk>/modifier/", views.modifier_reservation, name="modifier_reservation"),
     path("regles-salles/", views.regles_salle_liste, name="regles_salle_liste"),
     path("regles-salles/ajouter/", views.regle_salle_form, name="regle_salle_ajouter"),

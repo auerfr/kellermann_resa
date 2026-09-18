@@ -6233,6 +6233,20 @@ def budget_simulation(request):
     )
     params = Parametres.get_instance()
 
+    # Calcul des recettes au tarif voté et à l'équilibre (multiplication décimale impossible en template)
+    recette_lb_votee = recette_hg_votee = recette_totale_votee = deficit_votee = None
+    if sim and sim.get('eff_eq_lb') and params.tarif_membre_loge:
+        recette_lb_votee = Decimal(str(params.tarif_membre_loge)) * sim['eff_eq_lb']
+    if sim and sim.get('eff_eq_hg') and params.tarif_membre_hg:
+        recette_hg_votee = Decimal(str(params.tarif_membre_hg)) * sim['eff_eq_hg']
+    if recette_lb_votee is not None and recette_hg_votee is not None:
+        recette_totale_votee = recette_lb_votee + recette_hg_votee
+        charges_nettes = sim['total_global'] - (sim.get('recettes_exc') or Decimal('0'))
+        deficit_votee = charges_nettes - recette_totale_votee
+        charges_nettes_total = charges_nettes
+    else:
+        charges_nettes_total = None
+
     return render(request, 'administration/budget_simulation.html', {
         'saison': saison,
         'saisons_dispo': saisons_dispo,
@@ -6248,6 +6262,11 @@ def budget_simulation(request):
         'effectif_reel_hg': effectif_reel_hg,
         'nb_loges_lb': nb_loges_lb,
         'nb_loges_hg': nb_loges_hg,
+        'recette_lb_votee':      recette_lb_votee,
+        'recette_hg_votee':      recette_hg_votee,
+        'recette_totale_votee':  recette_totale_votee,
+        'deficit_votee':         deficit_votee,
+        'charges_nettes_total':  charges_nettes_total,
     })
 
 
@@ -7372,11 +7391,24 @@ def finance_facture_detail(request, pk):
     facture  = get_object_or_404(Facture.objects.select_related('loge').prefetch_related('lignes'), pk=pk)
     params   = Parametres.get_instance()
     activite = _activite_loge_saison(facture.loge, facture.saison)
+
+    # Toutes les réservations temple de la saison pour permettre le reclassement
+    from datetime import date as ddate
+    debut_s = ddate(facture.saison, 9, 1)
+    fin_s   = ddate(facture.saison + 1, 8, 31)
+    resas_saison = list(
+        Reservation.objects
+        .filter(loge=facture.loge, date__gte=debut_s, date__lte=fin_s, statut='validee')
+        .select_related('temple')
+        .order_by('date')
+    )
+
     return render(request, 'administration/finance_facture.html', {
-        'facture':  facture,
-        'params':   params,
-        'lignes':   facture.lignes.all(),
-        'activite': activite,
+        'facture':      facture,
+        'params':       params,
+        'lignes':       facture.lignes.all(),
+        'activite':     activite,
+        'resas_saison': resas_saison,
     })
 
 
@@ -7404,6 +7436,130 @@ def finance_ligne_toggle(request, pk, ligne_pk):
 
     from django.urls import reverse
     return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_resa_reclasser(request, pk, resa_pk):
+    """Change le type d'une réservation (reguliere/exceptionnelle/congres) depuis une facture brouillon."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_facture_detail', pk=pk)
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'brouillon':
+        messages.error(request, "Le reclassement n'est possible que sur un brouillon.")
+        return redirect('administration:finance_facture_detail', pk=pk)
+
+    resa = get_object_or_404(Reservation, pk=resa_pk, loge=facture.loge)
+    nouveau_type = request.POST.get('type_reservation')
+    types_valides = ('reguliere', 'exceptionnelle', 'congres')
+    if nouveau_type not in types_valides:
+        messages.error(request, "Type de réservation invalide.")
+        return redirect('administration:finance_facture_detail', pk=pk)
+
+    ancien_type = resa.type_reservation
+    resa.type_reservation = nouveau_type
+    resa.save(update_fields=['type_reservation'])
+
+    # Régénère les lignes du brouillon pour refléter le changement
+    from .models import LigneFacture
+    from decimal import Decimal as D
+
+    def _p(n):
+        return 's' if n > 1 else ''
+
+    params = Parametres.get_instance()
+    activite = _activite_loge_saison(facture.loge, facture.saison)
+
+    debut_params = params.tarif_date_effet
+    def _filtre_date(lst):
+        if not debut_params:
+            return lst
+        return [r for r in lst if r.date >= debut_params]
+
+    facture.lignes.all().delete()
+    ordre = 0
+    type_loge = facture.loge.type_loge
+    effectif  = facture.loge.effectif_total or 0
+    loge_reguliere = activite['nb_regulieres'] > 0
+
+    if loge_reguliere and effectif > 0:
+        tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
+        if tarif > 0:
+            type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
+            cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
+            LigneFacture.objects.create(
+                facture=facture, type_ligne=type_l,
+                libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €)",
+                quantite=D(str(effectif)), unite='membre',
+                montant_unitaire=tarif,
+                montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
+
+    t_exc_f     = _filtre_date(activite['tenues_exceptionnelles'])
+    t_congres_f = _filtre_date(activite['tenues_congres'])
+    exc_sans    = [r for r in t_exc_f if not r.besoin_agapes and r.type_reservation != 'funebre']
+    exc_agapes  = [r for r in t_exc_f if r.besoin_agapes]
+    exc_funebres = [r for r in t_exc_f if r.type_reservation == 'funebre']
+
+    if exc_sans:
+        n = len(exc_sans)
+        LigneFacture.objects.create(
+            facture=facture, type_ligne='tenue_exc',
+            libelle=f"Tenue{_p(n)} exceptionnelle{_p(n)} sans agapes ({n} tenue{_p(n)})",
+            quantite=D(str(n)), unite='tenue',
+            montant_unitaire=params.tarif_exc_sans_agapes,
+            montant_total=(params.tarif_exc_sans_agapes * D(str(n))).quantize(D('0.01')),
+            ordre=ordre,
+        )
+        ordre += 1
+    if exc_agapes:
+        n = len(exc_agapes)
+        LigneFacture.objects.create(
+            facture=facture, type_ligne='tenue_exc',
+            libelle=f"Tenue{_p(n)} exceptionnelle{_p(n)} avec agapes ({n} tenue{_p(n)})",
+            quantite=D(str(n)), unite='tenue',
+            montant_unitaire=params.tarif_exc_avec_agapes,
+            montant_total=(params.tarif_exc_avec_agapes * D(str(n))).quantize(D('0.01')),
+            ordre=ordre,
+        )
+        ordre += 1
+    if exc_funebres:
+        n = len(exc_funebres)
+        LigneFacture.objects.create(
+            facture=facture, type_ligne='tenue_exc',
+            libelle=f"Tenue{_p(n)} funèbre{_p(n)} ({n})",
+            quantite=D(str(n)), unite='tenue',
+            montant_unitaire=params.tarif_funebre,
+            montant_total=(params.tarif_funebre * D(str(n))).quantize(D('0.01')),
+            ordre=ordre,
+        )
+        ordre += 1
+    if t_congres_f:
+        nb_jours = sum(
+            max(1, (r.date_fin - r.date).days + 1) if r.date_fin and r.date_fin > r.date else 1
+            for r in t_congres_f
+        )
+        n = len(t_congres_f)
+        LigneFacture.objects.create(
+            facture=facture, type_ligne='tenue_exc',
+            libelle=f"Congrès / session{_p(n)} ({n} événement{_p(n)}, {nb_jours} jour{_p(nb_jours)})",
+            quantite=D(str(nb_jours)), unite='jour',
+            montant_unitaire=params.tarif_congres_jour,
+            montant_total=(params.tarif_congres_jour * D(str(nb_jours))).quantize(D('0.01')),
+            ordre=ordre,
+        )
+
+    facture.recalculer_total()
+    messages.success(request, f"Tenue du {resa.date.strftime('%d/%m/%Y')} reclassée : {ancien_type} → {nouveau_type}. Facture recalculée.")
+    return redirect('administration:finance_facture_detail', pk=pk)
 
 
 @staff_required

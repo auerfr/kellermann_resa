@@ -184,71 +184,85 @@
       Aucun effectif renseigné. Saisissez les effectifs totaux LB et HG ci-dessus.
     </div>
     {% else %}
-    <div class="row g-3">
 
-      {% if sim.tarif_eq_lb %}
-      <div class="col-md-4">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Loges bleues</div>
-        <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ sim.tarif_eq_lb|floatformat:2 }} €<span style="font-size:13px;font-weight:400;color:#64748B;"> / membre</span></div>
-        <div class="mt-1" style="font-size:12px;">
-          Tarif actuel voté : <strong>{{ params.tarif_membre_loge|floatformat:2 }} €</strong>
-          {% if params.tarif_membre_loge > sim.tarif_eq_lb %}
-          <span class="badge ms-1" style="background:#DCFCE7;color:#15803D;">excédent</span>
-          {% elif params.tarif_membre_loge < sim.tarif_eq_lb %}
-          <span class="badge ms-1" style="background:#FEE2E2;color:#B91C1C;">sous le seuil</span>
-          {% else %}
-          <span class="badge ms-1" style="background:#F0FDF4;color:#15803D;">à l'équilibre</span>
-          {% endif %}
-        </div>
-        <div class="text-muted mt-1" style="font-size:11px;">
-          {{ sim.eff_eq_lb }} membres · {{ sim.net_lb|floatformat:0 }} € net{% if sim.recettes_exc %} (après {{ sim.recettes_exc|floatformat:0 }} € déduits){% endif %}
-        </div>
-      </div>
-      {% endif %}
-
-      {% if sim.tarif_eq_hg %}
-      <div class="col-md-4">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Hauts grades</div>
-        <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ sim.tarif_eq_hg|floatformat:2 }} €<span style="font-size:13px;font-weight:400;color:#64748B;"> / membre</span></div>
-        <div class="mt-1" style="font-size:12px;">
-          Tarif actuel voté : <strong>{{ params.tarif_membre_hg|floatformat:2 }} €</strong>
-          {% if params.tarif_membre_hg > sim.tarif_eq_hg %}
-          <span class="badge ms-1" style="background:#DCFCE7;color:#15803D;">excédent</span>
-          {% elif params.tarif_membre_hg < sim.tarif_eq_hg %}
-          <span class="badge ms-1" style="background:#FEE2E2;color:#B91C1C;">sous le seuil</span>
-          {% else %}
-          <span class="badge ms-1" style="background:#F0FDF4;color:#15803D;">à l'équilibre</span>
-          {% endif %}
-        </div>
-        <div class="text-muted mt-1" style="font-size:11px;">
-          {{ sim.eff_eq_hg }} membres · {{ sim.net_hg|floatformat:0 }} € net
-        </div>
-      </div>
-      {% endif %}
-
-      <div class="col-md-4">
-        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Recette estimée vs charges</div>
-        {% if sim.eff_eq_lb or sim.eff_eq_hg %}
-        <div style="font-size:12px;" class="mt-1">
-          LB : {{ params.tarif_membre_loge|floatformat:0 }} € × {{ sim.eff_eq_lb }} = <strong>{% widthratio params.tarif_membre_loge 1 sim.eff_eq_lb %} €</strong><br>
-          HG : {{ params.tarif_membre_hg|floatformat:0 }} € × {{ sim.eff_eq_hg }} = <strong>{% widthratio params.tarif_membre_hg 1 sim.eff_eq_hg %} €</strong>
+    {# Tableau comparatif tarif voté vs équilibre #}
+    <div class="table-responsive mb-3">
+      <table class="table table-sm mb-0" style="font-size:13px;">
+        <thead>
+          <tr style="background:#F8FAFC;">
+            <th style="color:#64748B;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;"></th>
+            <th class="text-end" style="color:#64748B;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Loges bleues</th>
+            <th class="text-end" style="color:#64748B;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Hauts grades</th>
+            <th class="text-end" style="color:#64748B;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-muted">Charges imputées</td>
+            <td class="text-end">{{ sim.charges_lb|floatformat:0 }} €</td>
+            <td class="text-end">{{ sim.charges_hg|floatformat:0 }} €</td>
+            <td class="text-end fw-semibold">{{ sim.total_global|floatformat:0 }} €</td>
+          </tr>
           {% if sim.recettes_exc %}
-          <br>Recettes exc. : <strong>{{ sim.recettes_exc|floatformat:0 }} €</strong>
+          <tr style="color:#059669;">
+            <td>− Recettes exceptionnelles déduites</td>
+            <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.recettes_exc|floatformat:0 }} €</td>
+            <td></td>
+          </tr>
           {% endif %}
-        </div>
-        {% endif %}
-        <div class="text-muted mt-2" style="font-size:11px;">Charges totales simulées : <strong>{{ sim.total_global|floatformat:0 }} €</strong></div>
-      </div>
-
+          <tr style="border-top:1px solid #E2E8F0;">
+            <td class="fw-semibold">Charges nettes à couvrir</td>
+            <td class="text-end fw-semibold">{{ sim.net_lb|floatformat:0 }} €</td>
+            <td class="text-end fw-semibold">{{ sim.net_hg|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">
+              {% if charges_nettes_total %}{{ charges_nettes_total|floatformat:0 }}{% else %}{{ sim.total_global|floatformat:0 }}{% endif %} €
+            </td>
+          </tr>
+          <tr style="border-top:2px solid #0F2137;background:#F8FAFC;">
+            <td class="fw-semibold" style="color:#0F2137;">
+              Tarif d'équilibre
+              <div class="text-muted fw-normal" style="font-size:11px;">{{ sim.eff_eq_lb }} membres LB · {{ sim.eff_eq_hg }} membres HG</div>
+            </td>
+            <td class="text-end fw-bold" style="color:#0F2137;font-size:1.05rem;">
+              {% if sim.tarif_eq_lb %}{{ sim.tarif_eq_lb|floatformat:2 }} €/mbr{% else %}—{% endif %}
+            </td>
+            <td class="text-end fw-bold" style="color:#0F2137;font-size:1.05rem;">
+              {% if sim.tarif_eq_hg %}{{ sim.tarif_eq_hg|floatformat:2 }} €/mbr{% else %}—{% endif %}
+            </td>
+            <td></td>
+          </tr>
+          {% if recette_totale_votee is not None %}
+          <tr style="background:#FFFBEB;">
+            <td style="color:#92400E;">
+              Recettes au <strong>tarif voté</strong>
+              <div class="text-muted fw-normal" style="font-size:11px;">{{ params.tarif_membre_loge|floatformat:2 }} € LB · {{ params.tarif_membre_hg|floatformat:2 }} € HG</div>
+            </td>
+            <td class="text-end" style="color:#92400E;">{{ recette_lb_votee|floatformat:0 }} €</td>
+            <td class="text-end" style="color:#92400E;">{{ recette_hg_votee|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#92400E;">{{ recette_totale_votee|floatformat:0 }} €</td>
+          </tr>
+          <tr style="border-top:1px solid #FDE68A;">
+            <td class="fw-semibold">
+              {% if deficit_votee > 0 %}
+              <span style="color:#B91C1C;">Déficit (tarif voté insuffisant)</span>
+              {% elif deficit_votee < 0 %}
+              <span style="color:#059669;">Excédent (tarif voté supérieur)</span>
+              {% else %}
+              <span style="color:#059669;">Équilibre exact</span>
+              {% endif %}
+            </td>
+            <td class="text-end"></td>
+            <td class="text-end"></td>
+            <td class="text-end fw-bold" style="font-size:1.1rem;{% if deficit_votee > 0 %}color:#B91C1C;{% else %}color:#059669;{% endif %}">
+              {% if deficit_votee > 0 %}−{{ deficit_votee|floatformat:0 }}{% else %}+{{ deficit_votee|floatformat:0|slice:"1:" }}{% endif %} €
+            </td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
     </div>
+
     {% endif %}
-
-    <div class="alert alert-info mt-3 py-2 mb-0" style="font-size:12px;">
-      Tarif d'équilibre = charges nettes ÷ effectif total saisi.
-      {% if sim.recettes_exc %}
-      <strong>{{ sim.recettes_exc|floatformat:0 }} € de recettes exceptionnelles déduits des charges.</strong>
-      {% endif %}
-    </div>
   </div>
 </div>
 
