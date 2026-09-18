@@ -471,6 +471,123 @@
 </div>
 {% endif %}
 
+{# ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ── #}
+{% if guide_tarif %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header temple-header">
+    💡 Guide tarifaire — tenues exceptionnelles
+    <span class="ms-2 fw-normal" style="font-size:11px;color:#C8A84B;">Coût marginal basé sur le budget simulé (énergie + nettoyage)</span>
+  </div>
+  <div class="card-body">
+
+    <p class="text-muted small mb-3">
+      Les charges <strong>fixes de structure</strong> (loyers, assurances, salaires…) sont déjà couvertes par la cotisation annuelle des adhérents.
+      Une loge externe qui vient en exceptionnel ne supporte que les charges <strong>variables</strong> : énergie mutualisée du jour et nettoyage.
+      Le coût dépend du nombre de loges présentes le même jour.
+    </p>
+
+    <div class="table-responsive mb-3">
+      <table class="table table-sm align-middle mb-0" style="font-size:13px;">
+        <thead>
+          <tr style="background:#F8FAFC;">
+            <th class="ps-3">Scénario d'occupation</th>
+            <th class="text-end">Énergie</th>
+            <th class="text-end">Nettoyage</th>
+            <th class="text-end fw-bold">Coût réel</th>
+            <th class="text-end">Tarif voté</th>
+            <th class="text-end pe-3">Écart</th>
+          </tr>
+        </thead>
+        <tbody>
+          {# Seule #}
+          <tr>
+            <td class="ps-3 fw-semibold">Seule dans le bâtiment</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} €</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.seul|floatformat:0 }} €</td>
+            <td class="text-end">{% if guide_tarif.tarif_vote_sans %}{{ guide_tarif.tarif_vote_sans|floatformat:0 }} €{% else %}—{% endif %}</td>
+            <td class="text-end pe-3">
+              {% if guide_tarif.tarif_vote_sans %}
+                {% if guide_tarif.ecart_sans < 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">{{ guide_tarif.ecart_sans|floatformat:0 }} €</span>
+                  <span class="text-muted" style="font-size:10px;">sous le coût</span>
+                {% elif guide_tarif.ecart_sans > 0 %}
+                  <span style="color:#059669;font-weight:600;">+{{ guide_tarif.ecart_sans|floatformat:0 }} €</span>
+                {% else %}
+                  <span class="text-muted">= 0</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {# Seule avec agapes #}
+          <tr style="background:#FAFAFA;">
+            <td class="ps-3">↳ avec agapes (cuisine)</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} €</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} € + {{ guide_tarif.agapes_detail|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.seul_agapes|floatformat:0 }} €</td>
+            <td class="text-end">{% if guide_tarif.tarif_vote_avec %}{{ guide_tarif.tarif_vote_avec|floatformat:0 }} €{% else %}—{% endif %}</td>
+            <td class="text-end pe-3">
+              {% if guide_tarif.tarif_vote_avec %}
+                {% if guide_tarif.ecart_avec < 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">{{ guide_tarif.ecart_avec|floatformat:0 }} €</span>
+                  <span class="text-muted" style="font-size:10px;">sous le coût</span>
+                {% elif guide_tarif.ecart_avec > 0 %}
+                  <span style="color:#059669;font-weight:600;">+{{ guide_tarif.ecart_avec|floatformat:0 }} €</span>
+                {% else %}
+                  <span class="text-muted">= 0</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {# 2 loges #}
+          <tr>
+            <td class="ps-3 fw-semibold">2 loges le même jour</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} € ÷ 2</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.deux|floatformat:0 }} €</td>
+            <td class="text-end text-muted small">—</td>
+            <td class="text-end pe-3 text-muted small">—</td>
+          </tr>
+          {# 2 loges avec agapes #}
+          <tr style="background:#FAFAFA;">
+            <td class="ps-3">↳ avec agapes</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} € ÷ 2</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} € + {{ guide_tarif.agapes_detail|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.deux_agapes|floatformat:0 }} €</td>
+            <td class="text-end text-muted small">—</td>
+            <td class="text-end pe-3 text-muted small">—</td>
+          </tr>
+          {# 3 loges #}
+          <tr>
+            <td class="ps-3 fw-semibold">3 loges le même jour</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} € ÷ 3</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.trois|floatformat:0 }} €</td>
+            <td class="text-end text-muted small">—</td>
+            <td class="text-end pe-3 text-muted small">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="row g-2 mt-1">
+      <div class="col-12">
+        <div class="alert alert-light border py-2 mb-0" style="font-size:12px;">
+          <strong>Lecture :</strong>
+          énergie = {{ guide_tarif.energie_seul|floatformat:0 }} €/tenue (mutualisée sur {{ sim.nb_resas }} tenues/an) ·
+          nettoyage = {{ guide_tarif.nettoyage|floatformat:0 }} €/tenue ·
+          agapes = {{ guide_tarif.agapes_detail|floatformat:0 }} €/tenue avec cuisine.
+          <br>
+          Ces montants ne comprennent <strong>pas</strong> les charges fixes (déjà payées par les cotisants).
+          Si la loge externe est la seule à venir ce jour-là, elle supporte seule la totalité de l'énergie du bâtiment.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endif %}
+
 {# ── Par loge ── #}
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-header temple-header d-flex justify-content-between align-items-center">

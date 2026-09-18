@@ -6331,6 +6331,37 @@ def budget_simulation(request):
             else:
                 l['ecart_usage'] = l['ecart_hybride'] = None
 
+    # ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ─────────────
+    # Les charges fixes sont déjà couvertes par la cotisation des adhérents.
+    # Une tenue externe ne supporte que : énergie (mutualisée) + nettoyage (marginal).
+    # Scénarios : seule dans le bâtiment, 2 loges, 3 loges.
+    guide_tarif = None
+    if sim and sim.get('nb_resas') and sim['nb_resas'] > 0:
+        nb_t = Decimal(str(sim['nb_resas']))
+        cout_mutualise_par_tenue = sim['total_mutualise'] / nb_t
+        cout_marginal_par_tenue  = sim['total_marginal']  / nb_t
+        # Agapes : coût par tenue avec agapes (nb approx. = tenues avec agapes dans le détail)
+        nb_agapes = sum(1 for d in sim['detail'] if d['agapes']) or 1
+        cout_agapes_par_tenue    = sim['total_agapes'] / Decimal(str(nb_agapes))
+
+        guide_tarif = {
+            'seul':        cout_mutualise_par_tenue       + cout_marginal_par_tenue,
+            'deux':        cout_mutualise_par_tenue / 2   + cout_marginal_par_tenue,
+            'trois':       cout_mutualise_par_tenue / 3   + cout_marginal_par_tenue,
+            'supp_agapes': cout_agapes_par_tenue,
+            'seul_agapes':  cout_mutualise_par_tenue       + cout_marginal_par_tenue + cout_agapes_par_tenue,
+            'deux_agapes':  cout_mutualise_par_tenue / 2   + cout_marginal_par_tenue + cout_agapes_par_tenue,
+            # composants pour le tableau de détail
+            'energie_seul':    cout_mutualise_par_tenue,
+            'nettoyage':       cout_marginal_par_tenue,
+            'agapes_detail':   cout_agapes_par_tenue,
+            # comparaison avec tarifs votés
+            'tarif_vote_sans': params.tarif_exc_sans_agapes,
+            'tarif_vote_avec': params.tarif_exc_avec_agapes,
+            'ecart_sans':      (params.tarif_exc_sans_agapes or Decimal('0')) - (cout_mutualise_par_tenue + cout_marginal_par_tenue),
+            'ecart_avec':      (params.tarif_exc_avec_agapes or Decimal('0')) - (cout_mutualise_par_tenue + cout_marginal_par_tenue + cout_agapes_par_tenue),
+        }
+
     return render(request, 'administration/budget_simulation.html', {
         'saison': saison,
         'saisons_dispo': saisons_dispo,
@@ -6360,6 +6391,7 @@ def budget_simulation(request):
         'charges_nettes_total':  charges_nettes_total,
         'tarif_hybride_membre':  tarif_hybride_membre,
         'tarif_hybride_tenue':   tarif_hybride_tenue,
+        'guide_tarif':           guide_tarif,
     })
 
 
