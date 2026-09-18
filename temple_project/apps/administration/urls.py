@@ -76,4 +76,5 @@ urlpatterns = [
     path("salles/reserver-multi/", views.reserver_multi_salles, name="reserver_multi_salles"),
     path("demande-recurrence-salle/<int:pk>/valider/", views.valider_demande_recurrence_salle, name="valider_demande_recurrence_salle"),
     path("demande-recurrence-temple/<int:pk>/valider/", views.valider_demande_recurrence_temple, name="valider_demande_recurrence_temple"),
+    path("demande-modif/<int:pk>/valider/", views.valider_demande_modif, name="valider_demande_modif"),
 ]

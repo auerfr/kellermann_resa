@@ -330,6 +330,7 @@
               <th class="text-muted small">Lieu</th>
               <th class="text-muted small">Horaires</th>
               <th class="text-muted small">Statut</th>
+              <th class="text-muted small">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -364,13 +365,14 @@
                   <span class="badge bg-warning text-dark">En attente</span>
                 {% endif %}
               </td>
+              <td></td>
             </tr>
             {% endfor %}
 
             {# Séparateur Aujourd'hui #}
             {% if evenements_passes and evenements_futurs %}
             <tr class="sep-today">
-              <td colspan="5">— Aujourd'hui —</td>
+              <td colspan="6">— Aujourd'hui —</td>
             </tr>
             {% endif %}
 
@@ -403,6 +405,14 @@
                   <span class="badge bg-success">Validée</span>
                 {% elif e.statut == 'attente' %}
                   <span class="badge bg-warning text-dark">En attente</span>
+                {% endif %}
+              </td>
+              <td data-label="Actions">
+                {% if e.statut == 'validee' and e.obj.pk %}
+                <a href="{% url 'reservations:portail_demande_modif' token=token %}?resa_pk={{ e.obj.pk }}&resa_type={% if e.type_code == 'temple' %}temple{% else %}salle{% endif %}"
+                   class="btn btn-sm btn-outline-secondary" style="font-size:11px;padding:2px 8px;">
+                  Modifier / Annuler
+                </a>
                 {% endif %}
               </td>
             </tr>

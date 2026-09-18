@@ -51,8 +51,9 @@ def tableau_de_bord(request):
     demandes_portail_attente = DemandeAccesPortail.objects.filter(statut='attente').order_by('created_at')
     demandes_recsalle_attente = DemandeRegleRecurrenceSalle.objects.filter(statut='attente').select_related('loge').order_by('date_demande')
     demandes_rectemple_attente = DemandeRegleRecurrence.objects.filter(statut='attente').select_related('loge').order_by('date_demande')
-    from temple_project.apps.reservations.models import MessageContact
+    from temple_project.apps.reservations.models import MessageContact, DemandeModificationReservation
     messages_nouveaux = MessageContact.objects.filter(statut='nouveau').order_by('-created_at')
+    demandes_modif_attente = DemandeModificationReservation.objects.filter(statut='attente').select_related('loge', 'reservation', 'reservation_salle').order_by('created_at')
     context = {
         'attente':                  reservations_attente,
         'recentes':                 reservations_recentes,
@@ -70,6 +71,8 @@ def tableau_de_bord(request):
         'nb_demandes_rectemple':    demandes_rectemple_attente.count(),
         'messages_nouveaux':        messages_nouveaux,
         'nb_messages_nx':           messages_nouveaux.count(),
+        'demandes_modif_attente':   demandes_modif_attente,
+        'nb_demandes_modif':        demandes_modif_attente.count(),
     }
     return render(request, 'administration/tableau_de_bord.html', context)
 
@@ -388,6 +391,86 @@ def valider_acces_portail(request, pk):
         return redirect('administration:tableau_de_bord')
 
     return render(request, 'administration/valider_acces_portail.html', {'demande': demande})
+
+
+@staff_required
+def valider_demande_modif(request, pk):
+    from temple_project.apps.reservations.models import DemandeModificationReservation
+    from temple_project.apps.administration.email_utils import send_mail_kellermann
+    dmr = get_object_or_404(DemandeModificationReservation, pk=pk, statut='attente')
+
+    resa = dmr.reservation or dmr.reservation_salle
+    is_temple = dmr.reservation is not None
+
+    if request.method == 'POST':
+        decision     = request.POST.get('decision')
+        commentaire  = request.POST.get('commentaire', '').strip()
+
+        if decision == 'accepter':
+            if dmr.type_demande == 'annulation':
+                if dmr.reservation:
+                    dmr.reservation.delete()
+                elif dmr.reservation_salle:
+                    dmr.reservation_salle.delete()
+                dmr.statut = 'acceptee'
+                dmr.commentaire_admin = commentaire
+                dmr.save()
+                result_msg = "annulée"
+            elif dmr.type_demande == 'deplacement' and dmr.nouvelle_date:
+                if dmr.reservation:
+                    dmr.reservation.date = dmr.nouvelle_date
+                    dmr.reservation.save()
+                elif dmr.reservation_salle:
+                    dmr.reservation_salle.date = dmr.nouvelle_date
+                    dmr.reservation_salle.save()
+                dmr.statut = 'acceptee'
+                dmr.commentaire_admin = commentaire
+                dmr.save()
+                result_msg = f"déplacée au {dmr.nouvelle_date.strftime('%d/%m/%Y')}"
+            else:
+                dmr.statut = 'acceptee'
+                dmr.commentaire_admin = commentaire
+                dmr.save()
+                result_msg = "mise à jour"
+
+            # Notify loge
+            if dmr.loge and dmr.loge.email:
+                send_mail_kellermann(
+                    subject=f"[Kellermann] Votre demande de modification a été acceptée",
+                    message=(
+                        f"Bonjour,\n\n"
+                        f"Votre demande de {dmr.get_type_demande_display().lower()} a été acceptée.\n"
+                        f"La réservation a été {result_msg}.\n\n"
+                        f"Commentaire de l'administration : {commentaire or '(aucun)'}\n\n"
+                        f"Cordialement,\nL'équipe Kellermann"
+                    ),
+                    recipient_list=[dmr.loge.email],
+                )
+            messages.success(request, f"Demande acceptée — réservation {result_msg}.")
+        else:
+            dmr.statut = 'refusee'
+            dmr.commentaire_admin = commentaire
+            dmr.save()
+            if dmr.loge and dmr.loge.email:
+                send_mail_kellermann(
+                    subject=f"[Kellermann] Votre demande de modification a été refusée",
+                    message=(
+                        f"Bonjour,\n\n"
+                        f"Votre demande de {dmr.get_type_demande_display().lower()} n'a pas pu être accordée.\n\n"
+                        f"Motif : {commentaire or '(non précisé)'}\n\n"
+                        f"Cordialement,\nL'équipe Kellermann"
+                    ),
+                    recipient_list=[dmr.loge.email],
+                )
+            messages.success(request, "Demande refusée.")
+
+        return redirect('administration:tableau_de_bord')
+
+    return render(request, 'administration/valider_demande_modif.html', {
+        'dmr': dmr,
+        'resa': resa,
+        'is_temple': is_temple,
+    })
 
 
 def _envoyer_email_decision_salle(resa, action, commentaire_admin=''):

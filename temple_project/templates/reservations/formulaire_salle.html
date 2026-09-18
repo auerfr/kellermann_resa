@@ -34,7 +34,7 @@
                        for="salle_{{ salle.pk }}">
                   <input type="checkbox" class="form-check-input salle-cb mt-0 flex-shrink-0"
                          name="salles" value="{{ salle.pk }}" id="salle_{{ salle.pk }}">
-                  <span class="small">{{ salle.nom }}</span>
+                  <span class="small">{{ salle.nom }} <span class="text-muted">({{ salle.capacite }} pers.)</span></span>
                 </label>
               </div>
               {% endfor %}

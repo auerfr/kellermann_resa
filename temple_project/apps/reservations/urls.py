@@ -102,4 +102,7 @@ urlpatterns = [
     path("portail/<uuid:token>/demande-recurrence-salle/",
          views.portail_demande_recurrence_salle,
          name="portail_demande_recurrence_salle"),
+    path("portail/<uuid:token>/demande-modif/",
+         views.portail_demande_modif,
+         name="portail_demande_modif"),
 ]

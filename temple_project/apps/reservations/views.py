@@ -10,6 +10,7 @@ from .models import (
     RegleRecurrence, RegleRecurrenceSalle, DemandeRegleRecurrenceSalle,
     Temple, DemandeAccesPortail,
     ValidationSaison, ValidationSaisonLigne, MessageContact, AccessLog,
+    DemandeModificationReservation,
 )
 from temple_project.apps.loges.models import Loge
 from .forms import DemandeReservationForm, DemandeReservationSalleForm, DemandeCabinetsForm, DemandeBanquetForm
@@ -1852,3 +1853,90 @@ def ics_global(request):
     response = HttpResponse(content, content_type='text/calendar; charset=utf-8')
     response['Content-Disposition'] = 'inline; filename="kellermann_global.ics"'
     return response
+
+
+def portail_demande_modif(request, token):
+    """Permet à une loge de demander l'annulation ou le déplacement d'une tenue validée."""
+    from datetime import date as _date
+    demande_portail = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    loge = demande_portail.loge
+    today = _date.today()
+
+    resa_pk   = request.POST.get('resa_pk') or request.GET.get('resa_pk')
+    resa_type = request.POST.get('resa_type') or request.GET.get('resa_type', 'temple')
+
+    # Retrieve reservation (must belong to loge, be validated, and in the future)
+    resa_obj = None
+    if resa_type == 'temple':
+        resa_obj = get_object_or_404(Reservation, pk=resa_pk, loge=loge, statut='validee', date__gt=today)
+    else:
+        resa_obj = get_object_or_404(ReservationSalle, pk=resa_pk, loge=loge, statut='validee', date__gt=today)
+
+    if request.method == 'POST':
+        type_demande  = request.POST.get('type_demande', 'annulation')
+        nouvelle_date = request.POST.get('nouvelle_date', '').strip() or None
+        motif         = request.POST.get('motif', '').strip()
+
+        # Check new date is in the future for deployments
+        if type_demande == 'deplacement':
+            if not nouvelle_date:
+                messages.error(request, "La nouvelle date est obligatoire pour un déplacement.")
+                return render(request, 'reservations/portail_demande_modif.html', {
+                    'demande_portail': demande_portail, 'token': token,
+                    'resa': resa_obj, 'resa_type': resa_type, 'today': today,
+                })
+            from datetime import datetime as _dt
+            try:
+                nd = _dt.strptime(nouvelle_date, '%Y-%m-%d').date()
+            except ValueError:
+                messages.error(request, "Format de date invalide.")
+                return render(request, 'reservations/portail_demande_modif.html', {
+                    'demande_portail': demande_portail, 'token': token,
+                    'resa': resa_obj, 'resa_type': resa_type, 'today': today,
+                })
+            if nd <= today:
+                messages.error(request, "La nouvelle date doit être dans le futur.")
+                return render(request, 'reservations/portail_demande_modif.html', {
+                    'demande_portail': demande_portail, 'token': token,
+                    'resa': resa_obj, 'resa_type': resa_type, 'today': today,
+                })
+
+        kwargs = {
+            'loge': loge,
+            'type_demande': type_demande,
+            'motif': motif,
+            'nouvelle_date': nouvelle_date if type_demande == 'deplacement' else None,
+        }
+        if resa_type == 'temple':
+            kwargs['reservation'] = resa_obj
+        else:
+            kwargs['reservation_salle'] = resa_obj
+
+        DemandeModificationReservation.objects.create(**kwargs)
+
+        # Notify admin
+        type_label = "annulation" if type_demande == 'annulation' else "déplacement"
+        loge_nom = str(loge) if loge else 'Loge inconnue'
+        nd_str = f" → nouvelle date : {nouvelle_date}" if nouvelle_date else ""
+        send_mail_kellermann(
+            subject=f"[Kellermann] Demande de {type_label} — {loge_nom}",
+            message=(
+                f"Demande de {type_label} reçue depuis le portail.\n\n"
+                f"Loge    : {loge_nom}\n"
+                f"Réservation : {resa_obj.date.strftime('%d/%m/%Y')} — {resa_obj}\n"
+                f"Motif   : {motif or '(non précisé)'}{nd_str}\n\n"
+                f"À traiter dans l'administration."
+            ),
+            recipient_list=[get_email_admin()],
+        )
+
+        messages.success(request, f"Votre demande de {type_label} a bien été enregistrée. L'administration vous contactera.")
+        return redirect('reservations:portail_loge', token=token)
+
+    return render(request, 'reservations/portail_demande_modif.html', {
+        'demande_portail': demande_portail,
+        'token': token,
+        'resa': resa_obj,
+        'resa_type': resa_type,
+        'today': today,
+    })
