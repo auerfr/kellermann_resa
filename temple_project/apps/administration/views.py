@@ -1311,14 +1311,56 @@ def occupation(request):
         temple_id = int(request.GET.get('temple') or 0) or None
     except (TypeError, ValueError):
         temple_id = None
-    moment = request.GET.get('moment', 'soir')  # défaut : le soir (cas principal)
-    weekend = request.GET.get('weekend')  # '1' = inclure le week-end
+    moment = request.GET.get('moment', 'soir')
+    weekend = request.GET.get('weekend')
     ctx = _occupation_full(annee, temple_id, moment, inclure_weekend=(weekend == '1'))
     ctx['annees'] = [defaut - 1, defaut, defaut + 1]
     ctx['tous_temples'] = Temple.objects.all().order_by('nom')
     ctx['temple_sel'] = temple_id
     ctx['moment_sel'] = moment
     ctx['weekend_sel'] = weekend
+
+    # Simulation financière personnalisable via GET
+    params = Parametres.get_instance()
+    from decimal import Decimal as D, InvalidOperation
+    def _dec(name, default):
+        try:
+            v = D(request.GET.get(name, '') or str(default))
+            return v if v > 0 else D(str(default))
+        except InvalidOperation:
+            return D(str(default))
+    t_loge = _dec('t_loge', params.tarif_membre_loge)
+    t_hg   = _dec('t_hg',   params.tarif_membre_hg)
+    try:
+        mb_min = max(1, int(request.GET.get('mb_min') or 15))
+    except (TypeError, ValueError):
+        mb_min = 15
+    try:
+        mb_max = max(mb_min, int(request.GET.get('mb_max') or 20))
+    except (TypeError, ValueError):
+        mb_max = 20
+
+    cap_loges = ctx['cap_sem_bleues']
+    cap_hg    = ctx['cap_sem_hg']
+    fin_custom = {
+        't_loge': float(t_loge), 't_hg': float(t_hg),
+        'mb_min': mb_min, 'mb_max': mb_max,
+        'loge_min': round(mb_min * float(t_loge)),
+        'loge_max': round(mb_max * float(t_loge)),
+        'hg_min':   round(mb_min * float(t_hg)),
+        'hg_max':   round(mb_max * float(t_hg)),
+        'cap_loges': cap_loges, 'cap_hg': cap_hg,
+        'pot_loges_min': round(cap_loges * mb_min * float(t_loge)),
+        'pot_loges_max': round(cap_loges * mb_max * float(t_loge)),
+        'pot_hg_min':    round(cap_hg * mb_min * float(t_hg)),
+        'pot_hg_max':    round(cap_hg * mb_max * float(t_hg)),
+    }
+    ctx['fin'] = fin_custom
+    ctx['params'] = params
+    ctx['sim_t_loge'] = t_loge
+    ctx['sim_t_hg'] = t_hg
+    ctx['sim_mb_min'] = mb_min
+    ctx['sim_mb_max'] = mb_max
     return render(request, 'administration/occupation.html', ctx)
 
 
