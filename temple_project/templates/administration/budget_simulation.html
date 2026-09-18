@@ -420,11 +420,10 @@
         </thead>
         <tbody>
           {% for l in sim.par_loge %}
-          {% if l.type_loge == 'loge' or l.type_loge == 'haut_grade' %}
+          {% if l.membre_association and l.type_loge == 'loge' or l.membre_association and l.type_loge == 'haut_grade' %}
           <tr>
             <td class="ps-3 fw-semibold" style="color:#0F2137;">
               {{ l.loge_nom }}
-              {% if not l.membre_association %}<span class="badge ms-1" style="background:#FEF3C7;color:#B45309;font-size:9px;">Occas.</span>{% endif %}
             </td>
             <td class="text-center">
               {% if l.type_loge == 'haut_grade' %}

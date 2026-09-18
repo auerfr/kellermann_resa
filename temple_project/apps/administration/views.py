@@ -6310,7 +6310,14 @@ def budget_simulation(request):
         for l in sim['par_loge']:
             # Usage pur (hors agapes + salle auto-financés)
             l['cout_usage_pur'] = l['total_cout'] - l['total_agapes'] - l['total_salle']
-            # Cotisation actuelle (tarif voté × effectif)
+            # Loges occasionnelles : pas de modèle cotisation/hybride
+            if not l.get('membre_association'):
+                l['cotisation_actuelle'] = None
+                l['cout_hybride']        = None
+                l['ecart_usage']         = None
+                l['ecart_hybride']       = None
+                continue
+            # Cotisation actuelle (tarif voté × effectif) — adhérents uniquement
             eff = l.get('effectif') or 0
             if l['type_loge'] == 'loge' and params.tarif_membre_loge and eff:
                 l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_loge)) * eff
