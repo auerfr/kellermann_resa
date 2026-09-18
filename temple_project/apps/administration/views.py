@@ -5406,8 +5406,8 @@ def _simuler_budget(saison, nb_membres_global=None):
         return total
 
     nb_resas_salle_tot = len(resas_salle)
-    # Total annuel d'occupants : tenues temple + salles de réunion non-cabinet
-    total_occupants_annuel = nb_resas + nb_resas_salle_tot or 1
+    # Nombre de jours distincts où le bâtiment est ouvert (tenues + salles)
+    nb_jours_ouverts = len(occupants_par_jour) or 1
 
     def _variable_event(type_charge, temple_id, duree_h):
         """Charges par_evenement / par_heure : coût brut à diviser par occupants du jour."""
@@ -5423,8 +5423,13 @@ def _simuler_budget(saison, nb_membres_global=None):
                 total += p.montant * Decimal(str(round(duree_h, 4)))
         return total
 
-    def _variable_annuel(type_charge, temple_id, nb_resas_temple_loc):
-        """Charges annuelles/mensuelles : déjà amorties sur l'année, part par occupant."""
+    def _variable_annuel(type_charge, temple_id, nb_resas_temple_loc, nb_occupants_jour_loc):
+        """Charges annuelles/mensuelles.
+        Global bâtiment → coût journalier (annuel / nb_jours_ouverts) divisé
+        par les occupants du jour : les jours avec beaucoup de monde sont moins chers
+        par tête, et la somme annuelle est toujours exactement couverte.
+        Spécifique temple → dilué sur les tenues de ce temple.
+        """
         total = Decimal('0')
         for p in postes:
             if p.type_charge != type_charge:
@@ -5433,11 +5438,11 @@ def _simuler_budget(saison, nb_membres_global=None):
                 continue
             if p.unite in ('annuel', 'mensuel'):
                 if p.temple_id is not None:
-                    # Spécifique à un temple : dilué sur les tenues de ce temple
                     total += p.montant_annuel_normalise / Decimal(str(nb_resas_temple_loc or 1))
                 else:
-                    # Global bâtiment : dilué sur TOUS les occupants de la saison
-                    total += p.montant_annuel_normalise / Decimal(str(total_occupants_annuel))
+                    # Coût journalier / occupants du jour
+                    cout_jour = p.montant_annuel_normalise / Decimal(str(nb_jours_ouverts))
+                    total += cout_jour / Decimal(str(nb_occupants_jour_loc or 1))
         return total
 
     detail = []
@@ -5459,17 +5464,17 @@ def _simuler_budget(saison, nb_membres_global=None):
         # Mutualisé : event/heure partagé par occupants du jour + annuel/an amortie globalement
         part_mutualise = (
             _variable_event('mutualise', r.temple_id, duree_h) / nb_occupants_jour
-            + _variable_annuel('mutualise', r.temple_id, nb_resas_temple)
+            + _variable_annuel('mutualise', r.temple_id, nb_resas_temple, nb_occupants_jour)
         )
         part_marginal = (
             _variable_event('marginal', r.temple_id, duree_h)
-            + _variable_annuel('marginal', r.temple_id, nb_resas_temple)
+            + _variable_annuel('marginal', r.temple_id, nb_resas_temple, nb_occupants_jour)
         )
         # Cuisine/agapes : partagée entre toutes les loges avec agapes ce jour
         if r.besoin_agapes:
             part_agapes = (
                 _variable_event('agapes', r.temple_id, duree_h) / nb_agapes_jour
-                + _variable_annuel('agapes', r.temple_id, nb_resas_temple)
+                + _variable_annuel('agapes', r.temple_id, nb_resas_temple, nb_agapes_jour)
             )
         else:
             part_agapes = Decimal('0')
@@ -5545,7 +5550,7 @@ def _simuler_budget(saison, nb_membres_global=None):
         # (event/heure divisé par occupants du jour ; annuel déjà dans total_occupants_annuel)
         cout_mutualise_salle = (
             _variable_event('mutualise', None, duree_h) / nb_occupants_jour
-            + _variable_annuel('mutualise', None, 1)
+            + _variable_annuel('mutualise', None, 1, nb_occupants_jour)
         )
         cout_salle_specifique = _salle_brut(duree_h, nb_resas_salle_tot or 1)
         cout_s = cout_mutualise_salle + cout_salle_specifique
