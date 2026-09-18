@@ -92,22 +92,54 @@
           </div>
         </div>
         <hr>
-        <div class="small text-muted mb-2">Redevance par membre (récurrent — modèle à confirmer avec le trésorier, sert au potentiel financier) :</div>
+        <div class="small text-muted mb-2 fw-semibold">Redevances annuelles par membre (loges régulières) :</div>
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label fw-semibold">€ / membre — Loge bleue</label>
             <input type="number" step="0.01" min="0" name="tarif_membre_loge" class="form-control" value="{{ params.tarif_membre_loge }}">
           </div>
           <div class="col-md-4">
-            <label class="form-label fw-semibold">€ / membre — Haut grade</label>
+            <label class="form-label fw-semibold">€ / membre — Haut grade (interne régulier)</label>
             <input type="number" step="0.01" min="0" name="tarif_membre_hg" class="form-control" value="{{ params.tarif_membre_hg }}">
           </div>
         </div>
-        <div class="form-check mt-3">
-          <input type="checkbox" class="form-check-input" id="facturation_active" name="facturation_active" {% if params.facturation_active %}checked{% endif %}>
-          <label class="form-check-label" for="facturation_active">
-            <strong>Facturation active</strong> — décochez tant que le modèle n'est pas validé avec le trésorier (affiche un bandeau « provisoire »).
-          </label>
+        <hr>
+        <div class="small text-muted mb-2 fw-semibold">Tarifs à la tenue — occupants externes et occasionnels :</div>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Loge externe / occasionnelle (par tenue, €)</label>
+            <input type="number" step="0.01" min="0" name="tarif_loge_occasionnelle" class="form-control" value="{{ params.tarif_loge_occasionnelle }}">
+            <div class="form-text">Loge invitée, loge de passage, non membre de l'association.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Haut grade externe (par tenue, €)</label>
+            <input type="number" step="0.01" min="0" name="tarif_hg_externe" class="form-control" value="{{ params.tarif_hg_externe }}">
+            <div class="form-text">Atelier inter-obédientiel ou HG de passage.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">HG interne non régulier (par tenue, €)</label>
+            <input type="number" step="0.01" min="0" name="tarif_hg_interne_non_regulier" class="form-control" value="{{ params.tarif_hg_interne_non_regulier }}">
+            <div class="form-text">Atelier interne avec peu de tenues/an, sans règle récurrente.</div>
+          </div>
+        </div>
+        <hr>
+        <div class="row g-3 align-items-center">
+          <div class="col-auto">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="facturation_active" name="facturation_active" {% if params.facturation_active %}checked{% endif %}>
+              <label class="form-check-label" for="facturation_active">
+                <strong>Facturation exceptionnelle active</strong>
+              </label>
+            </div>
+          </div>
+          <div class="col-auto">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="module_finance_actif" name="module_finance_actif" {% if params.module_finance_actif %}checked{% endif %}>
+              <label class="form-check-label" for="module_finance_actif">
+                <strong>Module Finance (facturation annuelle) actif</strong>
+              </label>
+            </div>
+          </div>
         </div>
         <button type="submit" class="btn btn-temple mt-3">💾 Enregistrer</button>
       </form>

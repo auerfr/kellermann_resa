@@ -5866,6 +5866,110 @@ def budget_simulation_pdf(request):
         "entre les occupants simultanés. Cela représente une économie d'échelle réelle.",
         meth_style))
 
+    # ── Proposition de tarifs pour l'AG ──────────────────────────────────────
+    from reportlab.platypus import PageBreak
+    elems.append(PageBreak())
+    elems.append(Paragraph(f"Proposition de tarifs — AG Saison {saison}–{saison + 1}", titre))
+    elems.append(Spacer(1, 0.3 * cm))
+    elems.append(Paragraph(
+        "Tableau récapitulatif des tarifs à soumettre au vote de l'assemblée générale. "
+        "La colonne « Équilibre simulé » est calculée depuis la simulation ci-dessus ; "
+        "elle représente le montant minimum pour couvrir exactement les charges de la saison. "
+        "La colonne « Proposition » est pré-remplie avec les tarifs actuels des Paramètres.",
+        meth_style))
+    elems.append(Spacer(1, 0.3 * cm))
+
+    VERT_FONCE = colors.HexColor('#065F46')
+    VERT_CLAIR = colors.HexColor('#D1FAE5')
+    JAUNE      = colors.HexColor('#FEF3C7')
+    JAUNE_T    = colors.HexColor('#B45309')
+    GRIS_FOND  = colors.HexColor('#F3F4F6')
+
+    def _ligne_tarif(libelle, categorie, actuel, equilibre, note=''):
+        eq_str  = f"{equilibre:.2f} €" if equilibre is not None else "—"
+        act_str = f"{actuel:.2f} €"
+        return [libelle, categorie, act_str, eq_str, note]
+
+    eq_lb = sim.get('tarif_eq_lb')
+    eq_hg = sim.get('tarif_eq_hg')
+
+    tarif_rows = [
+        ['Type d\'occupation / loge', 'Catégorie', 'Tarif actuel', 'Équilibre simulé', 'Observations'],
+        _ligne_tarif(
+            'Cotisation annuelle / membre — Loge bleue', 'Récurrent par membre',
+            params.tarif_membre_loge, eq_lb,
+            'Multiplié par l\'effectif déclaré'),
+        _ligne_tarif(
+            'Cotisation annuelle / membre — Haut grade interne régulier', 'Récurrent par membre',
+            params.tarif_membre_hg, eq_hg,
+            'Multiplié par l\'effectif déclaré'),
+        _ligne_tarif(
+            'Loge externe / occasionnelle', 'À la tenue',
+            params.tarif_loge_occasionnelle, None,
+            'Loge invitée, de passage'),
+        _ligne_tarif(
+            'Haut grade externe', 'À la tenue',
+            params.tarif_hg_externe, None,
+            'Atelier inter-obédientiel ou de passage'),
+        _ligne_tarif(
+            'HG interne non régulier', 'À la tenue',
+            params.tarif_hg_interne_non_regulier, None,
+            '< 4 tenues/an, pas de règle récurrente'),
+        _ligne_tarif(
+            'Tenue exceptionnelle sans agapes', 'À la tenue',
+            params.tarif_exc_sans_agapes, None,
+            'Week-end / vacances scolaires'),
+        _ligne_tarif(
+            'Tenue exceptionnelle avec agapes', 'À la tenue',
+            params.tarif_exc_avec_agapes, None,
+            'Week-end / vacances, repas inclus'),
+        _ligne_tarif(
+            'Congrès / session régionale', 'Par jour',
+            params.tarif_congres_jour, None,
+            'Occupation journée complète'),
+        _ligne_tarif(
+            'Tenue funèbre exceptionnelle', 'À la tenue',
+            params.tarif_funebre, None,
+            'Week-end / vacances uniquement'),
+    ]
+
+    ag_tbl = Table(tarif_rows, colWidths=[6.5*cm, 3.5*cm, 2.5*cm, 2.5*cm, 3*cm], repeatRows=1)
+    ag_tbl.setStyle(TableStyle([
+        # En-tête
+        ('BACKGROUND',    (0,0), (-1,0),  BLEU),
+        ('TEXTCOLOR',     (0,0), (-1,0),  colors.white),
+        ('FONTNAME',      (0,0), (-1,0),  'Helvetica-Bold'),
+        ('FONTSIZE',      (0,0), (-1,-1), 8),
+        ('ALIGN',         (0,0), (-1,-1), 'LEFT'),
+        ('ALIGN',         (2,0), (3,-1),  'CENTER'),
+        ('ROWBACKGROUNDS',(0,1), (-1,-1), [colors.white, GRIS_FOND]),
+        ('GRID',          (0,0), (-1,-1), 0.25, colors.HexColor('#D1D5DB')),
+        ('TOPPADDING',    (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+        # Ligne cotisation LB — équilibre en vert
+        ('BACKGROUND',    (3,1), (3,2),  VERT_CLAIR),
+        ('TEXTCOLOR',     (3,1), (3,2),  VERT_FONCE),
+        ('FONTNAME',      (3,1), (3,2),  'Helvetica-Bold'),
+        # Lignes "à la tenue" : équilibre absent → colonne grisée
+        ('TEXTCOLOR',     (3,3), (3,-1), colors.HexColor('#9CA3AF')),
+    ]))
+    elems.append(ag_tbl)
+    elems.append(Spacer(1, 0.5 * cm))
+
+    note_ag = ParagraphStyle('note_ag', fontSize=8, textColor=GRIS, spaceAfter=3, leading=12)
+    elems.append(Paragraph(
+        "⚠ Le « tarif d'équilibre simulé » pour les cotisations par membre est calculé sur la base "
+        "des réservations validées de la saison et d'un effectif simulé. Il constitue le seuil minimum "
+        "théorique pour couvrir les charges. Tout tarif voté en-dessous crée un déficit structurel ; "
+        "tout tarif au-dessus constitue une réserve.",
+        note_ag))
+    elems.append(Paragraph(
+        "Les tarifs « à la tenue » (loges occasionnelles, exceptionnelles, congrès) n'ont pas "
+        "d'équilibre simulé direct : ils sont fixés librement par l'AG, sur la base du coût marginal "
+        "d'une occupation + une contribution solidaire aux charges fixes.",
+        note_ag))
+
     # ── Pied de page ──
     elems.append(Spacer(1, 0.8 * cm))
     elems.append(HRFlowable(width='100%', thickness=0.5, color=GRIS))
@@ -6002,11 +6106,19 @@ def facturation(request):
             de = (request.POST.get('tarif_date_effet') or '').strip()
             params.tarif_date_effet = date.fromisoformat(de) if de else None
             params.facturation_active = 'facturation_active' in request.POST
+            params.module_finance_actif = 'module_finance_actif' in request.POST
             params.tarif_membre_loge = Decimal(request.POST.get('tarif_membre_loge') or '0')
-            params.tarif_membre_hg = Decimal(request.POST.get('tarif_membre_hg') or '0')
-            params.save(update_fields=['tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
-                                       'tarif_congres_jour', 'tarif_funebre', 'tarif_date_effet',
-                                       'facturation_active', 'tarif_membre_loge', 'tarif_membre_hg'])
+            params.tarif_membre_hg   = Decimal(request.POST.get('tarif_membre_hg')   or '0')
+            params.tarif_loge_occasionnelle       = Decimal(request.POST.get('tarif_loge_occasionnelle')       or '0')
+            params.tarif_hg_externe               = Decimal(request.POST.get('tarif_hg_externe')               or '0')
+            params.tarif_hg_interne_non_regulier  = Decimal(request.POST.get('tarif_hg_interne_non_regulier')  or '0')
+            params.save(update_fields=[
+                'tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
+                'tarif_congres_jour', 'tarif_funebre', 'tarif_date_effet',
+                'facturation_active', 'module_finance_actif',
+                'tarif_membre_loge', 'tarif_membre_hg',
+                'tarif_loge_occasionnelle', 'tarif_hg_externe', 'tarif_hg_interne_non_regulier',
+            ])
             messages.success(request, "Tarifs mis à jour. Ils ne s'appliquent pas aux dates antérieures à leur entrée en vigueur.")
         except (InvalidOperation, ValueError):
             messages.error(request, "Valeurs invalides : vérifiez les montants et la date.")

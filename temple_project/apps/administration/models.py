@@ -41,6 +41,16 @@ class Parametres(models.Model):
     tarif_funebre = models.DecimalField(
         max_digits=8, decimal_places=2, default=100,
         help_text="Tenue funèbre exceptionnelle (week-end / vacances) (€)")
+    # ── Tarifs occupants externes / occasionnels ──────────────────────────────
+    tarif_loge_occasionnelle = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal('150'),
+        help_text="Loge externe ou occasionnelle (invitée, de passage), par tenue (€)")
+    tarif_hg_externe = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal('100'),
+        help_text="Atelier haut grade externe / inter-obédientiel, par tenue (€)")
+    tarif_hg_interne_non_regulier = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal('50'),
+        help_text="Atelier HG interne non régulier (2-3 tenues/an, pas de règle récurrente), par tenue (€)")
     tarif_date_effet = models.DateField(
         null=True, blank=True, default=date(2026, 6, 12),
         help_text="Date d'entrée en vigueur des tarifs (vote AG). Les occupations "
