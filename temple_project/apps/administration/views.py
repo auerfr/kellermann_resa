@@ -5358,17 +5358,24 @@ def _simuler_budget(saison, nb_membres_global=None):
 
     postes = list(PosteCharge.objects.filter(saison=saison, actif=True).select_related('temple'))
 
-    def _fixe_annuel(temple_id):
+    # Charges fixes globales (temple=None) → divisées par le nb TOTAL de réservations
+    # Charges fixes spécifiques à un temple → divisées par nb réservations de ce temple
+    fixe_global = Decimal('0')
+    for p in postes:
+        if p.type_charge == 'fixe' and p.temple_id is None:
+            fixe_global += p.montant_annuel_normalise
+
+    def _fixe_annuel_temple(temple_id):
+        """Charges fixes propres à un temple spécifique."""
         total = Decimal('0')
         for p in postes:
-            if p.type_charge != 'fixe':
+            if p.type_charge != 'fixe' or p.temple_id is None:
                 continue
-            if p.temple_id is not None and p.temple_id != temple_id:
-                continue
-            total += p.montant_annuel_normalise
+            if p.temple_id == temple_id:
+                total += p.montant_annuel_normalise
         return total
 
-    def _variable(type_charge, temple_id, duree_h):
+    def _variable(type_charge, temple_id, duree_h, nb_resas_temple):
         total = Decimal('0')
         for p in postes:
             if p.type_charge != type_charge:
@@ -5379,6 +5386,11 @@ def _simuler_budget(saison, nb_membres_global=None):
                 total += p.montant
             elif p.unite == 'par_heure':
                 total += p.montant * Decimal(str(round(duree_h, 4)))
+            elif p.unite in ('annuel', 'mensuel'):
+                # Charge annuelle/mensuelle mutualisée ou marginale : on la répartit
+                # sur le nombre de réservations du temple (ou global si temple=None)
+                denom = nb_resas_temple if p.temple_id is not None else (nb_resas or 1)
+                total += p.montant_annuel_normalise / Decimal(str(denom))
         return total
 
     detail = []
@@ -5392,9 +5404,14 @@ def _simuler_budget(saison, nb_membres_global=None):
         nb_resas_temple = len(resas_par_temple[r.temple_id]) or 1
         nb_loges_jour   = len(jour_temple[(r.date, r.temple_id)]) or 1
 
-        part_fixe      = _fixe_annuel(r.temple_id) / nb_resas_temple
-        part_mutualise = _variable('mutualise', r.temple_id, duree_h) / nb_loges_jour
-        part_marginal  = _variable('marginal',  r.temple_id, duree_h)
+        # Fixe global (tous temples) : dilué sur le total des réservations
+        part_fixe_global  = fixe_global / Decimal(str(nb_resas or 1))
+        # Fixe spécifique temple : dilué sur les réservations de ce temple
+        part_fixe_temple  = _fixe_annuel_temple(r.temple_id) / nb_resas_temple
+        part_fixe         = part_fixe_global + part_fixe_temple
+
+        part_mutualise = _variable('mutualise', r.temple_id, duree_h, nb_resas_temple) / nb_loges_jour
+        part_marginal  = _variable('marginal',  r.temple_id, duree_h, nb_resas_temple)
         cout_total     = part_fixe + part_mutualise + part_marginal
 
         if nb_membres_global:
