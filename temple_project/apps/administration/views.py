@@ -5425,7 +5425,7 @@ def _simuler_budget(saison, nb_membres_global=None):
 
         detail.append({
             'resa': r,
-            'loge_nom': r.loge.nom if r.loge else (getattr(r, 'nom_demandeur', None) or '?'),
+            'loge_nom': r.loge.nom if r.loge else '— Hors loge (exceptionnelle / congrès)',
             'loge': r.loge,
             'temple': str(r.temple),
             'date': r.date,
