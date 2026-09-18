@@ -16,7 +16,7 @@ from temple_project.apps.reservations.models import (
     DemandeRegleRecurrenceSalle, DemandeRegleRecurrence,
 )
 from temple_project.apps.loges.models import Loge, Obedience
-from .models import Parametres, JournalEvenement, Annonce, FAQ
+from .models import Parametres, JournalEvenement, Annonce, FAQ, PosteCharge
 from .journal import log_evenement
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -5309,6 +5309,261 @@ def _facturation_data(date_debut, date_fin, params):
         g['lignes'].sort(key=lambda x: x['date'])
     groupes_list = sorted(groupes.values(), key=lambda d: d['nom'].lower())
     return groupes_list, total, nb_lignes
+
+
+# ─────────────────────────────────────────────────────────────────
+#  BUDGET / SIMULATION
+# ─────────────────────────────────────────────────────────────────
+
+def _annee_saison_courante():
+    today = date.today()
+    return today.year if today.month >= 9 else today.year - 1
+
+
+def _simuler_budget(saison, nb_membres_global=None):
+    """Moteur de simulation budgétaire.
+
+    Retourne un dict avec par_loge, totaux et détail par réservation.
+    nb_membres_global : override l'effectif de chaque loge (slider UI).
+    """
+    from decimal import Decimal
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+
+    debut = date(saison, 9, 1)
+    fin   = date(saison + 1, 8, 31)
+
+    resas = list(
+        Reservation.objects
+        .filter(date__gte=debut, date__lte=fin, statut='validee')
+        .select_related('loge', 'temple')
+        .order_by('date', 'heure_debut')
+    )
+    nb_resas = len(resas)
+    if nb_resas == 0:
+        return {'par_loge': [], 'total_global': Decimal('0'),
+                'total_fixe': Decimal('0'), 'total_mutualise': Decimal('0'),
+                'total_marginal': Decimal('0'), 'nb_resas': 0,
+                'cout_moyen_tenue': Decimal('0'), 'detail': []}
+
+    # Grouper par (date, temple) pour trouver les jours partagés
+    jour_temple = defaultdict(list)
+    for r in resas:
+        jour_temple[(r.date, r.temple_id)].append(r)
+
+    # Réservations par temple (pour diluer le fixe)
+    resas_par_temple = defaultdict(list)
+    for r in resas:
+        resas_par_temple[r.temple_id].append(r)
+
+    postes = list(PosteCharge.objects.filter(saison=saison, actif=True).select_related('temple'))
+
+    def _fixe_annuel(temple_id):
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != 'fixe':
+                continue
+            if p.temple_id is not None and p.temple_id != temple_id:
+                continue
+            total += p.montant_annuel_normalise
+        return total
+
+    def _variable(type_charge, temple_id, duree_h):
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != type_charge:
+                continue
+            if p.temple_id is not None and p.temple_id != temple_id:
+                continue
+            if p.unite == 'par_evenement':
+                total += p.montant
+            elif p.unite == 'par_heure':
+                total += p.montant * Decimal(str(round(duree_h, 4)))
+        return total
+
+    detail = []
+    for r in resas:
+        debut_dt = datetime.combine(r.date, r.heure_debut)
+        fin_dt   = datetime.combine(r.date, r.heure_fin)
+        if fin_dt <= debut_dt:
+            fin_dt += timedelta(days=1)
+        duree_h = (fin_dt - debut_dt).total_seconds() / 3600
+
+        nb_resas_temple = len(resas_par_temple[r.temple_id]) or 1
+        nb_loges_jour   = len(jour_temple[(r.date, r.temple_id)]) or 1
+
+        part_fixe      = _fixe_annuel(r.temple_id) / nb_resas_temple
+        part_mutualise = _variable('mutualise', r.temple_id, duree_h) / nb_loges_jour
+        part_marginal  = _variable('marginal',  r.temple_id, duree_h)
+        cout_total     = part_fixe + part_mutualise + part_marginal
+
+        if nb_membres_global:
+            effectif = nb_membres_global
+        elif r.loge and r.loge.effectif_total > 0:
+            effectif = r.loge.effectif_total
+        else:
+            effectif = 30
+
+        cout_par_membre = cout_total / Decimal(str(effectif))
+
+        detail.append({
+            'resa': r,
+            'loge_nom': r.loge.nom if r.loge else (getattr(r, 'nom_demandeur', None) or '?'),
+            'loge': r.loge,
+            'temple': str(r.temple),
+            'date': r.date,
+            'duree_h': round(duree_h, 1),
+            'nb_loges_jour': nb_loges_jour,
+            'seul': nb_loges_jour == 1,
+            'part_fixe': part_fixe,
+            'part_mutualise': part_mutualise,
+            'part_marginal': part_marginal,
+            'cout_total': cout_total,
+            'effectif': effectif,
+            'cout_par_membre': cout_par_membre,
+        })
+
+    # Agréger par loge
+    agg = defaultdict(lambda: {
+        'loge': None, 'loge_nom': '', 'type_loge': '',
+        'nb_tenues': 0, 'effectif': 0,
+        'total_fixe': Decimal('0'), 'total_mutualise': Decimal('0'),
+        'total_marginal': Decimal('0'), 'total_cout': Decimal('0'),
+    })
+    for d in detail:
+        k = d['loge'].pk if d['loge'] else f"anon_{d['loge_nom']}"
+        a = agg[k]
+        a['loge']      = d['loge']
+        a['loge_nom']  = d['loge_nom']
+        a['type_loge'] = d['loge'].type_loge if d['loge'] else ''
+        a['nb_tenues'] += 1
+        a['effectif']  = d['effectif']
+        a['total_fixe']      += d['part_fixe']
+        a['total_mutualise'] += d['part_mutualise']
+        a['total_marginal']  += d['part_marginal']
+        a['total_cout']      += d['cout_total']
+
+    for a in agg.values():
+        eff = a['effectif'] or 1
+        a['cout_par_tenue']  = a['total_cout'] / a['nb_tenues'] if a['nb_tenues'] else Decimal('0')
+        a['cout_par_membre'] = a['total_cout'] / Decimal(str(eff))
+
+    par_loge = sorted(agg.values(), key=lambda x: -x['total_cout'])
+
+    total_global     = sum(d['cout_total']     for d in detail)
+    total_fixe       = sum(d['part_fixe']      for d in detail)
+    total_mutualise  = sum(d['part_mutualise'] for d in detail)
+    total_marginal   = sum(d['part_marginal']  for d in detail)
+
+    return {
+        'par_loge': par_loge,
+        'total_global':    total_global,
+        'total_fixe':      total_fixe,
+        'total_mutualise': total_mutualise,
+        'total_marginal':  total_marginal,
+        'nb_resas':        nb_resas,
+        'cout_moyen_tenue': total_global / nb_resas if nb_resas else Decimal('0'),
+        'detail': detail,
+    }
+
+
+@staff_required
+def budget_config(request):
+    """Saisie et gestion des postes de charges par temple et saison."""
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'ajouter':
+            from decimal import InvalidOperation as DIO
+            try:
+                temple_id = request.POST.get('temple') or None
+                PosteCharge.objects.create(
+                    saison      = saison,
+                    temple_id   = temple_id,
+                    libelle     = request.POST['libelle'].strip(),
+                    type_charge = request.POST['type_charge'],
+                    montant     = Decimal(request.POST['montant']),
+                    unite       = request.POST['unite'],
+                )
+                messages.success(request, "Poste ajouté.")
+            except (KeyError, DIO, ValueError) as e:
+                messages.error(request, f"Erreur : {e}")
+        elif action == 'supprimer':
+            PosteCharge.objects.filter(pk=request.POST.get('pk'), saison=saison).delete()
+            messages.success(request, "Poste supprimé.")
+        elif action == 'toggle':
+            p = PosteCharge.objects.filter(pk=request.POST.get('pk'), saison=saison).first()
+            if p:
+                p.actif = not p.actif
+                p.save(update_fields=['actif'])
+        elif action == 'dupliquer_saison':
+            src = int(request.POST.get('saison_source', saison - 1))
+            dst = saison
+            if src != dst:
+                for p in PosteCharge.objects.filter(saison=src):
+                    PosteCharge.objects.get_or_create(
+                        saison=dst, temple=p.temple, libelle=p.libelle,
+                        type_charge=p.type_charge,
+                        defaults={'montant': p.montant, 'unite': p.unite, 'actif': p.actif},
+                    )
+                messages.success(request, f"Postes copiés de {src}-{src+1} vers {dst}-{dst+1}.")
+        return redirect(f"{request.path}?saison={saison}")
+
+    postes = PosteCharge.objects.filter(saison=saison).select_related('temple')
+    temples = Temple.objects.all().order_by('nom')
+    saisons_dispo = sorted(set(
+        PosteCharge.objects.values_list('saison', flat=True)
+    ) | {saison}, reverse=True)
+
+    total_fixe     = sum(p.montant_annuel_normalise for p in postes if p.type_charge == 'fixe' and p.actif)
+    total_mutualise = sum(p.montant for p in postes if p.type_charge == 'mutualise' and p.actif)
+    total_marginal  = sum(p.montant for p in postes if p.type_charge == 'marginal' and p.actif)
+
+    return render(request, 'administration/budget_config.html', {
+        'saison': saison,
+        'saisons_dispo': saisons_dispo,
+        'postes': postes,
+        'temples': temples,
+        'total_fixe': total_fixe,
+        'total_mutualise': total_mutualise,
+        'total_marginal': total_marginal,
+        'type_choices': PosteCharge.TYPE_CHOICES,
+        'unite_choices': PosteCharge.UNITE_CHOICES,
+    })
+
+
+@staff_required
+def budget_simulation(request):
+    """Simulation de répartition des charges par loge."""
+    from decimal import Decimal
+    saison       = int(request.GET.get('saison') or _annee_saison_courante())
+    nb_membres   = request.GET.get('nb_membres', '')
+    nb_membres_v = int(nb_membres) if nb_membres.isdigit() and 1 <= int(nb_membres) <= 200 else None
+
+    postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
+    sim = _simuler_budget(saison, nb_membres_v) if postes_actifs > 0 else None
+
+    temples = Temple.objects.all().order_by('nom')
+    saisons_dispo = sorted(set(
+        PosteCharge.objects.values_list('saison', flat=True)
+    ) | {saison}, reverse=True)
+
+    # Tarif annuel suggéré : total annuel normalisé des fixe + estimation variable
+    total_fixe_annuel = sum(
+        p.montant_annuel_normalise
+        for p in PosteCharge.objects.filter(saison=saison, actif=True, type_charge='fixe')
+    )
+
+    return render(request, 'administration/budget_simulation.html', {
+        'saison': saison,
+        'saisons_dispo': saisons_dispo,
+        'nb_membres': nb_membres_v or '',
+        'sim': sim,
+        'postes_actifs': postes_actifs,
+        'total_fixe_annuel': total_fixe_annuel,
+        'temples': temples,
+    })
 
 
 @staff_required

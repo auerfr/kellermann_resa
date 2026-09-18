@@ -175,6 +175,50 @@ class Annonce(models.Model):
         """Identifiant de version pour le sessionStorage (change à chaque modification)."""
         return int(self.updated_at.timestamp()) if self.updated_at else 0
 
+class PosteCharge(models.Model):
+    """Poste de charge d'infrastructure pour simulation budgétaire."""
+    TYPE_CHOICES = [
+        ('fixe',      'Charge fixe (loyer, assurance, maintenance…)'),
+        ('mutualise', 'Variable mutualisée (chauffage, électricité de base…)'),
+        ('marginal',  'Variable marginale (nettoyage, consommables…)'),
+    ]
+    UNITE_CHOICES = [
+        ('annuel',        'Par an'),
+        ('mensuel',       'Par mois'),
+        ('par_heure',     'Par heure d\'occupation'),
+        ('par_evenement', 'Par événement'),
+    ]
+    temple = models.ForeignKey(
+        'reservations.Temple', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='postes_charges',
+        help_text="Laisser vide pour un poste commun à tous les temples",
+    )
+    saison    = models.PositiveIntegerField(help_text="Année de début de saison (ex : 2025 pour 2025-2026)")
+    libelle   = models.CharField(max_length=100)
+    type_charge = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    montant   = models.DecimalField(max_digits=10, decimal_places=2)
+    unite     = models.CharField(max_length=20, choices=UNITE_CHOICES)
+    actif     = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name        = "Poste de charge"
+        verbose_name_plural = "Postes de charges"
+        ordering            = ['saison', 'temple', 'type_charge', 'libelle']
+
+    def __str__(self):
+        return f"{self.libelle} ({self.get_type_charge_display()}, {self.montant} € / {self.get_unite_display()})"
+
+    @property
+    def montant_annuel_normalise(self):
+        """Pour les postes fixes : ramène à une valeur annuelle."""
+        from decimal import Decimal
+        if self.unite == 'annuel':
+            return self.montant
+        if self.unite == 'mensuel':
+            return self.montant * Decimal('12')
+        return Decimal('0')
+
+
 class FAQ(models.Model):
     """Entrée de FAQ — gérable par l'admin sans toucher au code."""
     CATEGORIE_CHOICES = [

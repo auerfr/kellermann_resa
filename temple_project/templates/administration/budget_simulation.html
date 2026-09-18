@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Simulation budgétaire{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📊 Simulation budgétaire</h1>
+    <p class="text-muted small mb-0">Répartition des charges d'infrastructure par loge · Saison {{ saison }}-{{ saison|add:1 }}</p>
+  </div>
+  <a href="{% url 'administration:budget_config' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">
+    ⚙️ Configurer les postes
+  </a>
+</div>
+
+{% if messages %}{% for msg in messages %}
+<div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
+{% endfor %}{% endif %}
+
+{# ── Paramètres de simulation ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-3">
+    <form method="get" class="d-flex align-items-end gap-3 flex-wrap">
+
+      <div>
+        <label class="form-label mb-1" style="font-size:12px;">Saison</label>
+        <select name="saison" class="form-select form-select-sm no-select2" style="width:140px;">
+          {% for s in saisons_dispo %}
+          <option value="{{ s }}" {% if s == saison %}selected{% endif %}>{{ s }}-{{ s|add:1 }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="min-width:260px;">
+        <label class="form-label mb-1" style="font-size:12px;">
+          Effectif global (override) :
+          <strong id="nb-val">{% if nb_membres %}{{ nb_membres }}{% else %}— (par loge){% endif %}</strong>
+        </label>
+        <input type="range" name="nb_membres" id="nb-slider"
+               min="0" max="120" step="5"
+               value="{% if nb_membres %}{{ nb_membres }}{% else %}0{% endif %}"
+               class="form-range"
+               oninput="document.getElementById('nb-val').textContent = this.value > 0 ? this.value + ' membres' : '— (par loge)'">
+        <div class="d-flex justify-content-between" style="font-size:10px;color:#94A3B8;margin-top:-2px;">
+          <span>Par loge</span><span>15</span><span>30</span><span>60</span><span>90</span><span>120</span>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-sm">Simuler</button>
+
+      {% if nb_membres %}
+      <a href="?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">✕ Réinitialiser</a>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+{% if not postes_actifs %}
+<div class="alert alert-warning">
+  Aucun poste de charge actif pour la saison {{ saison }}-{{ saison|add:1 }}.
+  <a href="{% url 'administration:budget_config' %}?saison={{ saison }}">Configurer les postes →</a>
+</div>
+{% elif not sim %}
+<div class="alert alert-info">
+  Aucune tenue validée sur cette saison — impossible de simuler.
+</div>
+{% else %}
+
+{# ── KPI globaux ── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center py-3">
+      <div style="font-size:1.6rem;font-weight:700;color:#0F2137;">{{ sim.total_global|floatformat:0 }} €</div>
+      <div class="text-muted small">Charge totale simulée</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center py-3">
+      <div style="font-size:1.6rem;font-weight:700;color:#0F2137;">{{ sim.nb_resas }}</div>
+      <div class="text-muted small">Tenues validées</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center py-3">
+      <div style="font-size:1.6rem;font-weight:700;color:#D97706;">{{ sim.cout_moyen_tenue|floatformat:0 }} €</div>
+      <div class="text-muted small">Coût moyen / tenue</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center py-3">
+      <div style="font-size:1.6rem;font-weight:700;color:#7C3AED;">{{ total_fixe_annuel|floatformat:0 }} €</div>
+      <div class="text-muted small">Charges fixes / an</div>
+    </div>
+  </div>
+</div>
+
+{# ── Décomposition ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-3">
+    <div class="row text-center g-2">
+      <div class="col-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;">Fixe</div>
+        <div class="fw-bold">{{ sim.total_fixe|floatformat:0 }} €</div>
+      </div>
+      <div class="col-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#B45309;">Mutualisé</div>
+        <div class="fw-bold">{{ sim.total_mutualise|floatformat:0 }} €</div>
+      </div>
+      <div class="col-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#5B21B6;">Marginal</div>
+        <div class="fw-bold">{{ sim.total_marginal|floatformat:0 }} €</div>
+      </div>
+    </div>
+    <div class="progress mt-2" style="height:8px;">
+      {% if sim.total_global %}
+      {% widthratio sim.total_fixe sim.total_global 100 as pct_fixe %}
+      {% widthratio sim.total_mutualise sim.total_global 100 as pct_mut %}
+      <div class="progress-bar" style="width:{{ pct_fixe }}%;background:#0F2137;"></div>
+      <div class="progress-bar" style="width:{{ pct_mut }}%;background:#D97706;"></div>
+      <div class="progress-bar" style="width:{% widthratio sim.total_marginal sim.total_global 100 %}%;background:#7C3AED;"></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Par loge ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header temple-header d-flex justify-content-between align-items-center">
+    <span>Répartition par loge</span>
+    {% if nb_membres %}<span style="font-size:11px;font-weight:400;">Effectif forcé : {{ nb_membres }} membres</span>{% endif %}
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th class="ps-3">Loge</th>
+          <th class="text-center">Type</th>
+          <th class="text-center">Tenues</th>
+          <th class="text-center">Effectif</th>
+          <th class="text-end">Charge totale</th>
+          <th class="text-end">Coût / tenue</th>
+          <th class="text-end pe-3">Coût / membre</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in sim.par_loge %}
+        <tr>
+          <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
+          <td class="text-center">
+            {% if l.type_loge == 'haut_grade' %}
+            <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
+            {% else %}
+            <span class="badge bg-secondary">LB</span>
+            {% endif %}
+          </td>
+          <td class="text-center">{{ l.nb_tenues }}</td>
+          <td class="text-center text-muted small">{{ l.effectif }}</td>
+          <td class="text-end fw-semibold">{{ l.total_cout|floatformat:0 }} €</td>
+          <td class="text-end text-muted">{{ l.cout_par_tenue|floatformat:0 }} €</td>
+          <td class="text-end pe-3">
+            <span class="badge rounded-pill" style="background:#F0F9FF;color:#0369A1;">
+              {{ l.cout_par_membre|floatformat:2 }} €
+            </span>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Aucune donnée.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Détail par tenue ── #}
+<details class="mb-4">
+  <summary class="btn btn-outline-secondary btn-sm mb-2">Voir le détail par tenue ({{ sim.nb_resas }})</summary>
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:12.5px;">
+        <thead>
+          <tr>
+            <th class="ps-3">Date</th>
+            <th>Loge</th>
+            <th>Temple</th>
+            <th class="text-center">Durée</th>
+            <th class="text-center">Cohabit.</th>
+            <th class="text-end">Fixe</th>
+            <th class="text-end">Mutualisé</th>
+            <th class="text-end">Marginal</th>
+            <th class="text-end pe-3">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in sim.detail %}
+          <tr {% if not d.seul %}style="background:#FFFDF0;"{% endif %}>
+            <td class="ps-3 text-muted">{{ d.date|date:"d/m/Y" }}</td>
+            <td class="fw-semibold" style="color:#0F2137;">{{ d.loge_nom }}</td>
+            <td class="text-muted">{{ d.temple }}</td>
+            <td class="text-center text-muted">{{ d.duree_h }}h</td>
+            <td class="text-center">
+              {% if d.seul %}
+              <span class="text-muted small">Seule</span>
+              {% else %}
+              <span class="badge" style="background:#FEF9C3;color:#92400E;">+{{ d.nb_loges_jour|add:-1 }}</span>
+              {% endif %}
+            </td>
+            <td class="text-end text-muted">{{ d.part_fixe|floatformat:0 }} €</td>
+            <td class="text-end text-muted">{{ d.part_mutualise|floatformat:0 }} €</td>
+            <td class="text-end text-muted">{{ d.part_marginal|floatformat:0 }} €</td>
+            <td class="text-end pe-3 fw-semibold">{{ d.cout_total|floatformat:0 }} €</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</details>
+
+<div class="text-muted mt-2" style="font-size:11px;">
+  💡 Charges fixes réparties sur l'ensemble des tenues du temple concerné.
+  Cohabitants (fond jaune) = le mutualisé est partagé entre toutes les loges présentes ce jour.
+  Effectif par loge = <code>effectif_total</code> de la fiche loge (ou 30 si non renseigné){% if nb_membres %}, overridé à {{ nb_membres }}{% endif %}.
+</div>
+
+{% endif %}
+
+{% endblock %}

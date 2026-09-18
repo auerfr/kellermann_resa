@@ -6,7 +6,11 @@
     <h1 class="h3 temple-title mb-1">💶 Facturation</h1>
     <p class="text-muted mb-0">Récapitulatif des réservations exceptionnelles et congrès (validées) pour le trésorier.</p>
   </div>
-  <a href="/admin/" class="btn btn-sm btn-outline-secondary">← Tableau de bord</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'administration:budget_simulation' %}" class="btn btn-sm btn-primary">📊 Simulation budgétaire</a>
+    <a href="{% url 'administration:budget_config' %}" class="btn btn-sm btn-outline-secondary">💶 Budget infrastructure</a>
+    <a href="/admin/" class="btn btn-sm btn-outline-secondary">← Tableau de bord</a>
+  </div>
 </div>
 
 {% if not params.facturation_active %}

@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Budget infrastructure{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">💶 Budget infrastructure</h1>
+    <p class="text-muted small mb-0">Saisie des charges par temple et par saison · Saison {{ saison }}-{{ saison|add:1 }}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    <a href="{% url 'administration:budget_simulation' %}?saison={{ saison }}"
+       class="btn btn-primary btn-sm">📊 Simulation →</a>
+    <a href="{% url 'administration:facturation' %}" class="btn btn-outline-secondary btn-sm">Facturation</a>
+  </div>
+</div>
+
+{% if messages %}{% for msg in messages %}
+<div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
+{% endfor %}{% endif %}
+
+{# ── Sélecteur de saison ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-2 px-3 d-flex align-items-center gap-3 flex-wrap">
+    <span class="text-muted small fw-semibold">Saison :</span>
+    {% for s in saisons_dispo %}
+    <a href="?saison={{ s }}"
+       class="btn btn-sm {% if s == saison %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+      {{ s }}-{{ s|add:1 }}
+    </a>
+    {% endfor %}
+    {# Saison suivante si non dispo #}
+    {% with next=saison|add:1 %}
+    {% if next not in saisons_dispo %}
+    <form method="post" class="d-inline">{% csrf_token %}
+      <input type="hidden" name="action" value="dupliquer_saison">
+      <input type="hidden" name="saison_source" value="{{ saison }}">
+      <button class="btn btn-sm btn-outline-success" title="Copier les postes {{ saison }}-{{ saison|add:1 }} vers {{ next }}-{{ next|add:1 }}">
+        ＋ Créer {{ next }}-{{ next|add:1 }}
+      </button>
+    </form>
+    {% endif %}
+    {% endwith %}
+  </div>
+</div>
+
+{# ── Résumé annuel ── #}
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Charges fixes / an</div>
+        <div class="fw-bold" style="font-size:1.5rem;color:#0F2137;">{{ total_fixe|floatformat:0 }} €</div>
+        <div class="text-muted small">Loyer, assurances, maintenance</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Variable mutualisé / événement</div>
+        <div class="fw-bold" style="font-size:1.5rem;color:#D97706;">{{ total_mutualise|floatformat:2 }} €</div>
+        <div class="text-muted small">Chauffage, électricité (partagés)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Variable marginal / événement</div>
+        <div class="fw-bold" style="font-size:1.5rem;color:#7C3AED;">{{ total_marginal|floatformat:2 }} €</div>
+        <div class="text-muted small">Nettoyage, consommables</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Tableau des postes ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header temple-header">Postes de charges — Saison {{ saison }}-{{ saison|add:1 }}</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th class="ps-3">Libellé</th>
+          <th>Type</th>
+          <th>Temple</th>
+          <th class="text-end">Montant</th>
+          <th>Unité</th>
+          <th class="text-center">Actif</th>
+          <th class="text-end pe-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in postes %}
+        <tr {% if not p.actif %}style="opacity:.45;"{% endif %}>
+          <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ p.libelle }}</td>
+          <td>
+            {% if p.type_charge == 'fixe' %}
+            <span class="badge bg-secondary">Fixe</span>
+            {% elif p.type_charge == 'mutualise' %}
+            <span class="badge" style="background:#FEF3C7;color:#B45309;">Mutualisé</span>
+            {% else %}
+            <span class="badge" style="background:#EDE9FE;color:#5B21B6;">Marginal</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">{{ p.temple|default:"Tous" }}</td>
+          <td class="text-end fw-semibold">{{ p.montant|floatformat:2 }} €</td>
+          <td class="text-muted small">{{ p.get_unite_display }}</td>
+          <td class="text-center">
+            <form method="post" class="d-inline">{% csrf_token %}
+              <input type="hidden" name="action" value="toggle">
+              <input type="hidden" name="pk" value="{{ p.pk }}">
+              <button class="btn btn-sm {% if p.actif %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                      style="padding:2px 8px;font-size:11px;">
+                {% if p.actif %}✓{% else %}✗{% endif %}
+              </button>
+            </form>
+          </td>
+          <td class="text-end pe-3">
+            <form method="post" class="d-inline"
+                  onsubmit="return confirm('Supprimer ce poste ?')">{% csrf_token %}
+              <input type="hidden" name="action" value="supprimer">
+              <input type="hidden" name="pk" value="{{ p.pk }}">
+              <button class="btn btn-sm btn-outline-danger" style="padding:2px 8px;font-size:11px;">🗑</button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">
+          Aucun poste pour cette saison.
+          <a href="{% url 'administration:budget_config' %}?saison={{ saison|add:-1 }}">
+            Voir la saison précédente
+          </a> ou ajoutez un poste ci-dessous.
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Formulaire d'ajout ── #}
+<div class="card border-0 shadow-sm">
+  <div class="card-header temple-header">Ajouter un poste</div>
+  <div class="card-body">
+    <form method="post" class="row g-3 align-items-end">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="ajouter">
+
+      <div class="col-md-3">
+        <label class="form-label">Libellé <span class="text-danger">*</span></label>
+        <input type="text" name="libelle" class="form-control" required
+               placeholder="ex : Loyer annuel, Électricité base…">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Type <span class="text-danger">*</span></label>
+        <select name="type_charge" class="form-select no-select2" required>
+          {% for val, lbl in type_choices %}
+          <option value="{{ val }}">{{ lbl|truncatechars:28 }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Temple</label>
+        <select name="temple" class="form-select no-select2">
+          <option value="">Tous les temples</option>
+          {% for t in temples %}
+          <option value="{{ t.pk }}">{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Montant (€) <span class="text-danger">*</span></label>
+        <input type="number" name="montant" class="form-control" required
+               min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Unité <span class="text-danger">*</span></label>
+        <select name="unite" class="form-select no-select2" required>
+          {% for val, lbl in unite_choices %}
+          <option value="{{ val }}">{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <button type="submit" class="btn btn-primary w-100">＋</button>
+      </div>
+    </form>
+
+    <div class="alert alert-info mt-3 py-2" style="font-size:12.5px;">
+      <strong>Rappel :</strong>
+      <strong>Fixe</strong> = s'applique toute l'année (loyer, assurance) — divisé par le nombre de tenues de la saison. ·
+      <strong>Mutualisé</strong> = s'allume dès qu'une loge est présente, partagé si plusieurs loges ce jour-là. ·
+      <strong>Marginal</strong> = par tenue, quelle que soit la cooccupation.
+    </div>
+  </div>
+</div>
+
+{% endblock %}
