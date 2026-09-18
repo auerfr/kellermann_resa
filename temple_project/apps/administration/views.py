@@ -7053,10 +7053,13 @@ def finance_saison(request):
 
 @staff_required
 def finance_generer_brouillons(request):
-    """Génère (ou régénère) les brouillons de factures depuis la simulation."""
+    """Génère (ou régénère) les brouillons de factures annuelles par loge.
+
+    Modèle : effectif_total × tarif_membre voté en AG.
+    Les tenues exceptionnelles/congrès sont ajoutées en lignes séparées.
+    """
     from .models import Facture, LigneFacture
     from decimal import Decimal as D
-    from datetime import date as ddate
 
     guard = _finance_guard(request)
     if guard:
@@ -7067,17 +7070,32 @@ def finance_generer_brouillons(request):
 
     saison = int(request.POST.get('saison') or _annee_saison_courante())
     params = Parametres.get_instance()
-    sim = _simuler_budget(saison)
 
-    if not sim or not sim.get('par_loge'):
-        messages.error(request, "Aucune donnée de simulation disponible pour cette saison.")
-        return redirect(f"{request.build_absolute_uri('/')[:-1]}{__import__('django.urls', fromlist=['reverse']).reverse('administration:finance_saison')}?saison={saison}")
+    # Toutes les loges actives qui ont eu des réservations validées cette saison
+    from apps.loges.models import Loge
+    from datetime import date as ddate
+    debut_saison = ddate(saison, 9, 1)
+    fin_saison   = ddate(saison + 1, 8, 31)
 
-    nb_crees = nb_maj = 0
+    loges_actives = Loge.objects.filter(actif=True).order_by('nom')
 
-    for agg in sim['par_loge']:
-        loge = agg.get('loge')
-        if not loge:
+    nb_crees = nb_maj = nb_ignores = 0
+    date_effet = params.tarif_date_effet
+
+    def _p(n):
+        """Pluriel simple."""
+        return 's' if n > 1 else ''
+
+    def _filtre_date(lst):
+        if not date_effet:
+            return lst
+        return [r for r in lst if r.date >= date_effet]
+
+    for loge in loges_actives:
+        activite = _activite_loge_saison(loge, saison)
+
+        # Une loge sans aucune réservation cette saison n'a pas de facture
+        if activite['nb_total'] == 0 and not activite['nb_salles']:
             continue
 
         facture, created = Facture.objects.get_or_create(
@@ -7085,251 +7103,91 @@ def finance_generer_brouillons(request):
             defaults={'statut': 'brouillon'}
         )
         if facture.statut not in ('brouillon',):
-            # Ne pas écraser une facture émise ou payée
+            nb_ignores += 1
             continue
 
-        # Supprimer les lignes existantes pour régénérer proprement
         facture.lignes.all().delete()
-
         ordre = 0
-        type_loge = agg.get('type_loge', '')
-        effectif  = agg.get('effectif') or 0
-
-        # Récapitulatif activité pour distinguer loges régulières / occasionnelles
-        activite = _activite_loge_saison(loge, saison)
+        type_loge = loge.type_loge  # 'loge' ou 'haut_grade'
+        effectif  = loge.effectif_total or 0
         loge_reguliere = activite['nb_regulieres'] > 0
 
-        if loge_reguliere:
-            # ══════════════════════════════════════════════════════════════════
-            # MODÈLE ANNUEL — loge avec tenues régulières
-            # Deux sous-modèles exclusifs :
-            #   A) tarif_membre > 0 → cotisation forfaitaire par membre
-            #   B) tarif_membre = 0 → imputation au réel par tenue (simulation)
-            # ══════════════════════════════════════════════════════════════════
-            tarif_membre = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
-            modele_forfait = (tarif_membre > 0)
-
-            if modele_forfait:
-                # ── Modèle A : cotisation annuelle forfaitaire ─────────────
-                if effectif > 0:
-                    type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
-                    cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
-                    LigneFacture.objects.create(
-                        facture=facture, type_ligne=type_l,
-                        libelle=f"Cotisation annuelle — {cat} ({effectif} membres × {tarif_membre} €)",
-                        quantite=D(str(effectif)), unite='membre',
-                        montant_unitaire=tarif_membre,
-                        montant_total=(tarif_membre * D(str(effectif))).quantize(D('0.01')),
-                        ordre=ordre,
-                    )
-                    ordre += 1
-            else:
-                # ── Modèle B : imputation au réel par tenue ───────────────
-                nb_t = agg.get('nb_tenues') or 1
-
-                total_fixe = agg.get('total_fixe', D('0'))
-                if total_fixe > 0:
-                    LigneFacture.objects.create(
-                        facture=facture, type_ligne='infrastructure_fixe',
-                        libelle=f"Part charges fixes — {nb_t} tenues",
-                        quantite=D(str(nb_t)), unite='tenue',
-                        montant_unitaire=(total_fixe / D(str(nb_t))).quantize(D('0.01')),
-                        montant_total=total_fixe.quantize(D('0.01')),
-                        ordre=ordre,
-                    )
-                    ordre += 1
-
-                total_mut = agg.get('total_mutualise', D('0'))
-                if total_mut > 0:
-                    LigneFacture.objects.create(
-                        facture=facture, type_ligne='infrastructure_mut',
-                        libelle=f"Part charges mutualisées — {nb_t} tenues",
-                        quantite=D(str(nb_t)), unite='tenue',
-                        montant_unitaire=(total_mut / D(str(nb_t))).quantize(D('0.01')),
-                        montant_total=total_mut.quantize(D('0.01')),
-                        ordre=ordre,
-                    )
-                    ordre += 1
-
-                total_marg = agg.get('total_marginal', D('0'))
-                if total_marg > 0:
-                    LigneFacture.objects.create(
-                        facture=facture, type_ligne='infrastructure_marg',
-                        libelle=f"Part charges marginales — {nb_t} tenues",
-                        quantite=D(str(nb_t)), unite='tenue',
-                        montant_unitaire=(total_marg / D(str(nb_t))).quantize(D('0.01')),
-                        montant_total=total_marg.quantize(D('0.01')),
-                        ordre=ordre,
-                    )
-                    ordre += 1
-
-            # Tenues exceptionnelles pour loges régulières
-            # (congrès, funèbres, exceptionnelles avec/sans agapes)
-            t_exc = activite['tenues_exceptionnelles']
-            t_congres = activite['tenues_congres']
-            date_effet = params.tarif_date_effet
-
-            def _filtre_tarif(lst):
-                if not date_effet:
-                    return lst
-                return [r for r in lst if r.date >= date_effet]
-
-            t_exc_f = _filtre_tarif(t_exc)
-            t_congres_f = _filtre_tarif(t_congres)
-
-            # Regrouper exceptionnelles : sans agapes / avec agapes / funèbres
-            exc_sans   = [r for r in t_exc_f if not r.besoin_agapes and r.type_reservation != 'funebre']
-            exc_agapes = [r for r in t_exc_f if r.besoin_agapes]
-            exc_funebres = [r for r in t_exc_f if r.type_reservation == 'funebre']
-
-            if exc_sans:
+        # ── Ligne principale : cotisation annuelle par membre ──────────────────
+        # Uniquement pour les loges avec tenues régulières et un effectif renseigné
+        if loge_reguliere and effectif > 0:
+            tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
+            if tarif > 0:
+                type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
+                cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
                 LigneFacture.objects.create(
-                    facture=facture, type_ligne='tenue_exc',
-                    libelle=f"Tenue{'s' if len(exc_sans) > 1 else ''} exceptionnelle{'s' if len(exc_sans) > 1 else ''} — sans agapes ({len(exc_sans)} tenue{'s' if len(exc_sans) > 1 else ''})",
-                    quantite=D(str(len(exc_sans))), unite='tenue',
-                    montant_unitaire=params.tarif_exc_sans_agapes,
-                    montant_total=(params.tarif_exc_sans_agapes * D(str(len(exc_sans)))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
-            if exc_agapes:
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='tenue_exc',
-                    libelle=f"Tenue{'s' if len(exc_agapes) > 1 else ''} exceptionnelle{'s' if len(exc_agapes) > 1 else ''} — avec agapes ({len(exc_agapes)} tenue{'s' if len(exc_agapes) > 1 else ''})",
-                    quantite=D(str(len(exc_agapes))), unite='tenue',
-                    montant_unitaire=params.tarif_exc_avec_agapes,
-                    montant_total=(params.tarif_exc_avec_agapes * D(str(len(exc_agapes)))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
-            if exc_funebres:
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='tenue_exc',
-                    libelle=f"Tenue{'s' if len(exc_funebres) > 1 else ''} funèbre{'s' if len(exc_funebres) > 1 else ''} ({len(exc_funebres)})",
-                    quantite=D(str(len(exc_funebres))), unite='tenue',
-                    montant_unitaire=params.tarif_funebre,
-                    montant_total=(params.tarif_funebre * D(str(len(exc_funebres)))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
-            if t_congres_f:
-                nb_jours_congres = sum(
-                    max(1, ((r.date_fin - r.date).days + 1) if r.date_fin and r.date_fin > r.date else 1)
-                    for r in t_congres_f
-                )
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='tenue_exc',
-                    libelle=f"Congrès / sessions ({len(t_congres_f)} événement{'s' if len(t_congres_f) > 1 else ''}, {nb_jours_congres} jour{'s' if nb_jours_congres > 1 else ''})",
-                    quantite=D(str(nb_jours_congres)), unite='jour',
-                    montant_unitaire=params.tarif_congres_jour,
-                    montant_total=(params.tarif_congres_jour * D(str(nb_jours_congres))).quantize(D('0.01')),
+                    facture=facture, type_ligne=type_l,
+                    libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €)",
+                    quantite=D(str(effectif)), unite='membre',
+                    montant_unitaire=tarif,
+                    montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
                     ordre=ordre,
                 )
                 ordre += 1
 
-            # Agapes et salle : de la simulation (coûts réels)
-            total_agapes = agg.get('total_agapes', D('0'))
-            if total_agapes > 0:
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='agapes',
-                    libelle="Usage cuisine et agapes",
-                    quantite=D('1'), unite='saison',
-                    montant_unitaire=total_agapes,
-                    montant_total=total_agapes,
-                    ordre=ordre,
-                )
-                ordre += 1
+        # ── Tenues exceptionnelles (toutes loges, après date d'effet) ─────────
+        t_exc_f    = _filtre_date(activite['tenues_exceptionnelles'])
+        t_congres_f = _filtre_date(activite['tenues_congres'])
 
-            total_salle = agg.get('total_salle', D('0'))
-            if total_salle > 0:
-                nb_s = agg.get('nb_salles') or 1
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='salle',
-                    libelle=f"Usage salle de réunion ({nb_s} occupation{'s' if nb_s > 1 else ''})",
-                    quantite=D(str(nb_s)), unite='occupation',
-                    montant_unitaire=(total_salle / D(str(nb_s))).quantize(D('0.01')),
-                    montant_total=total_salle,
-                    ordre=ordre,
-                )
-                ordre += 1
+        exc_sans    = [r for r in t_exc_f if not r.besoin_agapes and r.type_reservation != 'funebre']
+        exc_agapes  = [r for r in t_exc_f if r.besoin_agapes]
+        exc_funebres = [r for r in t_exc_f if r.type_reservation == 'funebre']
 
-        else:
-            # ══════════════════════════════════════════════════════════════════
-            # MODÈLE OCCASIONNEL — loge sans tenue régulière
-            # Facturation à la tenue aux tarifs votés (exceptionnelles, congrès)
-            # ══════════════════════════════════════════════════════════════════
-            date_effet = params.tarif_date_effet
+        if exc_sans:
+            n = len(exc_sans)
+            LigneFacture.objects.create(
+                facture=facture, type_ligne='tenue_exc',
+                libelle=f"Tenue{_p(n)} exceptionnelle{_p(n)} sans agapes ({n} tenue{_p(n)})",
+                quantite=D(str(n)), unite='tenue',
+                montant_unitaire=params.tarif_exc_sans_agapes,
+                montant_total=(params.tarif_exc_sans_agapes * D(str(n))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
 
-            def _filtre_tarif(lst):
-                if not date_effet:
-                    return lst
-                return [r for r in lst if r.date >= date_effet]
+        if exc_agapes:
+            n = len(exc_agapes)
+            LigneFacture.objects.create(
+                facture=facture, type_ligne='tenue_exc',
+                libelle=f"Tenue{_p(n)} exceptionnelle{_p(n)} avec agapes ({n} tenue{_p(n)})",
+                quantite=D(str(n)), unite='tenue',
+                montant_unitaire=params.tarif_exc_avec_agapes,
+                montant_total=(params.tarif_exc_avec_agapes * D(str(n))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
 
-            t_exc_f    = _filtre_tarif(activite['tenues_exceptionnelles'])
-            t_congres_f = _filtre_tarif(activite['tenues_congres'])
+        if exc_funebres:
+            n = len(exc_funebres)
+            LigneFacture.objects.create(
+                facture=facture, type_ligne='tenue_exc',
+                libelle=f"Tenue{_p(n)} funèbre{_p(n)} ({n})",
+                quantite=D(str(n)), unite='tenue',
+                montant_unitaire=params.tarif_funebre,
+                montant_total=(params.tarif_funebre * D(str(n))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
 
-            exc_sans   = [r for r in t_exc_f if not r.besoin_agapes and r.type_reservation != 'funebre']
-            exc_agapes = [r for r in t_exc_f if r.besoin_agapes]
-            exc_funebres = [r for r in t_exc_f if r.type_reservation == 'funebre']
-
-            if exc_sans:
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='tenue_exc',
-                    libelle=f"Tenue{'s' if len(exc_sans) > 1 else ''} exceptionnelle{'s' if len(exc_sans) > 1 else ''} — sans agapes ({len(exc_sans)} tenue{'s' if len(exc_sans) > 1 else ''})",
-                    quantite=D(str(len(exc_sans))), unite='tenue',
-                    montant_unitaire=params.tarif_exc_sans_agapes,
-                    montant_total=(params.tarif_exc_sans_agapes * D(str(len(exc_sans)))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
-            if exc_agapes:
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='tenue_exc',
-                    libelle=f"Tenue{'s' if len(exc_agapes) > 1 else ''} exceptionnelle{'s' if len(exc_agapes) > 1 else ''} — avec agapes ({len(exc_agapes)} tenue{'s' if len(exc_agapes) > 1 else ''})",
-                    quantite=D(str(len(exc_agapes))), unite='tenue',
-                    montant_unitaire=params.tarif_exc_avec_agapes,
-                    montant_total=(params.tarif_exc_avec_agapes * D(str(len(exc_agapes)))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
-            if exc_funebres:
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='tenue_exc',
-                    libelle=f"Tenue{'s' if len(exc_funebres) > 1 else ''} funèbre{'s' if len(exc_funebres) > 1 else ''} ({len(exc_funebres)})",
-                    quantite=D(str(len(exc_funebres))), unite='tenue',
-                    montant_unitaire=params.tarif_funebre,
-                    montant_total=(params.tarif_funebre * D(str(len(exc_funebres)))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
-            if t_congres_f:
-                nb_jours_congres = sum(
-                    max(1, ((r.date_fin - r.date).days + 1) if r.date_fin and r.date_fin > r.date else 1)
-                    for r in t_congres_f
-                )
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='tenue_exc',
-                    libelle=f"Congrès / sessions ({len(t_congres_f)} événement{'s' if len(t_congres_f) > 1 else ''}, {nb_jours_congres} jour{'s' if nb_jours_congres > 1 else ''})",
-                    quantite=D(str(nb_jours_congres)), unite='jour',
-                    montant_unitaire=params.tarif_congres_jour,
-                    montant_total=(params.tarif_congres_jour * D(str(nb_jours_congres))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
-
-            # Salle uniquement (pas d'agapes simulation pour occasionnels)
-            total_salle = agg.get('total_salle', D('0'))
-            if total_salle > 0:
-                nb_s = agg.get('nb_salles') or 1
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne='salle',
-                    libelle=f"Usage salle de réunion ({nb_s} occupation{'s' if nb_s > 1 else ''})",
-                    quantite=D(str(nb_s)), unite='occupation',
-                    montant_unitaire=(total_salle / D(str(nb_s))).quantize(D('0.01')),
-                    montant_total=total_salle,
-                    ordre=ordre,
-                )
-                ordre += 1
+        if t_congres_f:
+            nb_jours = sum(
+                max(1, (r.date_fin - r.date).days + 1) if r.date_fin and r.date_fin > r.date else 1
+                for r in t_congres_f
+            )
+            n = len(t_congres_f)
+            LigneFacture.objects.create(
+                facture=facture, type_ligne='tenue_exc',
+                libelle=f"Congrès / session{_p(n)} ({n} événement{_p(n)}, {nb_jours} jour{_p(nb_jours)})",
+                quantite=D(str(nb_jours)), unite='jour',
+                montant_unitaire=params.tarif_congres_jour,
+                montant_total=(params.tarif_congres_jour * D(str(nb_jours))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
 
         facture.recalculer_total()
         if created:
@@ -7337,10 +7195,11 @@ def finance_generer_brouillons(request):
         else:
             nb_maj += 1
 
-    msg = f"Brouillons générés : {nb_crees} créés, {nb_maj} mis à jour."
-    if nb_crees + nb_maj == 0:
-        msg = "Aucune loge à facturer (factures émises/payées non modifiées)."
-    messages.success(request, msg)
+    parts = [f"{nb_crees} créé{'s' if nb_crees > 1 else ''}",
+             f"{nb_maj} mis à jour"]
+    if nb_ignores:
+        parts.append(f"{nb_ignores} ignoré{'s' if nb_ignores > 1 else ''} (déjà émis/payé)")
+    messages.success(request, f"Brouillons générés — {', '.join(parts)}.")
     from django.urls import reverse
     return redirect(reverse('administration:finance_saison') + f'?saison={saison}')
 
@@ -7678,7 +7537,7 @@ def finance_facture_envoyer(request, pk):
     pdf_response = finance_facture_pdf(pdf_request, pk)
     pdf_bytes = pdf_response.content
 
-    destinataire = loge.email_contact or loge.email
+    destinataire = loge.email
     if not destinataire:
         messages.error(request, f"Aucune adresse email pour {loge.nom}.")
         from django.urls import reverse

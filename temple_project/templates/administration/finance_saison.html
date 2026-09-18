@@ -12,7 +12,7 @@
       {% csrf_token %}
       <input type="hidden" name="saison" value="{{ saison }}">
       <button class="btn btn-success btn-sm"
-              onclick="return confirm('Générer les brouillons depuis la simulation budgétaire pour la saison {{ saison }}-{{ saison|add:1 }} ?\n\nLes factures déjà émises ou payées ne seront pas modifiées.')">
+              onclick="return confirm('Générer les brouillons de facturation pour la saison {{ saison }}-{{ saison|add:1 }} ?\n\nBase : effectif × tarif voté en AG + tenues exceptionnelles.\nLes factures déjà émises ou payées ne seront pas modifiées.')">
         ⚡ Générer les brouillons
       </button>
     </form>
@@ -120,7 +120,7 @@
         {% empty %}
         <tr><td colspan="6" class="text-center text-muted py-4">
           Aucune facture pour cette saison.
-          Cliquez sur <strong>Générer les brouillons</strong> pour créer les factures depuis la simulation budgétaire.
+          Cliquez sur <strong>Générer les brouillons</strong> pour créer les factures (effectif × tarif AG + exceptionnelles).
         </td></tr>
         {% endfor %}
       </tbody>

@@ -71,8 +71,8 @@
         <div class="fw-bold mb-1" style="color:#0F2137;">{{ facture.loge.nom }}</div>
         {% if facture.loge.obedience %}<div class="text-muted small mb-1">{{ facture.loge.obedience }}</div>{% endif %}
         <div class="text-muted small">{{ facture.loge.get_type_loge_display }}</div>
-        {% if facture.loge.email_contact or facture.loge.email %}
-        <div class="text-muted small mt-2">📧 {{ facture.loge.email_contact|default:facture.loge.email }}</div>
+        {% if facture.loge.email %}
+        <div class="text-muted small mt-2">📧 {{ facture.loge.email }}</div>
         {% endif %}
       </div>
     </div>
@@ -138,11 +138,11 @@
           <span class="text-muted">Total occupations</span>
           <span class="fw-bold" style="color:#0F2137;">{{ activite.nb_total }}</span>
         </div>
-        {% if facture.loge.effectif_declare %}
+        {% if facture.loge.effectif_total %}
         <hr class="my-2">
         <div class="d-flex justify-content-between">
-          <span class="text-muted">Effectif déclaré (état J)</span>
-          <span class="fw-bold" style="color:#0F2137;">{{ facture.loge.effectif_declare }}</span>
+          <span class="text-muted">Effectif (état J)</span>
+          <span class="fw-bold" style="color:#0F2137;">{{ facture.loge.effectif_total }}</span>
         </div>
         {% endif %}
       </div>
