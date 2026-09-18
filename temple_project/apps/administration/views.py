@@ -6280,6 +6280,41 @@ def budget_simulation(request):
     else:
         charges_nettes_total = None
 
+    # ── Comparaison des modèles économiques par loge ────────────────────────
+    # Modèle hybride : cotisation fixe (charges fixes ÷ membres) + tarif tenue (variables ÷ tenues)
+    tarif_hybride_membre = tarif_hybride_tenue = None
+    if sim and sim.get('nb_resas'):
+        eff_total = (sim.get('eff_eq_lb') or 0) + (sim.get('eff_eq_hg') or 0)
+        if eff_total:
+            tarif_hybride_membre = sim['total_fixe'] / Decimal(str(eff_total))
+        nb_t = sim['nb_resas']
+        if nb_t:
+            tarif_hybride_tenue = (sim['total_mutualise'] + sim['total_marginal']) / Decimal(str(nb_t))
+
+        for l in sim['par_loge']:
+            # Usage pur (hors agapes + salle auto-financés)
+            l['cout_usage_pur'] = l['total_cout'] - l['total_agapes'] - l['total_salle']
+            # Cotisation actuelle (tarif voté × effectif)
+            eff = l.get('effectif') or 0
+            if l['type_loge'] == 'loge' and params.tarif_membre_loge and eff:
+                l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_loge)) * eff
+            elif l['type_loge'] == 'haut_grade' and params.tarif_membre_hg and eff:
+                l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_hg)) * eff
+            else:
+                l['cotisation_actuelle'] = None
+            # Modèle hybride
+            if tarif_hybride_membre and tarif_hybride_tenue and eff and l.get('nb_tenues'):
+                l['cout_hybride'] = (tarif_hybride_membre * eff
+                                     + tarif_hybride_tenue * l['nb_tenues'])
+            else:
+                l['cout_hybride'] = None
+            # Écarts vs cotisation actuelle
+            if l['cotisation_actuelle']:
+                l['ecart_usage']   = l['cout_usage_pur'] - l['cotisation_actuelle']
+                l['ecart_hybride'] = l['cout_hybride'] - l['cotisation_actuelle'] if l['cout_hybride'] else None
+            else:
+                l['ecart_usage'] = l['ecart_hybride'] = None
+
     return render(request, 'administration/budget_simulation.html', {
         'saison': saison,
         'saisons_dispo': saisons_dispo,
@@ -6307,6 +6342,8 @@ def budget_simulation(request):
         'recette_totale_votee':  recette_totale_votee,
         'deficit_votee':         deficit_votee,
         'charges_nettes_total':  charges_nettes_total,
+        'tarif_hybride_membre':  tarif_hybride_membre,
+        'tarif_hybride_tenue':   tarif_hybride_tenue,
     })
 
 
