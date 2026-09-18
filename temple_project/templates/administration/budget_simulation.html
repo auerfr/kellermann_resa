@@ -166,8 +166,11 @@
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
     <div class="card border-0 shadow-sm text-center py-3">
-      <div style="font-size:1.6rem;font-weight:700;color:#0F2137;">{{ sim.total_global|floatformat:0 }} €</div>
-      <div class="text-muted small">Charge totale simulée</div>
+      <div style="font-size:1.6rem;font-weight:700;color:#0F2137;">{{ sim.total_pour_equilibre|floatformat:0 }} €</div>
+      <div class="text-muted small">Charges à couvrir par cotisations</div>
+      {% if sim.total_auto_finance %}
+      <div class="text-muted" style="font-size:11px;">total {{ sim.total_global|floatformat:0 }} € dont {{ sim.total_auto_finance|floatformat:0 }} € auto-financés</div>
+      {% endif %}
     </div>
   </div>
   <div class="col-6 col-md-3">
@@ -214,10 +217,26 @@
         </thead>
         <tbody>
           <tr>
-            <td class="text-muted">Charges imputées</td>
+            <td class="text-muted">Charges totales simulées</td>
+            <td class="text-end text-muted">—</td>
+            <td class="text-end text-muted">—</td>
+            <td class="text-end fw-semibold">{{ sim.total_global|floatformat:0 }} €</td>
+          </tr>
+          {% if sim.total_auto_finance %}
+          <tr style="color:#059669;">
+            <td>
+              − Auto-financées (cuisine + salles)
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Couvertes par les tarifs à la tenue — non imputées à la cotisation</div>
+            </td>
+            <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.total_auto_finance|floatformat:0 }} €</td>
+            <td></td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td class="text-muted">Charges imputées à la cotisation</td>
             <td class="text-end">{{ sim.charges_lb|floatformat:0 }} €</td>
             <td class="text-end">{{ sim.charges_hg|floatformat:0 }} €</td>
-            <td class="text-end fw-semibold">{{ sim.total_global|floatformat:0 }} €</td>
+            <td class="text-end fw-semibold">{{ sim.total_pour_equilibre|floatformat:0 }} €</td>
           </tr>
           {% if sim.recettes_exc %}
           <tr style="color:#059669;">

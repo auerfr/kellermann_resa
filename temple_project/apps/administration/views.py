@@ -5673,8 +5673,13 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     nb_resas_salle_total = len(resas_salle)
 
     # ── Tarif d'équilibre ──────────────────────────────────────────
-    charges_lb  = sum(a['total_cout'] for a in par_loge if a['type_loge'] == 'loge')
-    charges_hg  = sum(a['total_cout'] for a in par_loge if a['type_loge'] == 'haut_grade')
+    # Les coûts cuisine (agapes) et salle sont auto-financés par les tarifs à la tenue ;
+    # les exclure évite le double-comptage dans la cotisation annuelle.
+    charges_lb  = sum(a['total_cout'] - a['total_agapes'] - a['total_salle']
+                      for a in par_loge if a['type_loge'] == 'loge')
+    charges_hg  = sum(a['total_cout'] - a['total_agapes'] - a['total_salle']
+                      for a in par_loge if a['type_loge'] == 'haut_grade')
+    total_auto_finance = total_agapes + total_salle
 
     # effectif_lb/hg = somme des effectifs par loge issus du détail (fiches ou fallback)
     effectif_lb  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'loge')
@@ -5699,7 +5704,8 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     tarif_eq_hg  = net_hg / Decimal(str(eff_eq_hg)) if eff_eq_hg else None
     eff_eq_tot   = (eff_eq_lb or 0) + (eff_eq_hg or 0) + sum(
         a['effectif'] for a in par_loge if a['type_loge'] not in ('loge', 'haut_grade'))
-    tarif_eq_global = (total_global - recettes_dec) / Decimal(str(eff_eq_tot or effectif_tot))
+    total_pour_equilibre = total_global - total_auto_finance
+    tarif_eq_global = (total_pour_equilibre - recettes_dec) / Decimal(str(eff_eq_tot or effectif_tot))
 
     return {
         'par_loge': par_loge,
@@ -5714,10 +5720,12 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         'cout_moyen_tenue': total_tenues / nb_resas if nb_resas else Decimal('0'),
         'detail': detail,
         # équilibre
-        'charges_lb':   charges_lb,
-        'charges_hg':   charges_hg,
-        'net_lb':       net_lb,
-        'net_hg':       net_hg,
+        'charges_lb':        charges_lb,
+        'charges_hg':        charges_hg,
+        'net_lb':            net_lb,
+        'net_hg':            net_hg,
+        'total_auto_finance': total_auto_finance,
+        'total_pour_equilibre': total_pour_equilibre,
         'effectif_lb':  effectif_lb,
         'effectif_hg':  effectif_hg,
         'eff_eq_lb':    eff_eq_lb,
@@ -6266,7 +6274,7 @@ def budget_simulation(request):
         recette_hg_votee = Decimal(str(params.tarif_membre_hg)) * sim['eff_eq_hg']
     if recette_lb_votee is not None and recette_hg_votee is not None:
         recette_totale_votee = recette_lb_votee + recette_hg_votee
-        charges_nettes = sim['total_global'] - (sim.get('recettes_exc') or Decimal('0'))
+        charges_nettes = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
         deficit_votee = charges_nettes - recette_totale_votee
         charges_nettes_total = charges_nettes
     else:
