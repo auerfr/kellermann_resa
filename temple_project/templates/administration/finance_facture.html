@@ -95,6 +95,59 @@
       </div>
     </div>
 
+    {# ── Activité de la saison ── #}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header temple-header">Activité {{ facture.saison }}-{{ facture.saison|add:1 }}</div>
+      <div class="card-body" style="font-size:13px;">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Tenues régulières</span>
+          <span class="fw-semibold">{{ activite.nb_regulieres }}</span>
+        </div>
+        {% if activite.nb_exceptionnelles %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Tenues exceptionnelles</span>
+          <span class="fw-semibold text-warning">{{ activite.nb_exceptionnelles }}</span>
+        </div>
+        {% endif %}
+        {% if activite.nb_congres %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Congrès / sessions</span>
+          <span class="fw-semibold">{{ activite.nb_congres }}</span>
+        </div>
+        {% endif %}
+        {% if activite.nb_agapes %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">dont agapes</span>
+          <span class="fw-semibold" style="color:#DC2626;">{{ activite.nb_agapes }}</span>
+        </div>
+        {% endif %}
+        {% if activite.nb_salles %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Réunions (salle)</span>
+          <span class="fw-semibold" style="color:#0891B2;">{{ activite.nb_salles }}</span>
+        </div>
+        {% endif %}
+        {% if activite.nb_cabinets %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Cabinets de réflexion</span>
+          <span class="fw-semibold text-muted">{{ activite.nb_cabinets }}</span>
+        </div>
+        {% endif %}
+        <hr class="my-2">
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Total occupations</span>
+          <span class="fw-bold" style="color:#0F2137;">{{ activite.nb_total }}</span>
+        </div>
+        {% if facture.loge.effectif_declare %}
+        <hr class="my-2">
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Effectif déclaré (état J)</span>
+          <span class="fw-bold" style="color:#0F2137;">{{ facture.loge.effectif_declare }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
     {# Notes #}
     <div class="card border-0 shadow-sm">
       <div class="card-header temple-header">Notes libres</div>
@@ -145,6 +198,7 @@
                   {% elif ligne.type_ligne == 'infrastructure_fixe' %}(fixe)
                   {% elif ligne.type_ligne == 'infrastructure_mut' %}(mutualisé)
                   {% elif ligne.type_ligne == 'infrastructure_marg' %}(marginal)
+                  {% elif ligne.type_ligne == 'tenue_exc' %}(exceptionnel)
                   {% elif ligne.type_ligne == 'agapes' %}(cuisine)
                   {% elif ligne.type_ligne == 'salle' %}(salle)
                   {% endif %}
