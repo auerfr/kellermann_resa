@@ -290,7 +290,9 @@ class Facture(models.Model):
         verbose_name        = "Facture"
         verbose_name_plural = "Factures"
         ordering            = ['-saison', 'loge__nom']
-        unique_together     = [('loge', 'saison')]
+        constraints = [
+            models.UniqueConstraint(fields=['loge', 'saison'], name='finance_facture_loge_saison_uniq'),
+        ]
         indexes = [
             models.Index(fields=['-saison', 'statut'], name='finance_facture_saison_idx'),
         ]
