@@ -5356,12 +5356,23 @@ def _simuler_budget(saison, nb_membres_global=None):
         .order_by('date', 'heure_debut')
     )
 
+    # ── Loges ayant une tenue temple par jour (pour dédup salle+tenue même loge)
+    tenues_loge_ids_par_jour = defaultdict(set)
+    for r in resas:
+        if r.loge_id:
+            tenues_loge_ids_par_jour[r.date].add(r.loge_id)
+
     # ── Nombre total d'occupants par jour (tenues temple + salles non-cabinet)
     # → sert à répartir équitablement les charges mutualisées du bâtiment
+    # Une salle réservée par une loge qui a déjà une tenue ce jour-là ne compte
+    # pas comme occupant supplémentaire pour les charges annuelles (elle ne paye
+    # pas la part annuelle mutualisée qui est déjà couverte via la tenue).
     occupants_par_jour = defaultdict(int)
     for r in resas:
         occupants_par_jour[r.date] += 1
     for rs in resas_salle:
+        if rs.loge_id and rs.loge_id in tenues_loge_ids_par_jour[rs.date]:
+            continue  # déjà compté via la tenue, ne pas gonfler le dénominateur
         occupants_par_jour[rs.date] += 1
 
     # ── Nombre de tenues avec agapes par jour → partage coût cuisine
@@ -5528,14 +5539,9 @@ def _simuler_budget(saison, nb_membres_global=None):
         a['total_agapes']    += d['part_agapes']
         a['total_cout']      += d['cout_total']
 
-    # Salles de réunion standalone : la loge paie sa part de mutualisé du jour
-    # + les charges spécifiques salle (entretien, etc.)
-    # Si d'autres occupants sont présents ce jour → le mutualisé est déjà dilué
-    tenues_loge_ids_par_jour = defaultdict(set)
-    for r in resas:
-        if r.loge_id:
-            tenues_loge_ids_par_jour[r.date].add(r.loge_id)
-
+    # Salles de réunion : la loge paie sa part de mutualisé du jour
+    # + les charges spécifiques salle.
+    # Si la loge a déjà une tenue ce jour → annuel mutualisé déjà payé via tenue.
     for rs in resas_salle:
         if not rs.loge_id:
             continue
