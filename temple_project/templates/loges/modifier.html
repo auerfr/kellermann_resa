@@ -90,7 +90,7 @@
             </select>
             <div class="form-text">« À reconfirmer » reste visible ; « Inactive » masque la loge partout.</div>
           </div>
-          <div class="row g-3 mb-4">
+          <div class="row g-3 mb-3">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Effectif total</label>
               <input type="number" name="effectif_total" value="{{ loge.effectif_total }}" class="form-control" min="0">
@@ -98,6 +98,19 @@
             <div class="col-md-6">
               <label class="form-label fw-semibold">Moy. couverts agapes</label>
               <input type="number" name="effectif_moyen_agapes" value="{{ loge.effectif_moyen_agapes }}" class="form-control" min="0">
+            </div>
+          </div>
+          <div class="mb-4">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="membre_association" name="membre_association"
+                     {% if loge.membre_association %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="membre_association">
+                Adhérente à l'association (cotisation annuelle)
+              </label>
+            </div>
+            <div class="form-text">
+              Décocher pour les occupants occasionnels (ex. une loge qui ne vient qu'une fois par an pour un événement).
+              Ces loges ne reçoivent pas de cotisation annuelle — uniquement une facturation à la tenue.
             </div>
           </div>
           <div class="d-flex gap-3">

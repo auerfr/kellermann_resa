@@ -226,6 +226,7 @@ def modifier_loge(request, pk):
         loge.telephone              = request.POST.get('telephone', loge.telephone).strip()
         loge.effectif_total         = int(request.POST.get('effectif_total', 0) or 0)
         loge.effectif_moyen_agapes  = int(request.POST.get('effectif_moyen_agapes', 0) or 0)
+        loge.membre_association     = 'membre_association' in request.POST
         obd_nom = request.POST.get('obedience')
         if obd_nom:
             obd, _ = Obedience.objects.get_or_create(nom=obd_nom)

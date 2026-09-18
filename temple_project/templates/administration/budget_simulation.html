@@ -419,7 +419,10 @@
           {% for l in sim.par_loge %}
           {% if l.type_loge == 'loge' or l.type_loge == 'haut_grade' %}
           <tr>
-            <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
+            <td class="ps-3 fw-semibold" style="color:#0F2137;">
+              {{ l.loge_nom }}
+              {% if not l.membre_association %}<span class="badge ms-1" style="background:#FEF3C7;color:#B45309;font-size:9px;">Occas.</span>{% endif %}
+            </td>
             <td class="text-center">
               {% if l.type_loge == 'haut_grade' %}
               <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
@@ -429,7 +432,9 @@
             </td>
             <td class="text-center text-muted">{{ l.nb_tenues }}</td>
             <td class="text-end">
-              {% if l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €{% else %}—{% endif %}
+              {% if not l.membre_association %}<span class="text-muted small">excl. cotis.</span>
+              {% elif l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €
+              {% else %}—{% endif %}
             </td>
             <td class="text-end">
               {{ l.cout_usage_pur|floatformat:0 }} €
@@ -497,15 +502,20 @@
             {% else %}
             <span class="badge bg-secondary">LB</span>
             {% endif %}
+            {% if not l.membre_association %}<span class="badge ms-1" style="background:#FEF3C7;color:#B45309;font-size:9px;">Occas.</span>{% endif %}
           </td>
           <td class="text-center">{{ l.nb_tenues }}</td>
-          <td class="text-center text-muted small">{{ l.effectif }}</td>
+          <td class="text-center text-muted small">
+            {% if l.membre_association %}{{ l.effectif }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
           <td class="text-end fw-semibold">{{ l.total_cout|floatformat:0 }} €</td>
           <td class="text-end text-muted">{{ l.cout_par_tenue|floatformat:0 }} €</td>
           <td class="text-end pe-3">
+            {% if l.membre_association %}
             <span class="badge rounded-pill" style="background:#F0F9FF;color:#0369A1;">
               {{ l.cout_par_membre|floatformat:2 }} €
             </span>
+            {% else %}<span class="text-muted small">excl. cotis.</span>{% endif %}
           </td>
         </tr>
         {% empty %}

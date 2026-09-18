@@ -5588,6 +5588,8 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
             'part_agapes': part_agapes,
             'cout_total': cout_total,
             'effectif': effectif,
+            'is_reguliere': r.type_reservation == 'reguliere',
+            'membre_association': r.loge.membre_association if r.loge else False,
             'cout_par_membre': cout_total / Decimal(str(effectif)),
         })
 
@@ -5595,6 +5597,7 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     agg = defaultdict(lambda: {
         'loge': None, 'loge_nom': '', 'type_loge': '',
         'nb_tenues': 0, 'nb_salles': 0, 'effectif': 0,
+        'has_regulier': False, 'membre_association': False,
         'total_fixe': Decimal('0'), 'total_mutualise': Decimal('0'),
         'total_marginal': Decimal('0'), 'total_agapes': Decimal('0'),
         'total_salle': Decimal('0'), 'total_cout': Decimal('0'),
@@ -5607,6 +5610,10 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         a['type_loge'] = d['loge'].type_loge if d['loge'] else ''
         a['nb_tenues']       += 1
         a['effectif']         = d['effectif']
+        if d['is_reguliere']:
+            a['has_regulier'] = True
+        if d['membre_association']:
+            a['membre_association'] = True
         a['total_fixe']      += d['part_fixe']
         a['total_mutualise'] += d['part_mutualise']
         a['total_marginal']  += d['part_marginal']
@@ -5681,9 +5688,10 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
                       for a in par_loge if a['type_loge'] == 'haut_grade')
     total_auto_finance = total_agapes + total_salle
 
-    # effectif_lb/hg = somme des effectifs par loge issus du détail (fiches ou fallback)
-    effectif_lb  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'loge')
-    effectif_hg  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'haut_grade')
+    # effectif_lb/hg = somme des effectifs des loges ADHÉRENTES uniquement
+    # Les occupants occasionnels (membre_association=False) ne paient pas de cotisation annuelle
+    effectif_lb  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'loge'       and a['membre_association'])
+    effectif_hg  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
     effectif_tot = sum(a['effectif'] for a in par_loge) or 1
 
     # Pour le tarif d'équilibre, utiliser le total override (nb_membres_lb/hg) si fourni ;
@@ -7365,8 +7373,8 @@ def finance_generer_brouillons(request):
         loge_reguliere = activite['nb_regulieres'] > 0
 
         # ── Ligne principale : cotisation annuelle par membre ──────────────────
-        # Uniquement pour les loges avec tenues régulières et un effectif renseigné
-        if loge_reguliere and effectif > 0:
+        # Uniquement pour les loges ADHÉRENTES (membre_association) avec tenues régulières
+        if loge_reguliere and effectif > 0 and loge.membre_association:
             tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
             if tarif > 0:
                 type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
@@ -7565,7 +7573,7 @@ def finance_resa_reclasser(request, pk, resa_pk):
     effectif  = facture.loge.effectif_total or 0
     loge_reguliere = activite['nb_regulieres'] > 0
 
-    if loge_reguliere and effectif > 0:
+    if loge_reguliere and effectif > 0 and facture.loge.membre_association:
         tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
         if tarif > 0:
             type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
