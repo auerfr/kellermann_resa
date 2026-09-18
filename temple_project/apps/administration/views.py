@@ -5711,11 +5711,21 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     eff_eq_lb = nb_membres_lb if nb_membres_lb else (effectif_lb or None)
     eff_eq_hg = nb_membres_hg if nb_membres_hg else (effectif_hg or None)
 
-    # Déduction recettes exceptionnelles (répartie proportionnellement aux charges)
-    recettes_dec = Decimal(str(recettes_exc)) if recettes_exc else Decimal('0')
+    # Recettes des tenues exceptionnelles / congrès des loges ADHÉRENTES
+    # (ces tenues sont facturées séparément → réduisent la cotisation à couvrir)
+    recettes_exc_adherents = sum(
+        tarif_reservation(r, params)
+        for r in resas
+        if r.loge and r.loge.membre_association
+        and r.type_reservation in ('exceptionnelle', 'congres')
+    )
+
+    # Déduction totale : recettes exceptionnelles adhérents + autres recettes manuelles
+    recettes_autres = Decimal(str(recettes_exc)) if recettes_exc else Decimal('0')
+    recettes_dec = recettes_exc_adherents + recettes_autres
     if recettes_dec > 0 and total_global > 0:
-        net_lb = charges_lb - recettes_dec * charges_lb / total_global
-        net_hg = charges_hg - recettes_dec * charges_hg / total_global
+        net_lb = charges_lb - recettes_dec * charges_lb / (charges_lb + charges_hg or total_global)
+        net_hg = charges_hg - recettes_dec * charges_hg / (charges_lb + charges_hg or total_global)
     else:
         net_lb = charges_lb
         net_hg = charges_hg
@@ -5744,9 +5754,11 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         'charges_hg':        charges_hg,
         'net_lb':            net_lb,
         'net_hg':            net_hg,
-        'total_auto_finance':      total_auto_finance,
-        'recettes_occasionnels':   recettes_occasionnels,
-        'total_pour_equilibre':    total_pour_equilibre,
+        'total_auto_finance':        total_auto_finance,
+        'recettes_occasionnels':     recettes_occasionnels,
+        'recettes_exc_adherents':    recettes_exc_adherents,
+        'recettes_autres':           recettes_autres,
+        'total_pour_equilibre':      total_pour_equilibre,
         'effectif_lb':  effectif_lb,
         'effectif_hg':  effectif_hg,
         'eff_eq_lb':    eff_eq_lb,
@@ -6354,6 +6366,18 @@ def budget_simulation(request):
             else:
                 l['ecart_equilibre'] = l['ecart_hybride'] = None
 
+    # ── Totaux modèles économiques (pour affichage dans le tableau d'équilibre) ──
+    recettes_hybride_total = recettes_eq_total = recettes_actuelles_total = None
+    deficit_hybride = solde_hybride = None
+    if sim:
+        _rec_exc_adh = sim.get('recettes_exc_adherents') or Decimal('0')
+        recettes_hybride_total   = sum(l['cout_hybride']        for l in sim['par_loge'] if l.get('cout_hybride'))       + _rec_exc_adh
+        recettes_eq_total        = sum(l['cout_equilibre']      for l in sim['par_loge'] if l.get('cout_equilibre'))     + _rec_exc_adh
+        recettes_actuelles_total = sum(l['cotisation_actuelle'] for l in sim['par_loge'] if l.get('cotisation_actuelle'))+ _rec_exc_adh
+        if charges_nettes_total is not None:
+            deficit_hybride = charges_nettes_total - recettes_hybride_total
+            solde_hybride   = recettes_hybride_total - charges_nettes_total
+
     # ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ─────────────
     # Les charges fixes sont déjà couvertes par la cotisation des adhérents.
     # Une tenue externe ne supporte que : énergie (mutualisée) + nettoyage (marginal).
@@ -6412,9 +6436,14 @@ def budget_simulation(request):
         'recette_totale_votee':  recette_totale_votee,
         'deficit_votee':         deficit_votee,
         'charges_nettes_total':  charges_nettes_total,
-        'tarif_hybride_membre':  tarif_hybride_membre,
-        'tarif_hybride_tenue':   tarif_hybride_tenue,
-        'guide_tarif':           guide_tarif,
+        'tarif_hybride_membre':      tarif_hybride_membre,
+        'tarif_hybride_tenue':       tarif_hybride_tenue,
+        'guide_tarif':               guide_tarif,
+        'recettes_hybride_total':    recettes_hybride_total,
+        'recettes_eq_total':         recettes_eq_total,
+        'recettes_actuelles_total':  recettes_actuelles_total,
+        'deficit_hybride':           deficit_hybride,
+        'solde_hybride':             solde_hybride,
     })
 
 

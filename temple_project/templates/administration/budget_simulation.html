@@ -241,10 +241,20 @@
             <td class="text-end">{{ sim.charges_hg|floatformat:0 }} €</td>
             <td class="text-end fw-semibold">{{ sim.total_pour_equilibre|floatformat:0 }} €</td>
           </tr>
-          {% if sim.recettes_exc %}
+          {% if sim.recettes_exc_adherents %}
           <tr style="color:#059669;">
-            <td>− Recettes exceptionnelles déduites</td>
-            <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.recettes_exc|floatformat:0 }} €</td>
+            <td>
+              − Tenues exceptionnelles (adhérents, au tarif voté)
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Réservations exceptionnelles / congrès facturées aux loges membres</div>
+            </td>
+            <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.recettes_exc_adherents|floatformat:0 }} €</td>
+            <td></td>
+          </tr>
+          {% endif %}
+          {% if sim.recettes_autres %}
+          <tr style="color:#059669;">
+            <td>− Autres recettes (subventions, dons…)</td>
+            <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.recettes_autres|floatformat:0 }} €</td>
             <td></td>
           </tr>
           {% endif %}
@@ -303,6 +313,35 @@
               {% if deficit_votee > 0 %}−{{ deficit_votee|floatformat:0 }}{% else %}+{{ deficit_votee|floatformat:0|slice:"1:" }}{% endif %} €
             </td>
           </tr>
+          {% if recettes_hybride_total %}
+          <tr>
+            <td colspan="4" class="py-1">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#5B21B6;padding-top:6px;border-top:2px dashed #DDD6FE;">
+                Simulation — modèle hybride ({{ tarif_hybride_membre|floatformat:0 }} €/mbr + {{ tarif_hybride_tenue|floatformat:0 }} €/tenue)
+              </div>
+            </td>
+          </tr>
+          <tr style="background:#F5F3FF;">
+            <td style="color:#5B21B6;">Recettes totales si <strong>modèle hybride</strong> appliqué</td>
+            <td class="text-end" colspan="2" style="color:#5B21B6;"></td>
+            <td class="text-end fw-bold" style="color:#5B21B6;">{{ recettes_hybride_total|floatformat:0 }} €</td>
+          </tr>
+          {% if solde_hybride is not None %}
+          <tr style="border-top:1px solid #DDD6FE;">
+            <td class="fw-semibold">
+              {% if solde_hybride >= 0 %}
+              <span style="color:#059669;">Excédent modèle hybride</span>
+              {% else %}
+              <span style="color:#B91C1C;">Déficit modèle hybride</span>
+              {% endif %}
+            </td>
+            <td></td><td></td>
+            <td class="text-end fw-bold" style="font-size:1.1rem;{% if solde_hybride >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}">
+              {% if solde_hybride >= 0 %}+{% endif %}{{ solde_hybride|floatformat:0 }} €
+            </td>
+          </tr>
+          {% endif %}
+          {% endif %}
           {% endif %}
         </tbody>
       </table>
