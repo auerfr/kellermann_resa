@@ -68,19 +68,19 @@
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label fw-semibold">Exceptionnelle sans agapes (€)</label>
-            <input type="number" step="0.01" min="0" name="tarif_exc_sans_agapes" class="form-control" value="{{ params.tarif_exc_sans_agapes }}">
+            <input type="number" step="0.01" min="0" name="tarif_exc_sans_agapes" class="form-control" value="{{ params.tarif_exc_sans_agapes|unlocalize }}">
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Exceptionnelle avec agapes (€)</label>
-            <input type="number" step="0.01" min="0" name="tarif_exc_avec_agapes" class="form-control" value="{{ params.tarif_exc_avec_agapes }}">
+            <input type="number" step="0.01" min="0" name="tarif_exc_avec_agapes" class="form-control" value="{{ params.tarif_exc_avec_agapes|unlocalize }}">
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Congrès, par jour (€)</label>
-            <input type="number" step="0.01" min="0" name="tarif_congres_jour" class="form-control" value="{{ params.tarif_congres_jour }}">
+            <input type="number" step="0.01" min="0" name="tarif_congres_jour" class="form-control" value="{{ params.tarif_congres_jour|unlocalize }}">
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Tenue funèbre (week-end / vacances) (€)</label>
-            <input type="number" step="0.01" min="0" name="tarif_funebre" class="form-control" value="{{ params.tarif_funebre }}">
+            <input type="number" step="0.01" min="0" name="tarif_funebre" class="form-control" value="{{ params.tarif_funebre|unlocalize }}">
             <div class="form-text">Tarif spécifique des tenues funèbres ; à ajuster quand il sera décidé.</div>
           </div>
         </div>
@@ -96,11 +96,11 @@
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label fw-semibold">€ / membre — Loge bleue</label>
-            <input type="number" step="0.01" min="0" name="tarif_membre_loge" class="form-control" value="{{ params.tarif_membre_loge }}">
+            <input type="number" step="0.01" min="0" name="tarif_membre_loge" class="form-control" value="{{ params.tarif_membre_loge|unlocalize }}">
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">€ / membre — Haut grade (interne régulier)</label>
-            <input type="number" step="0.01" min="0" name="tarif_membre_hg" class="form-control" value="{{ params.tarif_membre_hg }}">
+            <input type="number" step="0.01" min="0" name="tarif_membre_hg" class="form-control" value="{{ params.tarif_membre_hg|unlocalize }}">
           </div>
         </div>
         <hr>
@@ -108,17 +108,17 @@
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label fw-semibold">Loge externe / occasionnelle (par tenue, €)</label>
-            <input type="number" step="0.01" min="0" name="tarif_loge_occasionnelle" class="form-control" value="{{ params.tarif_loge_occasionnelle }}">
+            <input type="number" step="0.01" min="0" name="tarif_loge_occasionnelle" class="form-control" value="{{ params.tarif_loge_occasionnelle|unlocalize }}">
             <div class="form-text">Loge invitée, loge de passage, non membre de l'association.</div>
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Haut grade externe (par tenue, €)</label>
-            <input type="number" step="0.01" min="0" name="tarif_hg_externe" class="form-control" value="{{ params.tarif_hg_externe }}">
+            <input type="number" step="0.01" min="0" name="tarif_hg_externe" class="form-control" value="{{ params.tarif_hg_externe|unlocalize }}">
             <div class="form-text">Atelier inter-obédientiel ou HG de passage.</div>
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">HG interne non régulier (par tenue, €)</label>
-            <input type="number" step="0.01" min="0" name="tarif_hg_interne_non_regulier" class="form-control" value="{{ params.tarif_hg_interne_non_regulier }}">
+            <input type="number" step="0.01" min="0" name="tarif_hg_interne_non_regulier" class="form-control" value="{{ params.tarif_hg_interne_non_regulier|unlocalize }}">
             <div class="form-text">Atelier interne avec peu de tenues/an, sans règle récurrente.</div>
           </div>
         </div>
