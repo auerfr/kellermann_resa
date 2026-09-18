@@ -6820,3 +6820,596 @@ def activite_loges(request):
         'nb_calendrier_30j':     nb_calendrier_30j,
         'nb_visites_portail_30j': nb_visites_portail_30j,
     })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODULE FINANCE — Facturation annuelle par loge
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _finance_guard(request):
+    """Retourne None si le module est actif, sinon une HttpResponse d'erreur."""
+    params = Parametres.get_instance()
+    if not params.module_finance_actif:
+        return render(request, 'administration/finance_inactif.html', {'params': params})
+    return None
+
+
+def _prochain_numero_facture(saison):
+    """Génère le prochain numéro de facture pour la saison."""
+    from .models import Facture
+    existant = (
+        Facture.objects
+        .filter(saison=saison)
+        .exclude(numero='')
+        .order_by('numero')
+        .values_list('numero', flat=True)
+    )
+    max_n = 0
+    for num in existant:
+        try:
+            max_n = max(max_n, int(num.split('-')[-1]))
+        except (ValueError, IndexError):
+            pass
+    return f"KELL-{saison}-{max_n + 1:03d}"
+
+
+@staff_required
+def finance_saison(request):
+    """Tableau de bord du module finance : liste des factures par saison."""
+    from .models import Facture
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    saisons_dispo = sorted(set(
+        Facture.objects.values_list('saison', flat=True)
+    ) | {_annee_saison_courante()}, reverse=True)
+
+    factures = (
+        Facture.objects
+        .filter(saison=saison)
+        .select_related('loge')
+        .prefetch_related('lignes')
+        .order_by('loge__nom')
+    )
+
+    total_emis  = sum(f.total_ht for f in factures if f.statut in ('emise', 'payee'))
+    total_paye  = sum(f.total_ht for f in factures if f.statut == 'payee')
+    nb_brouillon = sum(1 for f in factures if f.statut == 'brouillon')
+    nb_emises    = sum(1 for f in factures if f.statut == 'emise')
+    nb_payees    = sum(1 for f in factures if f.statut == 'payee')
+
+    params = Parametres.get_instance()
+    return render(request, 'administration/finance_saison.html', {
+        'saison':         saison,
+        'saisons_dispo':  saisons_dispo,
+        'factures':       factures,
+        'total_emis':     total_emis,
+        'total_paye':     total_paye,
+        'nb_brouillon':   nb_brouillon,
+        'nb_emises':      nb_emises,
+        'nb_payees':      nb_payees,
+        'params':         params,
+    })
+
+
+@staff_required
+def finance_generer_brouillons(request):
+    """Génère (ou régénère) les brouillons de factures depuis la simulation."""
+    from .models import Facture, LigneFacture
+    from decimal import Decimal as D
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    saison = int(request.POST.get('saison') or _annee_saison_courante())
+    params = Parametres.get_instance()
+    sim = _simuler_budget(saison)
+
+    if not sim or not sim.get('par_loge'):
+        messages.error(request, "Aucune donnée de simulation disponible pour cette saison.")
+        return redirect(f"{request.build_absolute_uri('/')[:-1]}{__import__('django.urls', fromlist=['reverse']).reverse('administration:finance_saison')}?saison={saison}")
+
+    nb_crees = nb_maj = 0
+
+    for agg in sim['par_loge']:
+        loge = agg.get('loge')
+        if not loge:
+            continue
+
+        facture, created = Facture.objects.get_or_create(
+            loge=loge, saison=saison,
+            defaults={'statut': 'brouillon'}
+        )
+        if facture.statut not in ('brouillon',):
+            # Ne pas écraser une facture émise ou payée
+            continue
+
+        # Supprimer les lignes existantes pour régénérer proprement
+        facture.lignes.all().delete()
+
+        ordre = 0
+        type_loge = agg.get('type_loge', '')
+        effectif  = agg.get('effectif') or 0
+
+        # ── Cotisation membres ─────────────────────────────────────────────
+        if effectif > 0:
+            if type_loge == 'loge':
+                tarif_u = params.tarif_membre_loge
+                type_l  = 'cotisation_lb'
+                lbl     = f"Cotisation annuelle — loge bleue ({effectif} membres × {tarif_u} €)"
+            else:
+                tarif_u = params.tarif_membre_hg
+                type_l  = 'cotisation_hg'
+                lbl     = f"Cotisation annuelle — haut grade ({effectif} membres × {tarif_u} €)"
+            LigneFacture.objects.create(
+                facture=facture, type_ligne=type_l, libelle=lbl,
+                quantite=D(str(effectif)), unite='membre',
+                montant_unitaire=tarif_u,
+                montant_total=tarif_u * D(str(effectif)),
+                ordre=ordre,
+            )
+            ordre += 1
+
+        # ── Part infrastructure fixe ───────────────────────────────────────
+        total_fixe = agg.get('total_fixe', D('0'))
+        if total_fixe > 0:
+            nb_t = agg.get('nb_tenues') or 1
+            LigneFacture.objects.create(
+                facture=facture,
+                type_ligne='infrastructure_fixe',
+                libelle=f"Part charges fixes ({nb_t} tenues)",
+                quantite=D(str(nb_t)), unite='tenue',
+                montant_unitaire=(total_fixe / D(str(nb_t))).quantize(D('0.01')),
+                montant_total=total_fixe,
+                ordre=ordre,
+            )
+            ordre += 1
+
+        # ── Part mutualisée ────────────────────────────────────────────────
+        total_mut = agg.get('total_mutualise', D('0'))
+        if total_mut > 0:
+            nb_t = agg.get('nb_tenues') or 1
+            LigneFacture.objects.create(
+                facture=facture,
+                type_ligne='infrastructure_mut',
+                libelle=f"Part charges mutualisées ({nb_t} tenues)",
+                quantite=D(str(nb_t)), unite='tenue',
+                montant_unitaire=(total_mut / D(str(nb_t))).quantize(D('0.01')),
+                montant_total=total_mut,
+                ordre=ordre,
+            )
+            ordre += 1
+
+        # ── Part marginale ─────────────────────────────────────────────────
+        total_marg = agg.get('total_marginal', D('0'))
+        if total_marg > 0:
+            nb_t = agg.get('nb_tenues') or 1
+            LigneFacture.objects.create(
+                facture=facture,
+                type_ligne='infrastructure_marg',
+                libelle=f"Part charges marginales ({nb_t} tenues)",
+                quantite=D(str(nb_t)), unite='tenue',
+                montant_unitaire=(total_marg / D(str(nb_t))).quantize(D('0.01')),
+                montant_total=total_marg,
+                ordre=ordre,
+            )
+            ordre += 1
+
+        # ── Usage cuisine / agapes ─────────────────────────────────────────
+        total_agapes = agg.get('total_agapes', D('0'))
+        if total_agapes > 0:
+            LigneFacture.objects.create(
+                facture=facture,
+                type_ligne='agapes',
+                libelle="Usage cuisine et agapes",
+                quantite=D('1'), unite='saison',
+                montant_unitaire=total_agapes,
+                montant_total=total_agapes,
+                ordre=ordre,
+            )
+            ordre += 1
+
+        # ── Usage salle de réunion ─────────────────────────────────────────
+        total_salle = agg.get('total_salle', D('0'))
+        if total_salle > 0:
+            nb_s = agg.get('nb_salles') or 1
+            LigneFacture.objects.create(
+                facture=facture,
+                type_ligne='salle',
+                libelle=f"Usage salle de réunion ({nb_s} occupation{'s' if nb_s > 1 else ''})",
+                quantite=D(str(nb_s)), unite='occupation',
+                montant_unitaire=(total_salle / D(str(nb_s))).quantize(D('0.01')),
+                montant_total=total_salle,
+                ordre=ordre,
+            )
+            ordre += 1
+
+        facture.recalculer_total()
+        if created:
+            nb_crees += 1
+        else:
+            nb_maj += 1
+
+    msg = f"Brouillons générés : {nb_crees} créés, {nb_maj} mis à jour."
+    if nb_crees + nb_maj == 0:
+        msg = "Aucune loge à facturer (factures émises/payées non modifiées)."
+    messages.success(request, msg)
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_saison') + f'?saison={saison}')
+
+
+@staff_required
+def finance_facture_detail(request, pk):
+    """Vue détail d'une facture : lignes, notes, actions."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    facture = get_object_or_404(Facture.objects.select_related('loge').prefetch_related('lignes'), pk=pk)
+    params  = Parametres.get_instance()
+    return render(request, 'administration/finance_facture.html', {
+        'facture': facture,
+        'params':  params,
+        'lignes':  facture.lignes.all(),
+    })
+
+
+@staff_required
+def finance_ligne_toggle(request, pk, ligne_pk):
+    """Bascule facturable/non-facturable sur une ligne, recalcule le total."""
+    from .models import Facture, LigneFacture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    ligne   = get_object_or_404(LigneFacture, pk=ligne_pk, facture=facture)
+
+    if facture.statut not in ('brouillon',):
+        messages.error(request, "Seul un brouillon peut être modifié.")
+    else:
+        ligne.facturable = not ligne.facturable
+        ligne.save(update_fields=['facturable'])
+        facture.recalculer_total()
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_notes(request, pk):
+    """Sauvegarde les notes libres d'une facture brouillon."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'brouillon':
+        messages.error(request, "Seul un brouillon peut être modifié.")
+    else:
+        facture.notes = request.POST.get('notes', '')
+        facture.save(update_fields=['notes', 'updated_at'])
+        messages.success(request, "Notes enregistrées.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_emettre(request, pk):
+    """Émet une facture brouillon : numérotation + date."""
+    from .models import Facture
+    from datetime import date as ddate
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'brouillon':
+        messages.error(request, "Cette facture n'est pas à l'état brouillon.")
+    else:
+        facture.numero        = _prochain_numero_facture(facture.saison)
+        facture.statut        = 'emise'
+        facture.date_emission = ddate.today()
+        facture.save(update_fields=['numero', 'statut', 'date_emission', 'updated_at'])
+        messages.success(request, f"Facture {facture.numero} émise.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_annuler(request, pk):
+    """Annule une facture émise (non payée)."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut == 'payee':
+        messages.error(request, "Une facture payée ne peut pas être annulée.")
+    elif facture.statut == 'annulee':
+        messages.error(request, "Cette facture est déjà annulée.")
+    else:
+        facture.statut = 'annulee'
+        facture.save(update_fields=['statut', 'updated_at'])
+        messages.success(request, f"Facture {facture.numero or pk} annulée.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_paiement(request, pk):
+    """Marque une facture comme payée."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'emise':
+        messages.error(request, "Seule une facture émise peut être marquée payée.")
+    else:
+        facture.statut = 'payee'
+        facture.save(update_fields=['statut', 'updated_at'])
+        messages.success(request, f"Facture {facture.numero} marquée comme payée.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_pdf(request, pk):
+    """Génère le PDF d'une facture."""
+    from .models import Facture
+    from io import BytesIO
+    from decimal import Decimal as D
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    facture = get_object_or_404(Facture.objects.select_related('loge').prefetch_related('lignes'), pk=pk)
+    params  = Parametres.get_instance()
+    lignes  = list(facture.lignes.filter(facturable=True).order_by('ordre', 'type_ligne'))
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=2*cm, rightMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+
+    BLEU  = colors.HexColor('#0F2137')
+    GRIS  = colors.HexColor('#6B7280')
+    LIGNE = colors.HexColor('#E5E7EB')
+    VERT  = colors.HexColor('#065F46')
+
+    styles = getSampleStyleSheet()
+    h1  = ParagraphStyle('h1',  fontName='Helvetica-Bold', fontSize=18, textColor=BLEU, spaceAfter=4)
+    h2  = ParagraphStyle('h2',  fontName='Helvetica-Bold', fontSize=11, textColor=BLEU, spaceBefore=10, spaceAfter=4)
+    sub = ParagraphStyle('sub', fontName='Helvetica',      fontSize=9,  textColor=GRIS, spaceAfter=2)
+    nor = ParagraphStyle('nor', fontName='Helvetica',      fontSize=9,  spaceAfter=3)
+    rig = ParagraphStyle('rig', fontName='Helvetica-Bold', fontSize=11, alignment=TA_RIGHT, textColor=BLEU)
+
+    story = []
+
+    # ── En-tête ───────────────────────────────────────────────────────────────
+    header_data = [[
+        Paragraph("<b>Association Kellermann</b><br/>Temple des loges réunies<br/>Strasbourg", styles['Normal']),
+        Paragraph(
+            f"<b>FACTURE</b><br/>"
+            f"N° {facture.numero or '(brouillon)'}<br/>"
+            f"Saison {facture.saison}–{facture.saison + 1}",
+            ParagraphStyle('fac', fontName='Helvetica-Bold', fontSize=13, alignment=TA_RIGHT, textColor=BLEU)
+        ),
+    ]]
+    header_tbl = Table(header_data, colWidths=[9*cm, 8*cm])
+    header_tbl.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+    ]))
+    story.append(header_tbl)
+    story.append(HRFlowable(width='100%', thickness=1, color=BLEU))
+    story.append(Spacer(1, 0.4*cm))
+
+    # ── Destinataire ──────────────────────────────────────────────────────────
+    loge = facture.loge
+    story.append(Paragraph("<b>Destinataire</b>", h2))
+    story.append(Paragraph(f"<b>{loge.nom}</b>", nor))
+    if loge.obedience:
+        story.append(Paragraph(str(loge.obedience), sub))
+    story.append(Paragraph(
+        f"Type : {'Loge bleue' if loge.type_loge == 'loge' else 'Haut grade'}",
+        sub))
+    story.append(Spacer(1, 0.3*cm))
+
+    # ── Dates ─────────────────────────────────────────────────────────────────
+    from datetime import date as ddate
+    em = facture.date_emission.strftime('%d/%m/%Y') if facture.date_emission else '—'
+    ec = facture.date_echeance.strftime('%d/%m/%Y') if facture.date_echeance else '—'
+    dates_data = [
+        ['Date d\'émission', em, 'Saison', f"{facture.saison}–{facture.saison + 1}"],
+        ['Échéance',        ec, 'Statut',  facture.get_statut_display()],
+    ]
+    dates_tbl = Table(dates_data, colWidths=[4*cm, 4.5*cm, 3*cm, 5.5*cm])
+    dates_tbl.setStyle(TableStyle([
+        ('FONTNAME',  (0,0), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME',  (2,0), (2,-1), 'Helvetica-Bold'),
+        ('FONTSIZE',  (0,0), (-1,-1), 9),
+        ('TEXTCOLOR', (0,0), (0,-1), GRIS),
+        ('TEXTCOLOR', (2,0), (2,-1), GRIS),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+    ]))
+    story.append(dates_tbl)
+    story.append(Spacer(1, 0.5*cm))
+
+    # ── Lignes ────────────────────────────────────────────────────────────────
+    story.append(Paragraph("Détail", h2))
+    tbl_data = [['Libellé', 'Qté', 'Unité', 'P.U. (€)', 'Total (€)']]
+    for l in lignes:
+        tbl_data.append([
+            l.libelle,
+            f"{l.quantite:g}",
+            l.unite,
+            f"{l.montant_unitaire:,.2f}",
+            f"{l.montant_total:,.2f}",
+        ])
+
+    col_w = [9*cm, 1.5*cm, 2*cm, 2.5*cm, 2*cm]
+    tbl = Table(tbl_data, colWidths=col_w, repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND',   (0,0), (-1,0),  BLEU),
+        ('TEXTCOLOR',    (0,0), (-1,0),  colors.white),
+        ('FONTNAME',     (0,0), (-1,0),  'Helvetica-Bold'),
+        ('FONTSIZE',     (0,0), (-1,-1), 9),
+        ('ALIGN',        (1,0), (-1,-1), 'RIGHT'),
+        ('ALIGN',        (0,0), (0,-1),  'LEFT'),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1), [colors.white, colors.HexColor('#F9FAFB')]),
+        ('GRID',         (0,0), (-1,-1), 0.3, LIGNE),
+        ('TOPPADDING',   (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING',(0,0), (-1,-1), 5),
+    ]))
+    story.append(tbl)
+    story.append(Spacer(1, 0.4*cm))
+
+    # ── Total ─────────────────────────────────────────────────────────────────
+    total_data = [['', '', '', 'TOTAL TTC', f"{facture.total_ht:,.2f} €"]]
+    total_tbl  = Table(total_data, colWidths=col_w)
+    total_tbl.setStyle(TableStyle([
+        ('FONTNAME',     (0,0), (-1,-1), 'Helvetica-Bold'),
+        ('FONTSIZE',     (0,0), (-1,-1), 11),
+        ('TEXTCOLOR',    (3,0), (-1,-1), BLEU),
+        ('ALIGN',        (3,0), (-1,-1), 'RIGHT'),
+        ('TOPPADDING',   (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING',(0,0), (-1,-1), 6),
+        ('LINEABOVE',    (3,0), (-1,0),  1, BLEU),
+    ]))
+    story.append(total_tbl)
+
+    # ── Notes ─────────────────────────────────────────────────────────────────
+    if facture.notes:
+        story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph("<b>Notes</b>", h2))
+        story.append(Paragraph(facture.notes.replace('\n', '<br/>'), nor))
+
+    # ── Pied de page ──────────────────────────────────────────────────────────
+    story.append(Spacer(1, 1*cm))
+    story.append(HRFlowable(width='100%', thickness=0.5, color=LIGNE))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(Paragraph(
+        "Association Kellermann · Strasbourg · SIRET XXXXX · "
+        "Tout règlement par virement à IBAN FRXX XXXX XXXX XXXX XXXX XXXX XXX",
+        ParagraphStyle('footer', fontName='Helvetica', fontSize=7.5, textColor=GRIS, alignment=TA_CENTER)
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    num = facture.numero or f'brouillon-{facture.pk}'
+    fname = f"Facture_{num}_{loge.nom.replace(' ','_')}.pdf"
+    resp = HttpResponse(buf.read(), content_type='application/pdf')
+    resp['Content-Disposition'] = f'inline; filename="{fname}"'
+    return resp
+
+
+@staff_required
+def finance_facture_envoyer(request, pk):
+    """Envoie la facture PDF par email au contact de la loge."""
+    from .models import Facture
+    from io import BytesIO
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture.objects.select_related('loge').prefetch_related('lignes'), pk=pk)
+    if facture.statut == 'brouillon':
+        messages.error(request, "Veuillez émettre la facture avant de l'envoyer.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+    loge   = facture.loge
+    params = Parametres.get_instance()
+
+    # Générer le PDF en mémoire via la vue existante (appel interne)
+    pdf_request = request
+    pdf_response = finance_facture_pdf(pdf_request, pk)
+    pdf_bytes = pdf_response.content
+
+    destinataire = loge.email_contact or loge.email
+    if not destinataire:
+        messages.error(request, f"Aucune adresse email pour {loge.nom}.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+    sujet = f"Facture {facture.numero} — Saison {facture.saison}–{facture.saison + 1} — Association Kellermann"
+    corps = (
+        f"Bonjour,\n\n"
+        f"Veuillez trouver ci-joint la facture {facture.numero} "
+        f"pour la saison {facture.saison}–{facture.saison + 1}.\n\n"
+        f"Montant total : {facture.total_ht} €\n\n"
+        f"Cordialement,\n"
+        f"Association Kellermann"
+    )
+    fname = f"Facture_{facture.numero}_{loge.nom.replace(' ','_')}.pdf"
+
+    try:
+        from django.core.mail import EmailMessage as DjEmailMessage
+        from temple_project.apps.administration.email_utils import get_email_connection, _load_params
+        p = _load_params()
+        from_email = (p.email_from if p and p.email_from else settings.DEFAULT_FROM_EMAIL)
+        if from_email and '<' not in from_email:
+            from_email = f"Kellermann Réservations <{from_email}>"
+        conn = get_email_connection()
+        mail = DjEmailMessage(
+            subject=sujet, body=corps,
+            from_email=from_email, to=[destinataire],
+            connection=conn,
+        )
+        mail.attach(fname, pdf_bytes, 'application/pdf')
+        mail.send()
+        messages.success(request, f"Facture envoyée à {destinataire}.")
+    except Exception as exc:
+        messages.error(request, f"Erreur d'envoi : {exc}")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))

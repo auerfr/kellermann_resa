@@ -45,6 +45,12 @@ class Parametres(models.Model):
         null=True, blank=True, default=date(2026, 6, 12),
         help_text="Date d'entrée en vigueur des tarifs (vote AG). Les occupations "
                   "antérieures ne sont pas facturées.")
+    # ── Module finance (facturation annuelle par loge) ────────────────────────
+    module_finance_actif = models.BooleanField(
+        default=False,
+        help_text="Active le module de facturation annuelle par loge "
+                  "(factures cristallisées, PDF, envoi email). "
+                  "À activer après validation du modèle avec le trésorier.")
 
     class Meta:
         verbose_name = "Paramètres"
@@ -244,3 +250,88 @@ class FAQ(models.Model):
 
     def __str__(self):
         return f"[{self.get_categorie_display()}] {self.question[:60]}"
+
+
+# ── Module Finance — Facturation annuelle par loge ────────────────────────────
+
+class Facture(models.Model):
+    """Facture annuelle cristallisée pour une loge, sur une saison."""
+    STATUT_CHOICES = [
+        ('brouillon', 'Brouillon'),
+        ('emise',     'Émise'),
+        ('payee',     'Payée'),
+        ('annulee',   'Annulée'),
+    ]
+    loge          = models.ForeignKey(
+        'loges.Loge', on_delete=models.PROTECT, related_name='factures')
+    saison        = models.PositiveIntegerField(
+        help_text="Année de début de saison (ex : 2025 pour 2025-2026)")
+    numero        = models.CharField(max_length=30, blank=True, db_index=True,
+                                     help_text="Numéro définitif généré à l'émission (ex: KELL-2026-001)")
+    date_emission = models.DateField(null=True, blank=True)
+    date_echeance = models.DateField(null=True, blank=True)
+    statut        = models.CharField(max_length=20, choices=STATUT_CHOICES, default='brouillon', db_index=True)
+    notes         = models.TextField(blank=True, help_text="Notes libres (exonération partielle, accord trésorier…)")
+    total_ht      = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = "Facture"
+        verbose_name_plural = "Factures"
+        ordering            = ['-saison', 'loge__nom']
+        unique_together     = [('loge', 'saison')]
+        indexes = [
+            models.Index(fields=['-saison', 'statut'], name='finance_facture_saison_idx'),
+        ]
+
+    def __str__(self):
+        num = self.numero or 'Brouillon'
+        return f"{num} — {self.loge} ({self.saison}-{self.saison + 1})"
+
+    def recalculer_total(self):
+        from decimal import Decimal as D
+        self.total_ht = sum(
+            (l.montant_total for l in self.lignes.filter(facturable=True)),
+            D('0')
+        )
+        self.save(update_fields=['total_ht', 'updated_at'])
+
+
+class LigneFacture(models.Model):
+    """Ligne d'une facture annuelle (cotisations, tenues, agapes, salle…)."""
+    TYPE_CHOICES = [
+        ('cotisation_lb',        'Cotisation membre — loge bleue'),
+        ('cotisation_hg',        'Cotisation membre — haut grade'),
+        ('infrastructure_fixe',  'Part infrastructure fixe'),
+        ('infrastructure_mut',   'Part infrastructure mutualisée'),
+        ('infrastructure_marg',  'Part infrastructure marginale'),
+        ('agapes',               'Usage cuisine / agapes'),
+        ('salle',                'Usage salle de réunion'),
+        ('tenue_exc',            'Tenue exceptionnelle'),
+        ('autre',                'Autre'),
+    ]
+    facture           = models.ForeignKey(Facture, on_delete=models.CASCADE, related_name='lignes')
+    type_ligne        = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    libelle           = models.CharField(max_length=200)
+    quantite          = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('1'))
+    unite             = models.CharField(max_length=50, blank=True)
+    montant_unitaire  = models.DecimalField(max_digits=10, decimal_places=2)
+    montant_total     = models.DecimalField(max_digits=10, decimal_places=2)
+    facturable        = models.BooleanField(default=True,
+                                            help_text="Décocher pour exclure cette ligne sans la supprimer")
+    reservation       = models.ForeignKey(
+        'reservations.Reservation', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='lignes_facture')
+    reservation_salle = models.ForeignKey(
+        'reservations.ReservationSalle', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='lignes_facture')
+    ordre             = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name        = "Ligne de facture"
+        verbose_name_plural = "Lignes de facture"
+        ordering            = ['ordre', 'type_ligne']
+
+    def __str__(self):
+        return f"{self.libelle} ({self.montant_total} €)"
