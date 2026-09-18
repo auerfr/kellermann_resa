@@ -53,9 +53,10 @@
         </div>
       </div>
       <div class="alert alert-info py-2 mb-2" style="font-size:12.5px;">
-        <strong>Tarif d'équilibre</strong> = charges imputées à un type de loge ÷ effectif total de ce type.
-        C'est le montant théorique <em>par membre</em> pour couvrir exactement les charges simulées.
-        Il est <strong>directement lié à l'effectif</strong> saisi dans les fiches loges : vérifiez-le avant de communiquer ces chiffres.
+        <strong>Tarif d'équilibre LB</strong> = charges LB ÷ effectif → <em>€/membre/an</em>.
+        <strong>Tarif d'équilibre HG</strong> = coûts variables HG ÷ nb tenues → <em>€/tenue/an</em>
+        (les membres HG viennent de divers orients, l'effectif local n'est pas un indicateur fiable).
+        Vérifiez les effectifs LB dans les fiches loges avant de communiquer ces chiffres.
       </div>
       <div class="text-muted small">
         <strong>Cohabitation :</strong> deux loges au même temple le même jour → la charge mutualisée est partagée à parts égales.
@@ -318,13 +319,17 @@
           <tr style="border-top:2px solid #0F2137;background:#F8FAFC;">
             <td class="fw-semibold" style="color:#0F2137;">
               Tarif d'équilibre
-              <div class="text-muted fw-normal" style="font-size:11px;">{{ sim.eff_eq_lb }} membres LB · {{ sim.eff_eq_hg }} membres HG</div>
+              <div class="text-muted fw-normal" style="font-size:11px;">
+                LB : {{ sim.eff_eq_lb }} membres
+                · HG : {{ sim.nb_resas_hg_adherents }} tenues
+                <span title="Les HG sont facturés par tenue (pas par membre) — les membres viennent de divers orients, l'effectif local n'est pas fiable.">ⓘ</span>
+              </div>
             </td>
             <td class="text-end fw-bold" style="color:#0F2137;font-size:1.05rem;">
               {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }} €/mbr{% else %}—{% endif %}
             </td>
             <td class="text-end fw-bold" style="color:#0F2137;font-size:1.05rem;">
-              {% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }} €/mbr{% else %}—{% endif %}
+              {% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }} €/tenue{% else %}—{% endif %}
             </td>
             <td class="text-end text-muted small">↑ couvre exactement les charges</td>
           </tr>
@@ -446,8 +451,9 @@
           <div class="mb-1" style="font-size:13px;">
             <span class="badge bg-secondary me-1">LB</span> {{ params.tarif_membre_loge|floatformat:2 }} €/membre/an<br>
             <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span> {{ params.tarif_membre_hg|floatformat:2 }} €/membre/an
+            <span class="text-muted" style="font-size:11px;">(modèle par membre — à migrer vers par tenue)</span>
           </div>
-          <div class="text-muted small mt-2">Simple. Prévisible. Mais HG très sous-tarifé et LB ne paie pas à l'usage.</div>
+          <div class="text-muted small mt-2">Simple. Prévisible. Mais effectif HG peu fiable (membres d'autres orients) et LB ne paie pas à l'usage.</div>
           {% if deficit_votee and deficit_votee > 0 %}
           <div class="mt-2 fw-semibold" style="color:#B91C1C;font-size:12px;">⚠ Déficit : −{{ deficit_votee|floatformat:0 }} €/an</div>
           {% endif %}

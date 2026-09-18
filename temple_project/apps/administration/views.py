@@ -5740,9 +5740,15 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         net_hg = charges_hg
 
     tarif_eq_lb  = net_lb / Decimal(str(eff_eq_lb)) if eff_eq_lb else None
-    tarif_eq_hg  = net_hg / Decimal(str(eff_eq_hg)) if eff_eq_hg else None
-    eff_eq_tot   = (eff_eq_lb or 0) + (eff_eq_hg or 0) + sum(
-        a['effectif'] for a in par_loge if a['type_loge'] not in ('loge', 'haut_grade'))
+    # HG : tarif par TENUE (pas par membre — les membres HG viennent de divers orients,
+    # on ne peut pas raisonner en effectif local fiable)
+    nb_resas_hg_adherents = sum(
+        a['nb_tenues'] for a in par_loge
+        if a['type_loge'] == 'haut_grade' and a['membre_association']
+    )
+    tarif_eq_hg  = net_hg / Decimal(str(nb_resas_hg_adherents)) if nb_resas_hg_adherents else None
+    eff_eq_tot   = (eff_eq_lb or 0) + sum(
+        a['effectif'] for a in par_loge if a['type_loge'] not in ('loge',))
     total_pour_equilibre = total_global - total_auto_finance
     tarif_eq_global = (total_pour_equilibre - recettes_dec) / Decimal(str(eff_eq_tot or effectif_tot))
 
@@ -5769,13 +5775,14 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         'recettes_exc_adherents':    recettes_exc_adherents,
         'recettes_autres':           recettes_autres,
         'total_pour_equilibre':      total_pour_equilibre,
-        'effectif_lb':  effectif_lb,
-        'effectif_hg':  effectif_hg,
-        'eff_eq_lb':    eff_eq_lb,
-        'eff_eq_hg':    eff_eq_hg,
+        'effectif_lb':           effectif_lb,
+        'effectif_hg':           effectif_hg,
+        'eff_eq_lb':             eff_eq_lb,
+        'eff_eq_hg':             eff_eq_hg,
+        'nb_resas_hg_adherents': nb_resas_hg_adherents,
         'recettes_exc': recettes_dec,
         'tarif_eq_lb':  tarif_eq_lb,
-        'tarif_eq_hg':  tarif_eq_hg,
+        'tarif_eq_hg':  tarif_eq_hg,   # par TENUE (pas par membre)
         'tarif_eq_global': tarif_eq_global,
     }
 
@@ -6349,22 +6356,24 @@ def budget_simulation(request):
                 l['ecart_equilibre']     = None
                 l['ecart_hybride']       = None
                 continue
-            # Cotisation actuelle (tarif voté × effectif) — adhérents uniquement
             eff = l.get('effectif') or 0
+            nb_t = l.get('nb_tenues') or 0
+            # Cotisation actuelle (tarif voté)
+            # LB : par membre   | HG : par tenue (nouveau modèle)
             if l['type_loge'] == 'loge' and params.tarif_membre_loge and eff:
                 l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_loge)) * eff
-            elif l['type_loge'] == 'haut_grade' and params.tarif_membre_hg and eff:
-                l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_hg)) * eff
+            elif l['type_loge'] == 'haut_grade' and params.tarif_membre_hg and nb_t:
+                # Cotisation actuelle HG reste affichée en par-tenue si on a un tarif_tenue_hg,
+                # sinon on ne peut pas calculer (effectif non fiable pour HG)
+                l['cotisation_actuelle'] = None   # à renseigner dans Paramètres (tarif_tenue_hg futur)
             else:
                 l['cotisation_actuelle'] = None
-            # Tarif d'équilibre (tarif_eq × effectif)
-            if eff:
-                if l['type_loge'] == 'loge' and tarif_eq_lb_display:
-                    l['cout_equilibre'] = tarif_eq_lb_display * eff
-                elif l['type_loge'] == 'haut_grade' and tarif_eq_hg_display:
-                    l['cout_equilibre'] = tarif_eq_hg_display * eff
-                else:
-                    l['cout_equilibre'] = None
+            # Tarif d'équilibre
+            # LB : tarif_eq_lb × effectif   | HG : tarif_eq_hg × nb_tenues
+            if l['type_loge'] == 'loge' and tarif_eq_lb_display and eff:
+                l['cout_equilibre'] = tarif_eq_lb_display * eff
+            elif l['type_loge'] == 'haut_grade' and tarif_eq_hg_display and nb_t:
+                l['cout_equilibre'] = tarif_eq_hg_display * nb_t
             else:
                 l['cout_equilibre'] = None
             # Modèle hybride
