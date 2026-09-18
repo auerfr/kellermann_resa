@@ -169,7 +169,7 @@
       <div style="font-size:1.6rem;font-weight:700;color:#0F2137;">{{ sim.total_pour_equilibre|floatformat:0 }} €</div>
       <div class="text-muted small">Charges à couvrir par cotisations</div>
       {% if sim.total_auto_finance %}
-      <div class="text-muted" style="font-size:11px;">total {{ sim.total_global|floatformat:0 }} € dont {{ sim.total_auto_finance|floatformat:0 }} € auto-financés</div>
+      <div class="text-muted" style="font-size:11px;">total {{ sim.total_global|floatformat:0 }} € dont {{ sim.total_auto_finance|floatformat:0 }} € auto-financés (cuisine, salles{% if sim.recettes_occasionnels %}, occasionnelles{% endif %})</div>
       {% endif %}
     </div>
   </div>
@@ -225,8 +225,11 @@
           {% if sim.total_auto_finance %}
           <tr style="color:#059669;">
             <td>
-              − Auto-financées (cuisine + salles)
-              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Couvertes par les tarifs à la tenue — non imputées à la cotisation</div>
+              − Recettes auto-financées
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">
+                Cuisine + salles{% if sim.recettes_occasionnels %} + loges occasionnelles{% endif %} — couvertes par leur facturation à la tenue
+                {% if sim.recettes_occasionnels %}<br>dont {{ sim.recettes_occasionnels|floatformat:0 }} € de loges occasionnelles (facturation à la tenue){% endif %}
+              </div>
             </td>
             <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.total_auto_finance|floatformat:0 }} €</td>
             <td></td>
@@ -462,7 +465,7 @@
     <div class="text-muted mt-2" style="font-size:11px;">
       Écart hybride = différence entre le modèle hybride et la cotisation actuelle.
       Rouge = la loge paierait plus · Vert = paierait moins.
-      Usage pur et hybride sont calculés hors agapes et salle (auto-financés par les tarifs à la tenue).
+      Usage pur et hybride sont calculés hors agapes, salle et loges occasionnelles (auto-financés par leur facturation à la tenue).
     </div>
   </div>
 </div>

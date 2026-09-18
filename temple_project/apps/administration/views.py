@@ -5680,13 +5680,20 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     nb_resas_salle_total = len(resas_salle)
 
     # ── Tarif d'équilibre ──────────────────────────────────────────
-    # Les coûts cuisine (agapes) et salle sont auto-financés par les tarifs à la tenue ;
-    # les exclure évite le double-comptage dans la cotisation annuelle.
+    # Exclusions du calcul de cotisation annuelle :
+    #  - agapes / salle : auto-financés par les tarifs à la tenue
+    #  - occasionnels (membre_association=False) : couvert par leur facturation
+    #    exceptionnelle à la tenue ; traité comme recette en face des charges
     charges_lb  = sum(a['total_cout'] - a['total_agapes'] - a['total_salle']
-                      for a in par_loge if a['type_loge'] == 'loge')
+                      for a in par_loge if a['type_loge'] == 'loge' and a['membre_association'])
     charges_hg  = sum(a['total_cout'] - a['total_agapes'] - a['total_salle']
-                      for a in par_loge if a['type_loge'] == 'haut_grade')
-    total_auto_finance = total_agapes + total_salle
+                      for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
+    # Coûts auto-financés : agapes/salle + coûts des occupants occasionnels
+    recettes_occasionnels = sum(
+        a['total_cout'] - a['total_agapes'] - a['total_salle']
+        for a in par_loge if not a['membre_association']
+    )
+    total_auto_finance = total_agapes + total_salle + recettes_occasionnels
 
     # effectif_lb/hg = somme des effectifs des loges ADHÉRENTES uniquement
     # Les occupants occasionnels (membre_association=False) ne paient pas de cotisation annuelle
@@ -5732,8 +5739,9 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         'charges_hg':        charges_hg,
         'net_lb':            net_lb,
         'net_hg':            net_hg,
-        'total_auto_finance': total_auto_finance,
-        'total_pour_equilibre': total_pour_equilibre,
+        'total_auto_finance':      total_auto_finance,
+        'recettes_occasionnels':   recettes_occasionnels,
+        'total_pour_equilibre':    total_pour_equilibre,
         'effectif_lb':  effectif_lb,
         'effectif_hg':  effectif_hg,
         'eff_eq_lb':    eff_eq_lb,
