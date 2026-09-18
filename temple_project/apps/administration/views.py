@@ -1801,7 +1801,8 @@ def message_detail(request, pk):
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'repondre':
-            reponse = request.POST.get('reponse', '').strip()
+            reponse    = request.POST.get('reponse', '').strip()
+            email_dest = request.POST.get('email_dest', '').strip() or m.email
             if not reponse:
                 messages.error(request, "Le message de réponse est vide.")
             else:
@@ -1813,17 +1814,19 @@ def message_detail(request, pk):
                         f"En réponse à votre message du {m.created_at:%d/%m/%Y} :\n"
                         f"« {m.message} »"
                     ),
-                    recipient_list=[m.email],
+                    recipient_list=[email_dest],
                 )
+                if email_dest != m.email:
+                    m.email = email_dest
                 m.reponse = reponse
                 m.date_reponse = timezone.now()
                 m.repondu_par = request.user.get_username()
                 m.statut = 'traite'
                 m.save()
                 log_evenement('reponse_message',
-                              f"Réponse envoyée à {m.email} (message #{m.pk})",
+                              f"Réponse envoyée à {email_dest} (message #{m.pk})",
                               request=request, objet=m)
-                messages.success(request, f"Réponse envoyée à {m.email}.")
+                messages.success(request, f"Réponse envoyée à {email_dest}.")
             return redirect('administration:message_detail', pk=m.pk)
         elif action == 'traite':
             m.statut = 'traite'; m.save(update_fields=['statut'])
@@ -1842,6 +1845,48 @@ def message_detail(request, pk):
         m.statut = 'lu'
         m.save(update_fields=['statut'])
     return render(request, 'administration/message_detail.html', {'m': m})
+
+
+@staff_required
+def messagerie_nouveau(request):
+    """Composer un message sortant vers un contact de loge."""
+    from temple_project.apps.loges.models import Loge
+    from temple_project.apps.reservations.models import MessageContact
+
+    loges = Loge.objects.filter(email__gt='').order_by('nom')
+
+    if request.method == 'POST':
+        nom_dest   = request.POST.get('nom_dest', '').strip()
+        email_dest = request.POST.get('email_dest', '').strip()
+        sujet      = request.POST.get('sujet', '').strip()
+        corps      = request.POST.get('corps', '').strip()
+
+        if not email_dest or not corps:
+            messages.error(request, "L'adresse email et le message sont obligatoires.")
+        else:
+            send_mail_kellermann(
+                subject=sujet or "Message — Temples Kellermann",
+                message=corps,
+                recipient_list=[email_dest],
+            )
+            MessageContact.objects.create(
+                nom=nom_dest or email_dest,
+                email=email_dest,
+                sujet=sujet,
+                message=corps,
+                statut='traite',
+                reponse=corps,
+                date_reponse=timezone.now(),
+                repondu_par=request.user.get_username(),
+                emis=True,
+            )
+            log_evenement('message_emis',
+                          f"Message émis vers {email_dest}",
+                          request=request)
+            messages.success(request, f"Message envoyé à {email_dest}.")
+            return redirect('administration:messagerie')
+
+    return render(request, 'administration/messagerie_nouveau.html', {'loges': loges})
 
 
 @staff_required

@@ -547,6 +547,7 @@ class MessageContact(models.Model):
     reponse      = models.TextField(blank=True)
     date_reponse = models.DateTimeField(null=True, blank=True)
     repondu_par  = models.CharField(max_length=150, blank=True)
+    emis         = models.BooleanField(default=False, help_text="Message émis par l'admin (sortant)")
 
     class Meta:
         verbose_name = "Message de contact"

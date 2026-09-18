@@ -26,6 +26,7 @@ urlpatterns = [
     path("rattachement-salles/", views.rattachement_salles, name="rattachement_salles"),
     path("recherche/", views.recherche_globale, name="recherche_globale"),
     path("messagerie/", views.messagerie, name="messagerie"),
+    path("messagerie/nouveau/", views.messagerie_nouveau, name="messagerie_nouveau"),
     path("messagerie/<int:pk>/", views.message_detail, name="message_detail"),
     path("doublons-regles/", views.doublons_regles, name="doublons_regles"),
     path("accueil/", views.accueil, name="accueil"),
