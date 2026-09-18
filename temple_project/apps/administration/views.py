@@ -5507,6 +5507,200 @@ def _simuler_budget(saison, nb_membres_global=None):
 
 
 @staff_required
+def budget_simulation_pdf(request):
+    """Export PDF de synthèse budgétaire — destiné au président et trésorier."""
+    from io import BytesIO
+    from decimal import Decimal
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    nb_membres = request.GET.get('nb_membres', '')
+    nb_membres_v = int(nb_membres) if nb_membres.isdigit() and 1 <= int(nb_membres) <= 200 else None
+
+    sim = _simuler_budget(saison, nb_membres_v)
+    params = Parametres.get_instance()
+
+    BLEU = colors.HexColor('#0F2137')
+    OR   = colors.HexColor('#C8A84B')
+    GRIS = colors.HexColor('#64748B')
+    FOND = colors.HexColor('#EBF1FA')
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            topMargin=1.8 * cm, bottomMargin=1.8 * cm,
+                            leftMargin=1.8 * cm, rightMargin=1.8 * cm)
+    styles = getSampleStyleSheet()
+    titre    = ParagraphStyle('titre',   fontSize=18, textColor=BLEU, spaceAfter=4, fontName='Helvetica-Bold')
+    sous     = ParagraphStyle('sous',    fontSize=10, textColor=GRIS, spaceAfter=2)
+    section  = ParagraphStyle('section', fontSize=11, textColor=BLEU, spaceBefore=10, spaceAfter=4, fontName='Helvetica-Bold')
+    note     = ParagraphStyle('note',    fontSize=8,  textColor=GRIS, spaceAfter=2)
+    centré   = ParagraphStyle('centré',  fontSize=9,  textColor=GRIS, alignment=TA_CENTER)
+
+    elems = []
+
+    # ── En-tête ──
+    elems.append(Paragraph("Temples Kellermann — Simulation budgétaire", titre))
+    elems.append(Paragraph(f"Saison {saison}–{saison+1}  ·  Généré le {date.today():%d/%m/%Y}", sous))
+    if nb_membres_v:
+        elems.append(Paragraph(f"Effectif forcé à {nb_membres_v} membres par loge pour cette simulation.", note))
+    elems.append(HRFlowable(width='100%', thickness=1.5, color=OR, spaceAfter=10))
+
+    # ── KPI synthèse ──
+    elems.append(Paragraph("Synthèse", section))
+    kpi_data = [
+        ['Charge totale simulée', 'Tenues validées', 'Coût moyen / tenue', 'Charges fixes / an'],
+        [
+            f"{sim['total_global']:,.0f} €".replace(',', ' '),
+            str(sim['nb_resas']),
+            f"{sim['cout_moyen_tenue']:,.0f} €".replace(',', ' '),
+            f"{sim['total_fixe']:,.0f} €".replace(',', ' '),
+        ],
+    ]
+    kpi_t = Table(kpi_data, colWidths=[4.4 * cm] * 4)
+    kpi_t.setStyle(TableStyle([
+        ('BACKGROUND',  (0, 0), (-1, 0), BLEU),
+        ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+        ('FONTSIZE',    (0, 0), (-1, 0), 8),
+        ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BACKGROUND',  (0, 1), (-1, 1), FOND),
+        ('FONTNAME',    (0, 1), (-1, 1), 'Helvetica-Bold'),
+        ('FONTSIZE',    (0, 1), (-1, 1), 13),
+        ('ALIGN',       (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [BLEU, FOND]),
+        ('TOPPADDING',  (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('BOX',         (0, 0), (-1, -1), 0.5, GRIS),
+        ('INNERGRID',   (0, 0), (-1, -1), 0.3, colors.white),
+    ]))
+    elems.append(kpi_t)
+    elems.append(Spacer(1, 0.5 * cm))
+
+    # ── Décomposition charges ──
+    elems.append(Paragraph("Décomposition des charges", section))
+    total_g = sim['total_global'] or Decimal('1')
+    pct_f = float(sim['total_fixe']   / total_g * 100)
+    pct_m = float(sim['total_mutualise'] / total_g * 100)
+    pct_r = float(sim['total_marginal']  / total_g * 100)
+    dec_data = [
+        ['Type', 'Montant', '% du total'],
+        ['Charges fixes',      f"{sim['total_fixe']:,.0f} €".replace(',', ' '),      f"{pct_f:.1f} %"],
+        ['Charges mutualisées', f"{sim['total_mutualise']:,.0f} €".replace(',', ' '), f"{pct_m:.1f} %"],
+        ['Charges marginales', f"{sim['total_marginal']:,.0f} €".replace(',', ' '),  f"{pct_r:.1f} %"],
+        ['Total',              f"{sim['total_global']:,.0f} €".replace(',', ' '),    '100 %'],
+    ]
+    dec_t = Table(dec_data, colWidths=[8 * cm, 4 * cm, 3 * cm])
+    dec_t.setStyle(TableStyle([
+        ('BACKGROUND',  (0, 0), (-1, 0), BLEU),
+        ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BACKGROUND',  (0, -1), (-1, -1), FOND),
+        ('FONTNAME',    (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#F8FAFC')]),
+        ('FONTSIZE',    (0, 0), (-1, -1), 9),
+        ('ALIGN',       (1, 0), (-1, -1), 'RIGHT'),
+        ('GRID',        (0, 0), (-1, -1), 0.4, colors.HexColor('#CDD8E8')),
+        ('TOPPADDING',  (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elems.append(dec_t)
+    elems.append(Spacer(1, 0.5 * cm))
+
+    # ── Tarif d'équilibre ──
+    elems.append(Paragraph("Tarif d'équilibre (coût / membre)", section))
+    eq_data = [['Type de loge', 'Membres imputés', 'Charges imputées', 'Tarif équilibre', 'Tarif actuel', 'Écart']]
+    def _ecart(eq, actuel):
+        if eq is None or actuel is None:
+            return '—'
+        diff = eq - actuel
+        return f"+{diff:.2f} €" if diff >= 0 else f"{diff:.2f} €"
+
+    if sim['tarif_eq_lb'] is not None:
+        eq_data.append([
+            'Loges bleues',
+            str(sim['effectif_lb']),
+            f"{sim['charges_lb']:,.0f} €".replace(',', ' '),
+            f"{sim['tarif_eq_lb']:.2f} €",
+            f"{params.tarif_membre_loge:.2f} €",
+            _ecart(sim['tarif_eq_lb'], params.tarif_membre_loge),
+        ])
+    if sim['tarif_eq_hg'] is not None:
+        eq_data.append([
+            'Hauts grades',
+            str(sim['effectif_hg']),
+            f"{sim['charges_hg']:,.0f} €".replace(',', ' '),
+            f"{sim['tarif_eq_hg']:.2f} €",
+            f"{params.tarif_membre_hg:.2f} €",
+            _ecart(sim['tarif_eq_hg'], params.tarif_membre_hg),
+        ])
+
+    if len(eq_data) > 1:
+        eq_t = Table(eq_data, colWidths=[3.5*cm, 2.5*cm, 3*cm, 3*cm, 2.5*cm, 2.5*cm])
+        eq_t.setStyle(TableStyle([
+            ('BACKGROUND',  (0, 0), (-1, 0), BLEU),
+            ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('FONTSIZE',    (0, 0), (-1, -1), 9),
+            ('ALIGN',       (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID',        (0, 0), (-1, -1), 0.4, colors.HexColor('#CDD8E8')),
+            ('TOPPADDING',  (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elems.append(eq_t)
+    elems.append(Spacer(1, 0.5 * cm))
+
+    # ── Tableau par loge ──
+    elems.append(Paragraph("Répartition par loge", section))
+    loge_data = [['Loge', 'Type', 'Tenues', 'Effectif', 'Charge totale', 'Coût / tenue', 'Coût / membre']]
+    for a in sim['par_loge']:
+        badge = 'LB' if a['type_loge'] == 'loge' else ('HG' if a['type_loge'] == 'haut_grade' else '—')
+        loge_data.append([
+            a['loge_nom'],
+            badge,
+            str(a['nb_tenues']),
+            str(a['effectif']) if a['effectif'] else '—',
+            f"{a['total_cout']:,.0f} €".replace(',', ' '),
+            f"{a['cout_par_tenue']:,.0f} €".replace(',', ' '),
+            f"{a['cout_par_membre']:.2f} €" if a['effectif'] else '—',
+        ])
+    loge_t = Table(loge_data, colWidths=[5.5*cm, 1.2*cm, 1.5*cm, 1.8*cm, 2.8*cm, 2.4*cm, 2.3*cm])
+    loge_t.setStyle(TableStyle([
+        ('BACKGROUND',  (0, 0), (-1, 0), BLEU),
+        ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+        ('FONTSIZE',    (0, 0), (-1, -1), 8.5),
+        ('ALIGN',       (2, 0), (-1, -1), 'RIGHT'),
+        ('GRID',        (0, 0), (-1, -1), 0.4, colors.HexColor('#CDD8E8')),
+        ('TOPPADDING',  (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elems.append(loge_t)
+
+    # ── Pied de page ──
+    elems.append(Spacer(1, 0.8 * cm))
+    elems.append(HRFlowable(width='100%', thickness=0.5, color=GRIS))
+    elems.append(Spacer(1, 0.2 * cm))
+    elems.append(Paragraph(
+        "Document confidentiel — Temples Kellermann · Simulation budgétaire interne · "
+        "Les tarifs d'équilibre sont indicatifs et basés sur les réservations validées de la saison.",
+        centré))
+
+    doc.build(elems)
+    buf.seek(0)
+    resp = HttpResponse(buf, content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="Simulation_budgetaire_{saison}-{saison+1}_{date.today():%Y%m%d}.pdf"'
+    return resp
+
+
+@staff_required
 def budget_config(request):
     """Saisie et gestion des postes de charges par temple et saison."""
     saison = int(request.GET.get('saison') or _annee_saison_courante())

@@ -7,9 +7,15 @@
     <h1 class="h3 mb-1" style="color:#0F2137;">📊 Simulation budgétaire</h1>
     <p class="text-muted small mb-0">Répartition des charges d'infrastructure par loge · Saison {{ saison }}-{{ saison|add:1 }}</p>
   </div>
-  <a href="{% url 'administration:budget_config' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">
-    ⚙️ Configurer les postes
-  </a>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if sim %}
+    <a href="{% url 'administration:budget_simulation_pdf' %}?saison={{ saison }}{% if nb_membres %}&nb_membres={{ nb_membres }}{% endif %}"
+       class="btn btn-danger btn-sm">🧾 PDF synthèse</a>
+    {% endif %}
+    <a href="{% url 'administration:budget_config' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">
+      ⚙️ Configurer les postes
+    </a>
+  </div>
 </div>
 
 {% if messages %}{% for msg in messages %}
