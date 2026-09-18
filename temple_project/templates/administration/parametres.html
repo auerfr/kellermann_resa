@@ -60,6 +60,35 @@
           </div>
         </div>
       </div>
+      <hr class="my-3">
+      <div class="fw-semibold mb-2" style="color:#0F2137;">Modules financiers</div>
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="p-3 rounded border">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="facturation_active" name="facturation_active"
+                     {% if params.facturation_active %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="facturation_active">
+                💶 Facturation exceptionnelle active
+              </label>
+            </div>
+            <div class="text-muted small mt-1">Facture les tenues exceptionnelles (week-end / vacances) et congrès aux tarifs votés en AG. À désactiver tant que le modèle n'est pas validé avec le trésorier.</div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="p-3 rounded border">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="module_finance_actif" name="module_finance_actif"
+                     {% if params.module_finance_actif %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="module_finance_actif">
+                📊 Module Finance actif (factures annuelles)
+              </label>
+            </div>
+            <div class="text-muted small mt-1">Active la génération de factures annuelles par loge (cotisations + tenues exceptionnelles). À activer après validation des tarifs en assemblée générale.</div>
+          </div>
+        </div>
+      </div>
+
       <div class="d-flex gap-3">
         <button type="submit" class="btn px-4" style="background:#0F2137;color:white;">Enregistrer</button>
         <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">Annuler</a>

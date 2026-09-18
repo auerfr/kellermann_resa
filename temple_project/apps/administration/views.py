@@ -4028,6 +4028,8 @@ def parametres(request):
         params.smtp_user = request.POST.get('smtp_user', params.smtp_user)
         params.smtp_password = request.POST.get('smtp_password', params.smtp_password)
         params.smtp_tls = request.POST.get('smtp_tls') == 'on'
+        params.facturation_active   = request.POST.get('facturation_active') == 'on'
+        params.module_finance_actif = request.POST.get('module_finance_actif') == 'on'
         params.save()
         messages.success(request, "Paramètres sauvegardés.")
         return redirect('administration:parametres')
@@ -5320,11 +5322,12 @@ def _annee_saison_courante():
     return today.year if today.month >= 9 else today.year - 1
 
 
-def _simuler_budget(saison, nb_membres_global=None):
+def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membres_hg=None):
     """Moteur de simulation budgétaire.
 
     Retourne un dict avec par_loge, totaux et détail par réservation.
-    nb_membres_global : override l'effectif de chaque loge (slider UI).
+    nb_membres_global : override global (toutes loges).
+    nb_membres_lb / nb_membres_hg : override par catégorie (loges bleues / hauts grades).
     """
     from decimal import Decimal
     from datetime import datetime, timedelta
@@ -5493,10 +5496,18 @@ def _simuler_budget(saison, nb_membres_global=None):
 
         if nb_membres_global:
             effectif = nb_membres_global
-        elif r.loge and r.loge.effectif_total > 0:
-            effectif = r.loge.effectif_total
+        elif r.loge:
+            type_loge = r.loge.type_loge
+            if nb_membres_lb and type_loge == 'loge':
+                effectif = nb_membres_lb
+            elif nb_membres_hg and type_loge == 'haut_grade':
+                effectif = nb_membres_hg
+            elif r.loge.effectif_total > 0:
+                effectif = r.loge.effectif_total
+            else:
+                effectif = 20  # défaut si effectif non renseigné
         else:
-            effectif = 30
+            effectif = 20
 
         detail.append({
             'resa': r,
@@ -5648,11 +5659,18 @@ def budget_simulation_pdf(request):
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
-    saison = int(request.GET.get('saison') or _annee_saison_courante())
-    nb_membres = request.GET.get('nb_membres', '')
-    nb_membres_v = int(nb_membres) if nb_membres.isdigit() and 1 <= int(nb_membres) <= 200 else None
+    def _p(val):
+        try:
+            v = int(val)
+            return v if 1 <= v <= 300 else None
+        except (TypeError, ValueError):
+            return None
 
-    sim = _simuler_budget(saison, nb_membres_v)
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    nb_membres_lb = _p(request.GET.get('nb_membres_lb'))
+    nb_membres_hg = _p(request.GET.get('nb_membres_hg'))
+
+    sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg)
     params = Parametres.get_instance()
 
     BLEU = colors.HexColor('#0F2137')
@@ -5676,8 +5694,13 @@ def budget_simulation_pdf(request):
     # ── En-tête ──
     elems.append(Paragraph("Temples Kellermann — Simulation budgétaire", titre))
     elems.append(Paragraph(f"Saison {saison}–{saison+1}  ·  Généré le {date.today():%d/%m/%Y}", sous))
-    if nb_membres_v:
-        elems.append(Paragraph(f"Effectif forcé à {nb_membres_v} membres par loge pour cette simulation.", note))
+    if nb_membres_lb or nb_membres_hg:
+        note_eff = []
+        if nb_membres_lb:
+            note_eff.append(f"LB : {nb_membres_lb} membres")
+        if nb_membres_hg:
+            note_eff.append(f"HG : {nb_membres_hg} membres")
+        elems.append(Paragraph(f"Effectifs simulés — {' · '.join(note_eff)}.", note))
     elems.append(HRFlowable(width='100%', thickness=1.5, color=OR, spaceAfter=10))
 
     # ── KPI synthèse ──
@@ -5821,14 +5844,19 @@ def budget_simulation_pdf(request):
     effectif_note = (
         "<b>⚠ Attention — effectifs à confirmer.</b> "
         "Les effectifs indiqués proviennent des fiches loges (champ « Effectif total »). "
-        "Si ce champ n'est pas renseigné, la simulation utilise 30 membres par défaut. "
+        "Si ce champ n'est pas renseigné, la simulation utilise 20 membres par défaut. "
         "Le tarif d'équilibre par membre est donc <b>directement fonction de l'effectif saisi</b> : "
         "un effectif sous-estimé donne un tarif sur-estimé, et inversement. "
         "Vérifiez les effectifs dans les fiches loges avant de communiquer ces chiffres."
     )
-    if nb_membres_v:
+    if nb_membres_lb or nb_membres_hg:
+        parts = []
+        if nb_membres_lb:
+            parts.append(f"LB : {nb_membres_lb} membres")
+        if nb_membres_hg:
+            parts.append(f"HG : {nb_membres_hg} membres")
         effectif_note = (
-            f"<b>ℹ Effectif forcé à {nb_membres_v} membres</b> pour cette simulation (curseur manuel). "
+            f"<b>ℹ Effectifs simulés ({' · '.join(parts)})</b>. "
             "Les tarifs d'équilibre sont calculés sur cette base et non sur les effectifs réels des loges."
         )
     elems.append(Paragraph(effectif_note, avert_style))
@@ -6060,19 +6088,26 @@ def budget_config(request):
 def budget_simulation(request):
     """Simulation de répartition des charges par loge."""
     from decimal import Decimal
+
+    def _parse_int_param(val, lo=1, hi=300):
+        try:
+            v = int(val)
+            return v if lo <= v <= hi else None
+        except (TypeError, ValueError):
+            return None
+
     saison       = int(request.GET.get('saison') or _annee_saison_courante())
-    nb_membres   = request.GET.get('nb_membres', '')
-    nb_membres_v = int(nb_membres) if nb_membres.isdigit() and 1 <= int(nb_membres) <= 200 else None
+    nb_membres_lb = _parse_int_param(request.GET.get('nb_membres_lb'))
+    nb_membres_hg = _parse_int_param(request.GET.get('nb_membres_hg'))
 
     postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
-    sim = _simuler_budget(saison, nb_membres_v) if postes_actifs > 0 else None
+    sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg) if postes_actifs > 0 else None
 
     temples = Temple.objects.all().order_by('nom')
     saisons_dispo = sorted(set(
         PosteCharge.objects.values_list('saison', flat=True)
     ) | {saison}, reverse=True)
 
-    # Tarif annuel suggéré : total annuel normalisé des fixe + estimation variable
     total_fixe_annuel = sum(
         p.montant_annuel_normalise
         for p in PosteCharge.objects.filter(saison=saison, actif=True, type_charge='fixe')
@@ -6080,15 +6115,28 @@ def budget_simulation(request):
 
     params = Parametres.get_instance()
 
+    # Effectifs réels des loges pour affichage
+    loges_lb = list(Loge.objects.filter(actif=True, type_loge='loge').values('nom', 'effectif_total'))
+    loges_hg = list(Loge.objects.filter(actif=True, type_loge='haut_grade').values('nom', 'effectif_total'))
+    effectif_reel_lb = sum(l['effectif_total'] for l in loges_lb if l['effectif_total'])
+    effectif_reel_hg = sum(l['effectif_total'] for l in loges_hg if l['effectif_total'])
+    nb_loges_lb = len(loges_lb)
+    nb_loges_hg = len(loges_hg)
+
     return render(request, 'administration/budget_simulation.html', {
         'saison': saison,
         'saisons_dispo': saisons_dispo,
-        'nb_membres': nb_membres_v or '',
+        'nb_membres_lb': nb_membres_lb or '',
+        'nb_membres_hg': nb_membres_hg or '',
         'sim': sim,
         'postes_actifs': postes_actifs,
         'total_fixe_annuel': total_fixe_annuel,
         'temples': temples,
         'params': params,
+        'effectif_reel_lb': effectif_reel_lb,
+        'effectif_reel_hg': effectif_reel_hg,
+        'nb_loges_lb': nb_loges_lb,
+        'nb_loges_hg': nb_loges_hg,
     })
 
 
@@ -7014,9 +7062,7 @@ def _prochain_numero_facture(saison):
 def finance_saison(request):
     """Tableau de bord du module finance : liste des factures par saison."""
     from .models import Facture
-    guard = _finance_guard(request)
-    if guard:
-        return guard
+    params = Parametres.get_instance()
 
     saison = int(request.GET.get('saison') or _annee_saison_courante())
     saisons_dispo = sorted(set(
@@ -7029,7 +7075,7 @@ def finance_saison(request):
         .select_related('loge')
         .prefetch_related('lignes')
         .order_by('loge__nom')
-    )
+    ) if params.module_finance_actif else []
 
     total_emis  = sum(f.total_ht for f in factures if f.statut in ('emise', 'payee'))
     total_paye  = sum(f.total_ht for f in factures if f.statut == 'payee')
@@ -7037,7 +7083,6 @@ def finance_saison(request):
     nb_emises    = sum(1 for f in factures if f.statut == 'emise')
     nb_payees    = sum(1 for f in factures if f.statut == 'payee')
 
-    params = Parametres.get_instance()
     return render(request, 'administration/finance_saison.html', {
         'saison':         saison,
         'saisons_dispo':  saisons_dispo,

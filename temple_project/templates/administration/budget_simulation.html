@@ -9,12 +9,13 @@
   </div>
   <div class="d-flex gap-2 flex-wrap">
     {% if sim %}
-    <a href="{% url 'administration:budget_simulation_pdf' %}?saison={{ saison }}{% if nb_membres %}&nb_membres={{ nb_membres }}{% endif %}"
+    <a href="{% url 'administration:budget_simulation_pdf' %}?saison={{ saison }}{% if nb_membres_lb %}&nb_membres_lb={{ nb_membres_lb }}{% endif %}{% if nb_membres_hg %}&nb_membres_hg={{ nb_membres_hg }}{% endif %}"
        class="btn btn-danger btn-sm">🧾 PDF synthèse</a>
     {% endif %}
     <a href="{% url 'administration:budget_config' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">
       ⚙️ Configurer les postes
     </a>
+    <a href="{% url 'administration:finance_saison' %}" class="btn btn-outline-secondary btn-sm">← Facturation</a>
   </div>
 </div>
 
@@ -35,19 +36,19 @@
         <div class="col-md-4">
           <div class="p-3 rounded" style="background:#F1F5F9;border-left:4px solid #64748B;">
             <div class="fw-bold mb-1">🏛 Charges fixes</div>
-            <div class="text-muted small">Loyer, assurances, maintenance. Montant annuel divisé <strong>par le nombre de tenues</strong> de la saison. Chaque tenue supporte une quote-part égale, indépendamment de l'heure ou du nombre de loges présentes.</div>
+            <div class="text-muted small">Loyer, assurances, maintenance. Montant annuel divisé <strong>par le nombre de tenues</strong> de la saison. Chaque tenue supporte une quote-part égale.</div>
           </div>
         </div>
         <div class="col-md-4">
           <div class="p-3 rounded" style="background:#FFFBEB;border-left:4px solid #D97706;">
             <div class="fw-bold mb-1">⚡ Charges mutualisées</div>
-            <div class="text-muted small">Chauffage, électricité de base. Coût déjà engagé dès qu'une loge est présente. <strong>Si plusieurs loges partagent le temple le même jour</strong>, le coût est divisé entre elles — économie d'échelle réelle.</div>
+            <div class="text-muted small">Chauffage, électricité. <strong>Si plusieurs loges partagent le temple le même jour</strong>, le coût est divisé entre elles — économie d'échelle réelle.</div>
           </div>
         </div>
         <div class="col-md-4">
           <div class="p-3 rounded" style="background:#F5F3FF;border-left:4px solid #7C3AED;">
             <div class="fw-bold mb-1">🧹 Charges marginales</div>
-            <div class="text-muted small">Nettoyage, consommables. Coût fixe <strong>par tenue</strong>, quel que soit le nombre de loges présentes ce jour-là. Chaque occupation génère ce coût en totalité.</div>
+            <div class="text-muted small">Nettoyage, consommables. Coût fixe <strong>par tenue</strong>, quel que soit le nombre de loges présentes ce jour-là.</div>
           </div>
         </div>
       </div>
@@ -66,38 +67,62 @@
 
 {# ── Paramètres de simulation ── #}
 <div class="card border-0 shadow-sm mb-4">
+  <div class="card-header" style="background:#0F2137;">
+    <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">⚙️ Paramètres de simulation</span>
+  </div>
   <div class="card-body py-3">
-    <form method="get" class="d-flex align-items-end gap-3 flex-wrap">
+    <form method="get" class="row g-3 align-items-end">
+      <input type="hidden" name="saison" value="{{ saison }}">
 
-      <div>
-        <label class="form-label mb-1" style="font-size:12px;">Saison</label>
-        <select name="saison" class="form-select form-select-sm no-select2" style="width:140px;">
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">Saison</label>
+        <select name="saison" class="form-select form-select-sm no-select2">
           {% for s in saisons_dispo %}
           <option value="{{ s }}" {% if s == saison %}selected{% endif %}>{{ s }}-{{ s|add:1 }}</option>
           {% endfor %}
         </select>
       </div>
 
-      <div style="min-width:260px;">
-        <label class="form-label mb-1" style="font-size:12px;">
-          Effectif global (override) :
-          <strong id="nb-val">{% if nb_membres %}{{ nb_membres }}{% else %}— (par loge){% endif %}</strong>
+      <div class="col-md-3">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Effectif moyen — Loges bleues
+          <span class="text-muted fw-normal">(vide = fiches loges)</span>
         </label>
-        <input type="range" name="nb_membres" id="nb-slider"
-               min="0" max="120" step="5"
-               value="{% if nb_membres %}{{ nb_membres }}{% else %}0{% endif %}"
-               class="form-range"
-               oninput="document.getElementById('nb-val').textContent = this.value > 0 ? this.value + ' membres' : '— (par loge)'">
-        <div class="d-flex justify-content-between" style="font-size:10px;color:#94A3B8;margin-top:-2px;">
-          <span>Par loge</span><span>15</span><span>30</span><span>60</span><span>90</span><span>120</span>
+        <div class="input-group input-group-sm">
+          <input type="number" name="nb_membres_lb" class="form-control"
+                 min="1" max="300" step="1"
+                 value="{{ nb_membres_lb }}"
+                 placeholder="{% if effectif_reel_lb %}{{ effectif_reel_lb }} réel{% else %}non renseigné{% endif %}">
+          <span class="input-group-text text-muted">membres</span>
+        </div>
+        <div class="form-text">
+          {% if nb_loges_lb %}{{ nb_loges_lb }} loge{% if nb_loges_lb > 1 %}s{% endif %} LB active{% if nb_loges_lb > 1 %}s{% endif %}{% if effectif_reel_lb %}, {{ effectif_reel_lb }} membres déclarés{% endif %}{% endif %}
         </div>
       </div>
 
-      <button type="submit" class="btn btn-primary btn-sm">Simuler</button>
+      <div class="col-md-3">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Effectif moyen — Hauts grades
+          <span class="text-muted fw-normal">(vide = fiches loges)</span>
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="nb_membres_hg" class="form-control"
+                 min="1" max="300" step="1"
+                 value="{{ nb_membres_hg }}"
+                 placeholder="{% if effectif_reel_hg %}{{ effectif_reel_hg }} réel{% else %}non renseigné{% endif %}">
+          <span class="input-group-text text-muted">membres</span>
+        </div>
+        <div class="form-text">
+          {% if nb_loges_hg %}{{ nb_loges_hg }} atelier{% if nb_loges_hg > 1 %}s{% endif %} HG actif{% if nb_loges_hg > 1 %}s{% endif %}{% if effectif_reel_hg %}, {{ effectif_reel_hg }} membres déclarés{% endif %}{% endif %}
+        </div>
+      </div>
 
-      {% if nb_membres %}
-      <a href="?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">✕ Réinitialiser</a>
-      {% endif %}
+      <div class="col-md-4 d-flex gap-2 align-items-end">
+        <button type="submit" class="btn btn-primary btn-sm">Simuler</button>
+        {% if nb_membres_lb or nb_membres_hg %}
+        <a href="?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">✕ Réinitialiser</a>
+        {% endif %}
+      </div>
     </form>
   </div>
 </div>
@@ -145,6 +170,12 @@
 <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #C8A84B!important;">
   <div class="card-body py-3 px-4">
     <div class="fw-bold mb-3" style="color:#0F2137;font-size:15px;">⚖️ Tarif d'équilibre</div>
+
+    {% if not sim.tarif_eq_lb and not sim.tarif_eq_hg %}
+    <div class="alert alert-warning py-2 mb-0">
+      Aucun effectif renseigné dans les fiches loges. Saisissez un effectif simulé ci-dessus pour obtenir le tarif d'équilibre.
+    </div>
+    {% else %}
     <div class="row g-3">
 
       {% if sim.tarif_eq_lb %}
@@ -152,18 +183,14 @@
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Loges bleues</div>
         <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ sim.tarif_eq_lb|floatformat:2 }} €<span style="font-size:13px;font-weight:400;color:#64748B;"> / membre</span></div>
         <div class="mt-1" style="font-size:12px;">
-          Tarif actuel : <strong>{{ params.tarif_membre_loge|floatformat:2 }} €</strong>
-          {% with diff=params.tarif_membre_loge|add:0 %}
+          Tarif actuel voté : <strong>{{ params.tarif_membre_loge|floatformat:2 }} €</strong>
           {% if params.tarif_membre_loge > sim.tarif_eq_lb %}
-          <span class="badge ms-1" style="background:#DCFCE7;color:#15803D;">
-            +{{ params.tarif_membre_loge|floatformat:2 }} / {{ sim.tarif_eq_lb|floatformat:2 }} ≈ excédent
-          </span>
+          <span class="badge ms-1" style="background:#DCFCE7;color:#15803D;">excédent</span>
           {% elif params.tarif_membre_loge < sim.tarif_eq_lb %}
           <span class="badge ms-1" style="background:#FEE2E2;color:#B91C1C;">sous le seuil</span>
           {% else %}
           <span class="badge ms-1" style="background:#F0FDF4;color:#15803D;">à l'équilibre</span>
           {% endif %}
-          {% endwith %}
         </div>
         <div class="text-muted mt-1" style="font-size:11px;">{{ sim.effectif_lb }} membres · {{ sim.charges_lb|floatformat:0 }} € de charges imputées</div>
       </div>
@@ -174,7 +201,7 @@
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Hauts grades</div>
         <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ sim.tarif_eq_hg|floatformat:2 }} €<span style="font-size:13px;font-weight:400;color:#64748B;"> / membre</span></div>
         <div class="mt-1" style="font-size:12px;">
-          Tarif actuel : <strong>{{ params.tarif_membre_hg|floatformat:2 }} €</strong>
+          Tarif actuel voté : <strong>{{ params.tarif_membre_hg|floatformat:2 }} €</strong>
           {% if params.tarif_membre_hg > sim.tarif_eq_hg %}
           <span class="badge ms-1" style="background:#DCFCE7;color:#15803D;">excédent</span>
           {% elif params.tarif_membre_hg < sim.tarif_eq_hg %}
@@ -189,22 +216,23 @@
 
       <div class="col-md-4">
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Recette estimée vs charges</div>
-        {% with recette_lb=params.tarif_membre_loge recette_hg=params.tarif_membre_hg %}
         {% if sim.effectif_lb or sim.effectif_hg %}
         <div style="font-size:12px;" class="mt-1">
           LB : {{ params.tarif_membre_loge|floatformat:0 }} € × {{ sim.effectif_lb }} = <strong>{% widthratio params.tarif_membre_loge 1 sim.effectif_lb %} €</strong><br>
           HG : {{ params.tarif_membre_hg|floatformat:0 }} € × {{ sim.effectif_hg }} = <strong>{% widthratio params.tarif_membre_hg 1 sim.effectif_hg %} €</strong>
         </div>
         {% endif %}
-        {% endwith %}
         <div class="text-muted mt-2" style="font-size:11px;">Charges totales simulées : <strong>{{ sim.total_global|floatformat:0 }} €</strong></div>
       </div>
 
     </div>
+    {% endif %}
+
     <div class="alert alert-info mt-3 py-2 mb-0" style="font-size:12px;">
-      Le tarif d'équilibre est calculé sur la base des tenues <em>validées</em> de la saison et des effectifs renseignés dans les fiches loges.
-      {% if nb_membres %}Effectif forcé à {{ nb_membres }} membres pour cette simulation.{% endif %}
-      Ajustez les postes de charges ou le slider effectif pour affiner.
+      Le tarif d'équilibre est calculé sur la base des tenues <em>validées</em> de la saison et des effectifs renseignés dans les fiches loges
+      (ou de l'effectif simulé saisi ci-dessus).
+      {% if nb_membres_lb %}<strong>LB simulé : {{ nb_membres_lb }} membres.</strong>{% endif %}
+      {% if nb_membres_hg %}<strong>HG simulé : {{ nb_membres_hg }} membres.</strong>{% endif %}
     </div>
   </div>
 </div>
@@ -242,7 +270,12 @@
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-header temple-header d-flex justify-content-between align-items-center">
     <span>Répartition par loge</span>
-    {% if nb_membres %}<span style="font-size:11px;font-weight:400;">Effectif forcé : {{ nb_membres }} membres</span>{% endif %}
+    {% if nb_membres_lb or nb_membres_hg %}
+    <span style="font-size:11px;font-weight:400;">
+      {% if nb_membres_lb %}LB simulé : {{ nb_membres_lb }} mbr{% endif %}
+      {% if nb_membres_hg %}{% if nb_membres_lb %} · {% endif %}HG simulé : {{ nb_membres_hg }} mbr{% endif %}
+    </span>
+    {% endif %}
   </div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
@@ -334,7 +367,7 @@
 <div class="text-muted mt-2" style="font-size:11px;">
   💡 Charges fixes réparties sur l'ensemble des tenues du temple concerné.
   Cohabitants (fond jaune) = le mutualisé est partagé entre toutes les loges présentes ce jour.
-  Effectif par loge = <code>effectif_total</code> de la fiche loge (ou 30 si non renseigné){% if nb_membres %}, overridé à {{ nb_membres }}{% endif %}.
+  Effectif par loge = <code>effectif_total</code> de la fiche loge (ou 20 si non renseigné){% if nb_membres_lb %}, LB simulé à {{ nb_membres_lb }}{% endif %}{% if nb_membres_hg %}, HG simulé à {{ nb_membres_hg }}{% endif %}.
 </div>
 
 {% endif %}
