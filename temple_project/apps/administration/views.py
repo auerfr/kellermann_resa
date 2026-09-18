@@ -5392,23 +5392,6 @@ def _simuler_budget(saison, nb_membres_global=None):
                 total += p.montant_annuel_normalise
         return total
 
-    def _variable_brut(type_charge, temple_id, duree_h, nb_resas_temple):
-        """Coût brut (avant mutualisaton inter-loges) pour un type de charge."""
-        total = Decimal('0')
-        for p in postes:
-            if p.type_charge != type_charge:
-                continue
-            if p.temple_id is not None and p.temple_id != temple_id:
-                continue
-            if p.unite == 'par_evenement':
-                total += p.montant
-            elif p.unite == 'par_heure':
-                total += p.montant * Decimal(str(round(duree_h, 4)))
-            elif p.unite in ('annuel', 'mensuel'):
-                denom = nb_resas_temple if p.temple_id is not None else (nb_resas or 1)
-                total += p.montant_annuel_normalise / Decimal(str(denom))
-        return total
-
     def _salle_brut(duree_h, nb_resas_salle_tot):
         total = Decimal('0')
         for p in postes:
@@ -5422,7 +5405,40 @@ def _simuler_budget(saison, nb_membres_global=None):
                 total += p.montant_annuel_normalise / Decimal(str(nb_resas_salle_tot or 1))
         return total
 
-    nb_resas_salle_tot = len(resas_salle) or 1
+    nb_resas_salle_tot = len(resas_salle)
+    # Total annuel d'occupants : tenues temple + salles de réunion non-cabinet
+    total_occupants_annuel = nb_resas + nb_resas_salle_tot or 1
+
+    def _variable_event(type_charge, temple_id, duree_h):
+        """Charges par_evenement / par_heure : coût brut à diviser par occupants du jour."""
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != type_charge:
+                continue
+            if p.temple_id is not None and p.temple_id != temple_id:
+                continue
+            if p.unite == 'par_evenement':
+                total += p.montant
+            elif p.unite == 'par_heure':
+                total += p.montant * Decimal(str(round(duree_h, 4)))
+        return total
+
+    def _variable_annuel(type_charge, temple_id, nb_resas_temple_loc):
+        """Charges annuelles/mensuelles : déjà amorties sur l'année, part par occupant."""
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != type_charge:
+                continue
+            if p.temple_id is not None and p.temple_id != temple_id:
+                continue
+            if p.unite in ('annuel', 'mensuel'):
+                if p.temple_id is not None:
+                    # Spécifique à un temple : dilué sur les tenues de ce temple
+                    total += p.montant_annuel_normalise / Decimal(str(nb_resas_temple_loc or 1))
+                else:
+                    # Global bâtiment : dilué sur TOUS les occupants de la saison
+                    total += p.montant_annuel_normalise / Decimal(str(total_occupants_annuel))
+        return total
 
     detail = []
     for r in resas:
@@ -5433,7 +5449,6 @@ def _simuler_budget(saison, nb_membres_global=None):
         duree_h = (fin_dt - debut_dt).total_seconds() / 3600
 
         nb_resas_temple = len(resas_par_temple[r.temple_id]) or 1
-        # Tous les occupants du bâtiment ce jour (tenues + salles)
         nb_occupants_jour = occupants_par_jour[r.date] or 1
         nb_agapes_jour    = agapes_par_jour[r.date] or 1
 
@@ -5441,12 +5456,24 @@ def _simuler_budget(saison, nb_membres_global=None):
         part_fixe_temple = _fixe_annuel_temple(r.temple_id) / nb_resas_temple
         part_fixe        = part_fixe_global + part_fixe_temple
 
-        # Mutualisé : partagé entre TOUS les occupants du jour
-        part_mutualise = _variable_brut('mutualise', r.temple_id, duree_h, nb_resas_temple) / nb_occupants_jour
-        part_marginal  = _variable_brut('marginal',  r.temple_id, duree_h, nb_resas_temple)
+        # Mutualisé : event/heure partagé par occupants du jour + annuel/an amortie globalement
+        part_mutualise = (
+            _variable_event('mutualise', r.temple_id, duree_h) / nb_occupants_jour
+            + _variable_annuel('mutualise', r.temple_id, nb_resas_temple)
+        )
+        part_marginal = (
+            _variable_event('marginal', r.temple_id, duree_h)
+            + _variable_annuel('marginal', r.temple_id, nb_resas_temple)
+        )
         # Cuisine/agapes : partagée entre toutes les loges avec agapes ce jour
-        part_agapes    = _variable_brut('agapes', r.temple_id, duree_h, nb_resas_temple) / nb_agapes_jour if r.besoin_agapes else Decimal('0')
-        cout_total     = part_fixe + part_mutualise + part_marginal + part_agapes
+        if r.besoin_agapes:
+            part_agapes = (
+                _variable_event('agapes', r.temple_id, duree_h) / nb_agapes_jour
+                + _variable_annuel('agapes', r.temple_id, nb_resas_temple)
+            )
+        else:
+            part_agapes = Decimal('0')
+        cout_total = part_fixe + part_mutualise + part_marginal + part_agapes
 
         if nb_membres_global:
             effectif = nb_membres_global
@@ -5515,16 +5542,21 @@ def _simuler_budget(saison, nb_membres_global=None):
         nb_occupants_jour = occupants_par_jour[rs.date] or 1
 
         # Part de mutualisé du bâtiment pour cette occupation de salle
-        cout_mutualise_salle = _variable_brut('mutualise', None, duree_h, 1) / nb_occupants_jour
-        # Charges spécifiques salle (nettoyage salle, etc.)
-        cout_salle_specifique = _salle_brut(duree_h, nb_resas_salle_tot)
+        # (event/heure divisé par occupants du jour ; annuel déjà dans total_occupants_annuel)
+        cout_mutualise_salle = (
+            _variable_event('mutualise', None, duree_h) / nb_occupants_jour
+            + _variable_annuel('mutualise', None, 1)
+        )
+        cout_salle_specifique = _salle_brut(duree_h, nb_resas_salle_tot or 1)
         cout_s = cout_mutualise_salle + cout_salle_specifique
 
-        # Si la loge a déjà une tenue ce jour → elle paie déjà sa part de mutualisé
-        # via la tenue temple ; ne pas doubler la part mutualisé, garder seulement
-        # le coût spécifique salle
+        # Si la loge a déjà une tenue ce jour → part annuelle mutualisé déjà comptée
+        # via la tenue ; garder seulement event mutualisé (partagé) + spécifique salle
         if rs.loge_id in tenues_loge_ids_par_jour[rs.date]:
-            cout_s = cout_salle_specifique
+            cout_s = (
+                _variable_event('mutualise', None, duree_h) / nb_occupants_jour
+                + cout_salle_specifique
+            )
 
         if cout_s == 0:
             continue
