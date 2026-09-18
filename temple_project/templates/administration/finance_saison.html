@@ -1,23 +1,23 @@
 {% extends "base.html" %}
-{% block title %}Finance — Saison {{ saison }}-{{ saison|add:1 }}{% endblock %}
+{% block title %}Facturation {{ saison }}-{{ saison|add:1 }}{% endblock %}
 {% block content %}
 
 <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
   <div>
-    <h1 class="h3 mb-1" style="color:#0F2137;">🧾 Finance — Facturation annuelle</h1>
-    <p class="text-muted small mb-0">Factures par loge · Saison {{ saison }}-{{ saison|add:1 }}</p>
+    <h1 class="h3 mb-1" style="color:#0F2137;">💶 Facturation</h1>
+    <p class="text-muted small mb-0">Saison {{ saison }}-{{ saison|add:1 }}</p>
   </div>
   <div class="d-flex gap-2 flex-wrap align-items-center">
     <form method="post" action="{% url 'administration:finance_generer' %}">
       {% csrf_token %}
       <input type="hidden" name="saison" value="{{ saison }}">
       <button class="btn btn-success btn-sm"
-              onclick="return confirm('Générer les brouillons de facturation pour la saison {{ saison }}-{{ saison|add:1 }} ?\n\nBase : effectif × tarif voté en AG + tenues exceptionnelles.\nLes factures déjà émises ou payées ne seront pas modifiées.')">
+              onclick="return confirm('Générer les brouillons pour la saison {{ saison }}-{{ saison|add:1 }} ?\n\nBase : effectif × tarif voté en AG + tenues exceptionnelles.\nLes factures déjà émises ou payées ne seront pas modifiées.')">
         ⚡ Générer les brouillons
       </button>
     </form>
-    <a href="{% url 'administration:budget_simulation' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">📊 Simulation</a>
-    <a href="{% url 'administration:facturation' %}" class="btn btn-outline-secondary btn-sm">Facturation exceptions</a>
+    <a href="{% url 'administration:facturation' %}" class="btn btn-outline-secondary btn-sm">Récap exceptions</a>
+    <a href="{% url 'administration:budget_simulation' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">Simulation AG</a>
   </div>
 </div>
 
