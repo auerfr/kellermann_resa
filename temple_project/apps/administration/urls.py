@@ -78,6 +78,7 @@ urlpatterns = [
     path("finance/facture/<int:pk>/notes/", views.finance_facture_notes, name="finance_facture_notes"),
     path("finance/facture/<int:pk>/emettre/", views.finance_facture_emettre, name="finance_facture_emettre"),
     path("finance/facture/<int:pk>/annuler/", views.finance_facture_annuler, name="finance_facture_annuler"),
+    path("finance/facture/<int:pk>/reactiver/", views.finance_facture_reactiver, name="finance_facture_reactiver"),
     path("finance/facture/<int:pk>/paiement/", views.finance_facture_paiement, name="finance_facture_paiement"),
     path("finance/facture/<int:pk>/pdf/", views.finance_facture_pdf, name="finance_facture_pdf"),
     path("finance/facture/<int:pk>/envoyer/", views.finance_facture_envoyer, name="finance_facture_envoyer"),

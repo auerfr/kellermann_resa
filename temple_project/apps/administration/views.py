@@ -1322,38 +1322,48 @@ def occupation(request):
 
     # Simulation financière personnalisable via GET
     params = Parametres.get_instance()
-    from decimal import Decimal as D, InvalidOperation
-    def _dec(name, default):
+
+    def _float_param(name, default_float):
+        raw = request.GET.get(name, '').replace(',', '.').strip()
+        if raw:
+            try:
+                v = float(raw)
+                if v > 0:
+                    return v
+            except ValueError:
+                pass
+        return default_float
+
+    def _int_param(name, default_int):
         try:
-            v = D(request.GET.get(name, '') or str(default))
-            return v if v > 0 else D(str(default))
-        except InvalidOperation:
-            return D(str(default))
-    t_loge = _dec('t_loge', params.tarif_membre_loge)
-    t_hg   = _dec('t_hg',   params.tarif_membre_hg)
-    try:
-        mb_min = max(1, int(request.GET.get('mb_min') or 15))
-    except (TypeError, ValueError):
-        mb_min = 15
-    try:
-        mb_max = max(mb_min, int(request.GET.get('mb_max') or 20))
-    except (TypeError, ValueError):
-        mb_max = 20
+            v = int(request.GET.get(name, '') or default_int)
+            return max(1, v)
+        except (TypeError, ValueError):
+            return default_int
+
+    # Tarifs : utiliser ceux des params, avec fallback si non configurés (0 ou None)
+    tarif_lb_defaut = float(params.tarif_membre_loge) if params.tarif_membre_loge else 85.0
+    tarif_hg_defaut = float(params.tarif_membre_hg) if params.tarif_membre_hg else 22.8
+
+    t_loge = _float_param('t_loge', tarif_lb_defaut)
+    t_hg   = _float_param('t_hg',   tarif_hg_defaut)
+    mb_min = _int_param('mb_min', 15)
+    mb_max = max(mb_min, _int_param('mb_max', 20))
 
     cap_loges = ctx['cap_sem_bleues']
     cap_hg    = ctx['cap_sem_hg']
     fin_custom = {
-        't_loge': float(t_loge), 't_hg': float(t_hg),
+        't_loge': t_loge, 't_hg': t_hg,
         'mb_min': mb_min, 'mb_max': mb_max,
-        'loge_min': round(mb_min * float(t_loge)),
-        'loge_max': round(mb_max * float(t_loge)),
-        'hg_min':   round(mb_min * float(t_hg)),
-        'hg_max':   round(mb_max * float(t_hg)),
+        'loge_min': round(mb_min * t_loge),
+        'loge_max': round(mb_max * t_loge),
+        'hg_min':   round(mb_min * t_hg),
+        'hg_max':   round(mb_max * t_hg),
         'cap_loges': cap_loges, 'cap_hg': cap_hg,
-        'pot_loges_min': round(cap_loges * mb_min * float(t_loge)),
-        'pot_loges_max': round(cap_loges * mb_max * float(t_loge)),
-        'pot_hg_min':    round(cap_hg * mb_min * float(t_hg)),
-        'pot_hg_max':    round(cap_hg * mb_max * float(t_hg)),
+        'pot_loges_min': round(cap_loges * mb_min * t_loge),
+        'pot_loges_max': round(cap_loges * mb_max * t_loge),
+        'pot_hg_min':    round(cap_hg * mb_min * t_hg),
+        'pot_hg_max':    round(cap_hg * mb_max * t_hg),
     }
     ctx['fin'] = fin_custom
     ctx['params'] = params
@@ -7407,6 +7417,30 @@ def finance_facture_annuler(request, pk):
         facture.statut = 'annulee'
         facture.save(update_fields=['statut', 'updated_at'])
         messages.success(request, f"Facture {facture.numero or pk} annulée.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_reactiver(request, pk):
+    """Remet une facture annulée en brouillon."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'annulee':
+        messages.error(request, "Seules les factures annulées peuvent être réactivées.")
+    else:
+        facture.statut = 'brouillon'
+        facture.save(update_fields=['statut', 'updated_at'])
+        messages.success(request, "Facture remise en brouillon. Vous pouvez la régénérer ou l'émettre.")
 
     from django.urls import reverse
     return redirect(reverse('administration:finance_facture_detail', args=[pk]))

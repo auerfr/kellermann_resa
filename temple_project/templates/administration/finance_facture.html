@@ -50,6 +50,13 @@
       <button class="btn btn-outline-danger btn-sm">Annuler</button>
     </form>
     {% endif %}
+    {% if facture.statut == 'annulee' %}
+    <form method="post" action="{% url 'administration:finance_facture_reactiver' facture.pk %}"
+          onsubmit="return confirm('Remettre cette facture en brouillon ?')">
+      {% csrf_token %}
+      <button class="btn btn-outline-warning btn-sm">↩ Réactiver en brouillon</button>
+    </form>
+    {% endif %}
     <a href="{% url 'administration:finance_facture_pdf' facture.pk %}"
        target="_blank" class="btn btn-outline-secondary btn-sm">🖨️ PDF</a>
     <a href="{% url 'administration:finance_saison' %}?saison={{ facture.saison }}"
@@ -60,6 +67,20 @@
 {% if messages %}{% for msg in messages %}
 <div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
 {% endfor %}{% endif %}
+
+{% if facture.statut == 'brouillon' and facture.total_ht == 0 %}
+<div class="alert alert-warning py-2">
+  <strong>⚠ Facture à 0,00 €</strong> —
+  {% if not facture.loge.effectif_total %}
+    L'effectif de <strong>{{ facture.loge.nom }}</strong> n'est pas renseigné dans la fiche loge.
+    La cotisation annuelle ({{ facture.loge.get_type_loge_display }}) ne peut pas être calculée.
+    <a href="{% url 'administration:annuaire' %}" class="alert-link">Compléter la fiche loge →</a>
+  {% else %}
+    Cette loge n'a pas de tenues exceptionnelles facturables sur la période (après la date d'effet des tarifs),
+    et l'effectif est renseigné. Vérifiez la date d'effet dans les <a href="{% url 'administration:facturation' %}" class="alert-link">Paramètres de facturation</a>.
+  {% endif %}
+</div>
+{% endif %}
 
 <div class="row g-4">
 
