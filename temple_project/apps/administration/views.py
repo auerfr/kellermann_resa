@@ -5497,7 +5497,7 @@ def budget_config(request):
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'ajouter':
-            from decimal import InvalidOperation as DIO
+            from decimal import Decimal, InvalidOperation as DIO
             try:
                 temple_id = request.POST.get('temple') or None
                 PosteCharge.objects.create(
