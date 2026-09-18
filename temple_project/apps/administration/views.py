@@ -5949,7 +5949,8 @@ def _get_loge_panel(loge, exclude_pk=None, model='temple'):
 @staff_required
 def activite_loges(request):
     """Classement des loges par volume de réservations + accès rapide portail."""
-    from django.db.models import Count, Q
+    from django.db.models import Count, OuterRef, Subquery, IntegerField, Value
+    from django.db.models.functions import Coalesce
     from datetime import date as _date
 
     tri = request.GET.get('tri', 'total')
@@ -5958,19 +5959,17 @@ def activite_loges(request):
     d1 = _date(annee, 9, 1)
     d2 = _date(annee + 1, 8, 31)
 
+    def _sq(qs):
+        return Coalesce(Subquery(qs.values('loge_id').annotate(c=Count('pk')).values('c')[:1],
+                                 output_field=IntegerField()), Value(0))
+
     loges = Loge.objects.filter(actif=True).annotate(
-        nb_total=Count('reservations',
-                        filter=Q(reservations__statut='validee'), distinct=True),
-        nb_saison=Count('reservations',
-                         filter=Q(reservations__statut='validee',
-                                  reservations__date__gte=d1,
-                                  reservations__date__lte=d2), distinct=True),
-        nb_attente=Count('reservations',
-                          filter=Q(reservations__statut='attente'), distinct=True),
-        nb_salle=Count('reservations_salle',
-                        filter=Q(reservations_salle__statut='validee'), distinct=True),
-        nb_salle_attente=Count('reservations_salle',
-                                filter=Q(reservations_salle__statut='attente'), distinct=True),
+        nb_total=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='validee')),
+        nb_saison=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='validee',
+                                                  date__gte=d1, date__lte=d2)),
+        nb_attente=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
+        nb_salle=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='validee')),
+        nb_salle_attente=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
     )
 
     ordre = {
