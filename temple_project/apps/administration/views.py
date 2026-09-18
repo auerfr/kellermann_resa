@@ -7072,10 +7072,8 @@ def finance_generer_brouillons(request):
     params = Parametres.get_instance()
 
     # Toutes les loges actives qui ont eu des réservations validées cette saison
-    from apps.loges.models import Loge
+    from temple_project.apps.loges.models import Loge
     from datetime import date as ddate
-    debut_saison = ddate(saison, 9, 1)
-    fin_saison   = ddate(saison + 1, 8, 31)
 
     loges_actives = Loge.objects.filter(actif=True).order_by('nom')
 
