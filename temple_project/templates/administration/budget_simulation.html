@@ -222,50 +222,90 @@
             <td class="text-end text-muted">—</td>
             <td class="text-end fw-semibold">{{ sim.total_global|floatformat:0 }} €</td>
           </tr>
-          {% if sim.total_auto_finance %}
+
+          {# ── Bloc 1 : postes facturés séparément, jamais dans la cotisation ── #}
+          <tr>
+            <td colspan="4" class="pt-2 pb-0" style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#94A3B8;">
+              Postes facturés séparément — exclus de la cotisation
+            </td>
+          </tr>
+          {% if sim.total_agapes %}
           <tr style="color:#059669;">
-            <td>
-              − Recettes auto-financées
+            <td class="ps-3">
+              − Agapes / cuisine
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Facturées directement par le traiteur à la loge</div>
+            </td>
+            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
+            <td class="text-end" style="color:#059669;">−{{ sim.total_agapes|floatformat:0 }} €</td>
+          </tr>
+          {% endif %}
+          {% if sim.total_salle %}
+          <tr style="color:#059669;">
+            <td class="ps-3">
+              − Locations salles annexes
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Salles de réunion facturées à part</div>
+            </td>
+            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
+            <td class="text-end" style="color:#059669;">−{{ sim.total_salle|floatformat:0 }} €</td>
+          </tr>
+          {% endif %}
+          {% if sim.recettes_occasionnels %}
+          <tr style="color:#059669;">
+            <td class="ps-3">
+              − Loges extérieures (sans cotisation)
               <div class="fw-normal" style="font-size:11px;color:#6B7280;">
-                Cuisine + salles{% if sim.recettes_occasionnels %} + loges occasionnelles (congr., excep.){% endif %} — couvertes par leur facturation propre
-                {% if sim.recettes_occasionnels %}<br>dont {{ sim.recettes_occasionnels|floatformat:0 }} € au tarif voté (congrès {{ params.tarif_congres_jour|floatformat:0 }} €/j, exceptionnel…){% endif %}
+                Socrate, CAALA… paient à la tenue au tarif voté (congrès {{ params.tarif_congres_jour|floatformat:0 }} €/j, exceptionnel…) — pas de cotisation annuelle
               </div>
             </td>
-            <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.total_auto_finance|floatformat:0 }} €</td>
-            <td></td>
+            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
+            <td class="text-end" style="color:#059669;">−{{ sim.recettes_occasionnels|floatformat:0 }} €</td>
           </tr>
           {% endif %}
-          <tr>
-            <td class="text-muted">Charges imputées à la cotisation</td>
-            <td class="text-end">{{ sim.charges_lb|floatformat:0 }} €</td>
-            <td class="text-end">{{ sim.charges_hg|floatformat:0 }} €</td>
+
+          {# ── Sous-total : charges qui tombent dans la cotisation ── #}
+          <tr style="border-top:1px solid #E2E8F0;background:#F8FAFC;">
+            <td class="fw-semibold text-muted" style="font-size:13px;">Charges à répartir par cotisation</td>
+            <td class="text-end text-muted small">LB : {{ sim.charges_lb|floatformat:0 }} €</td>
+            <td class="text-end text-muted small">
+              HG : {{ sim.charges_hg|floatformat:0 }} €
+              {% if sim.hg_fixe_absorbe %}
+              <div style="font-size:10px;color:#94A3B8;" title="Les membres HG paient déjà leur cotisation LB qui couvre les charges fixes. La cotisation HG ne porte que sur les coûts variables de leurs tenues HG.">
+                (+ {{ sim.hg_fixe_absorbe|floatformat:0 }} € fixe → via LB)
+              </div>
+              {% endif %}
+            </td>
             <td class="text-end fw-semibold">{{ sim.total_pour_equilibre|floatformat:0 }} €</td>
           </tr>
-          {% if sim.hg_fixe_absorbe %}
-          <tr style="color:#6B7280;font-size:12px;">
-            <td colspan="4">
-              <span title="Les membres HG étant déjà en loge bleue, les charges fixes de leurs tenues HG ({{ sim.hg_fixe_absorbe|floatformat:0 }} €) sont considérées couvertes par leur cotisation LB. La cotisation HG ne porte que sur les coûts variables (énergie, nettoyage…) de leurs tenues.">
-                ℹ️ Charges fixes HG ({{ sim.hg_fixe_absorbe|floatformat:0 }} €) couvertes par la cotisation LB — la cotisation HG ne couvre que les coûts variables
-              </span>
+
+          {# ── Bloc 2 : recettes qui réduisent la cotisation ── #}
+          {% if sim.recettes_exc_adherents or sim.recettes_autres %}
+          <tr>
+            <td colspan="4" class="pt-2 pb-0" style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#94A3B8;">
+              Recettes qui réduisent la cotisation
             </td>
           </tr>
-          {% endif %}
           {% if sim.recettes_exc_adherents %}
           <tr style="color:#059669;">
-            <td>
-              − Tenues exceptionnelles (adhérents, au tarif voté)
-              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Réservations exceptionnelles / congrès facturées aux loges membres</div>
+            <td class="ps-3">
+              − Tenues excep. des loges membres (calculé)
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">
+                Tenues excep. / congrès facturées aux loges adhérentes — calculé automatiquement depuis les réservations
+              </div>
             </td>
-            <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.recettes_exc_adherents|floatformat:0 }} €</td>
-            <td></td>
+            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
+            <td class="text-end" style="color:#059669;">−{{ sim.recettes_exc_adherents|floatformat:0 }} €</td>
           </tr>
           {% endif %}
           {% if sim.recettes_autres %}
           <tr style="color:#059669;">
-            <td>− Autres recettes (subventions, dons…)</td>
-            <td class="text-end" colspan="2" style="color:#059669;">−{{ sim.recettes_autres|floatformat:0 }} €</td>
-            <td></td>
+            <td class="ps-3">
+              − Autres recettes (subventions, dons…)
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Montant saisi manuellement</div>
+            </td>
+            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
+            <td class="text-end" style="color:#059669;">−{{ sim.recettes_autres|floatformat:0 }} €</td>
           </tr>
+          {% endif %}
           {% endif %}
           <tr style="border-top:1px solid #E2E8F0;">
             <td class="fw-semibold">Charges nettes à couvrir</td>
