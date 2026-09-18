@@ -5486,27 +5486,39 @@ def _simuler_budget(saison, nb_membres_global=None):
         a['total_agapes']    += d['part_agapes']
         a['total_cout']      += d['cout_total']
 
-    # Ajouter les charges de salles de réunion par loge
+    # Jours où chaque loge a déjà une tenue temple (pour éviter double-comptage)
+    tenues_par_loge_jour = set()
+    for r in resas:
+        if r.loge_id:
+            tenues_par_loge_jour.add((r.loge_id, r.date))
+
+    # Charges de salles de réunion : exclure cabinets de réflexion (toujours
+    # simultanés à une tenue) et exclure les jours où la loge a déjà une tenue
+    # (les fluides/électricité sont déjà allumés via la tenue temple).
     for rs in resas_salle:
+        # Cabinets de réflexion → toujours liés à une tenue, pas de coût additionnel
+        if rs.salle.type_salle == 'cabinet_reflexion':
+            continue
+        # Si la loge a une tenue temple ce même jour → coûts déjà comptés
+        if rs.loge_id and (rs.loge_id, rs.date) in tenues_par_loge_jour:
+            continue
         debut_dt = datetime.combine(rs.date, rs.heure_debut)
         fin_dt   = datetime.combine(rs.date, rs.heure_fin)
         if fin_dt <= debut_dt:
             fin_dt += timedelta(days=1)
         duree_h = (fin_dt - debut_dt).total_seconds() / 3600
         cout_s = _cout_salle(duree_h)
-        if cout_s == 0:
+        if cout_s == 0 or not rs.loge_id:
             continue
-        if rs.loge_id:
-            k = rs.loge_id
-            a = agg[k]
-            if a['loge'] is None:
-                a['loge']     = rs.loge
-                a['loge_nom'] = rs.loge.nom
-                a['type_loge'] = rs.loge.type_loge
-            a['nb_salles']   += 1
-            a['total_salle'] += cout_s
-            a['total_cout']  += cout_s
-        # salles sans loge identifiée → ignorées (pas d'imputation possible)
+        k = rs.loge_id
+        a = agg[k]
+        if a['loge'] is None:
+            a['loge']      = rs.loge
+            a['loge_nom']  = rs.loge.nom
+            a['type_loge'] = rs.loge.type_loge
+        a['nb_salles']   += 1
+        a['total_salle'] += cout_s
+        a['total_cout']  += cout_s
 
     for a in agg.values():
         eff = a['effectif'] or 1
