@@ -4,13 +4,13 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <div>
-    <h1 class="h3 temple-title mb-1">💶 Facturation</h1>
-    <p class="text-muted mb-0">Récapitulatif des réservations exceptionnelles et congrès (validées) pour le trésorier.</p>
+    <h1 class="h3 temple-title mb-1">📋 Récap tenues exceptionnelles</h1>
+    <p class="text-muted mb-0">Réservations exceptionnelles et congrès validées — récapitulatif pour le trésorier.</p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <a href="{% url 'administration:budget_simulation' %}" class="btn btn-sm btn-primary">📊 Simulation budgétaire</a>
-    <a href="{% url 'administration:budget_config' %}" class="btn btn-sm btn-outline-secondary">💶 Budget infrastructure</a>
-    <a href="/admin/" class="btn btn-sm btn-outline-secondary">← Tableau de bord</a>
+    <a href="{% url 'administration:finance_saison' %}" class="btn btn-sm btn-outline-secondary">💶 Cotisations annuelles</a>
+    <a href="{% url 'administration:budget_simulation' %}" class="btn btn-sm btn-outline-secondary">📊 Simulation budgétaire</a>
+    <a href="{% url 'administration:budget_config' %}" class="btn btn-sm btn-outline-secondary">⚙️ Budget infrastructure</a>
   </div>
 </div>
 

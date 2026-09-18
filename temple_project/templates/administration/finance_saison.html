@@ -4,7 +4,7 @@
 
 <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
   <div>
-    <h1 class="h3 mb-1" style="color:#0F2137;">💶 Finance</h1>
+    <h1 class="h3 mb-1" style="color:#0F2137;">💶 Cotisations annuelles</h1>
     <p class="text-muted small mb-0">Saison {{ saison }}-{{ saison|add:1 }}</p>
   </div>
   <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -18,7 +18,7 @@
       </button>
     </form>
     {% endif %}
-    <a href="{% url 'administration:facturation' %}" class="btn btn-outline-secondary btn-sm">📋 Récap exceptionnelles</a>
+    <a href="{% url 'administration:facturation' %}" class="btn btn-outline-secondary btn-sm">📋 Récap tenues exceptionnelles</a>
     <a href="{% url 'administration:budget_simulation' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">📊 Simulation budgétaire</a>
     <a href="{% url 'administration:occupation' %}" class="btn btn-outline-secondary btn-sm">🏛 Occupation / capacité</a>
   </div>
