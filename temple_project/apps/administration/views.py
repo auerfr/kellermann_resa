@@ -5374,12 +5374,14 @@ def _annee_saison_courante():
     return today.year if today.month >= 9 else today.year - 1
 
 
-def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membres_hg=None):
+def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membres_hg=None, recettes_exc=None):
     """Moteur de simulation budgétaire.
 
-    Retourne un dict avec par_loge, totaux et détail par réservation.
-    nb_membres_global : override global (toutes loges).
-    nb_membres_lb / nb_membres_hg : override par catégorie (loges bleues / hauts grades).
+    nb_membres_lb / nb_membres_hg : effectif TOTAL de la catégorie (pas par loge).
+      → utilisé comme dénominateur du tarif d'équilibre.
+      → sert aussi de fallback par loge pour les loges sans effectif_total saisi
+        (on divise par le nb de loges distinctes présentes dans les resas).
+    recettes_exc : recettes exceptionnelles à déduire des charges avant calcul du tarif d'équilibre.
     """
     from decimal import Decimal
     from datetime import datetime, timedelta
@@ -5511,6 +5513,12 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
                     total += cout_jour / Decimal(str(nb_occupants_jour_loc or 1))
         return total
 
+    # Nb de loges distinctes par type présentes dans les resas (pour fallback effectif par loge)
+    loges_lb_set = {r.loge_id for r in resas if r.loge and r.loge.type_loge == 'loge' and r.loge_id}
+    loges_hg_set = {r.loge_id for r in resas if r.loge and r.loge.type_loge == 'haut_grade' and r.loge_id}
+    nb_loges_lb_resas = len(loges_lb_set) or 1
+    nb_loges_hg_resas = len(loges_hg_set) or 1
+
     detail = []
     for r in resas:
         debut_dt = datetime.combine(r.date, r.heure_debut)
@@ -5546,18 +5554,21 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
             part_agapes = Decimal('0')
         cout_total = part_fixe + part_mutualise + part_marginal + part_agapes
 
+        # Effectif par loge : utilise loge.effectif_total en priorité ;
+        # fallback = total_override / nb_loges si override fourni, sinon 20.
         if nb_membres_global:
             effectif = nb_membres_global
         elif r.loge:
-            type_loge = r.loge.type_loge
-            if nb_membres_lb and type_loge == 'loge':
-                effectif = nb_membres_lb
-            elif nb_membres_hg and type_loge == 'haut_grade':
-                effectif = nb_membres_hg
-            elif r.loge.effectif_total > 0:
+            if r.loge.effectif_total > 0:
                 effectif = r.loge.effectif_total
             else:
-                effectif = 20  # défaut si effectif non renseigné
+                type_loge = r.loge.type_loge
+                if type_loge == 'loge' and nb_membres_lb:
+                    effectif = max(1, nb_membres_lb // nb_loges_lb_resas)
+                elif type_loge == 'haut_grade' and nb_membres_hg:
+                    effectif = max(1, nb_membres_hg // nb_loges_hg_resas)
+                else:
+                    effectif = 20  # défaut si effectif non renseigné
         else:
             effectif = 20
 
@@ -5662,18 +5673,33 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     nb_resas_salle_total = len(resas_salle)
 
     # ── Tarif d'équilibre ──────────────────────────────────────────
-    # Pour chaque type de loge : charges imputées / effectif total des loges de ce type
     charges_lb  = sum(a['total_cout'] for a in par_loge if a['type_loge'] == 'loge')
     charges_hg  = sum(a['total_cout'] for a in par_loge if a['type_loge'] == 'haut_grade')
-    charges_aut = sum(a['total_cout'] for a in par_loge if a['type_loge'] not in ('loge', 'haut_grade'))
 
+    # effectif_lb/hg = somme des effectifs par loge issus du détail (fiches ou fallback)
     effectif_lb  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'loge')
     effectif_hg  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'haut_grade')
     effectif_tot = sum(a['effectif'] for a in par_loge) or 1
 
-    tarif_eq_lb  = charges_lb  / Decimal(str(effectif_lb))  if effectif_lb  else None
-    tarif_eq_hg  = charges_hg  / Decimal(str(effectif_hg))  if effectif_hg  else None
-    tarif_eq_global = total_global / Decimal(str(effectif_tot))
+    # Pour le tarif d'équilibre, utiliser le total override (nb_membres_lb/hg) si fourni ;
+    # sinon retomber sur la somme des effectifs du détail.
+    eff_eq_lb = nb_membres_lb if nb_membres_lb else (effectif_lb or None)
+    eff_eq_hg = nb_membres_hg if nb_membres_hg else (effectif_hg or None)
+
+    # Déduction recettes exceptionnelles (répartie proportionnellement aux charges)
+    recettes_dec = Decimal(str(recettes_exc)) if recettes_exc else Decimal('0')
+    if recettes_dec > 0 and total_global > 0:
+        net_lb = charges_lb - recettes_dec * charges_lb / total_global
+        net_hg = charges_hg - recettes_dec * charges_hg / total_global
+    else:
+        net_lb = charges_lb
+        net_hg = charges_hg
+
+    tarif_eq_lb  = net_lb / Decimal(str(eff_eq_lb)) if eff_eq_lb else None
+    tarif_eq_hg  = net_hg / Decimal(str(eff_eq_hg)) if eff_eq_hg else None
+    eff_eq_tot   = (eff_eq_lb or 0) + (eff_eq_hg or 0) + sum(
+        a['effectif'] for a in par_loge if a['type_loge'] not in ('loge', 'haut_grade'))
+    tarif_eq_global = (total_global - recettes_dec) / Decimal(str(eff_eq_tot or effectif_tot))
 
     return {
         'par_loge': par_loge,
@@ -5688,12 +5714,17 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         'cout_moyen_tenue': total_tenues / nb_resas if nb_resas else Decimal('0'),
         'detail': detail,
         # équilibre
-        'charges_lb':  charges_lb,
-        'charges_hg':  charges_hg,
-        'effectif_lb': effectif_lb,
-        'effectif_hg': effectif_hg,
-        'tarif_eq_lb': tarif_eq_lb,
-        'tarif_eq_hg': tarif_eq_hg,
+        'charges_lb':   charges_lb,
+        'charges_hg':   charges_hg,
+        'net_lb':       net_lb,
+        'net_hg':       net_hg,
+        'effectif_lb':  effectif_lb,
+        'effectif_hg':  effectif_hg,
+        'eff_eq_lb':    eff_eq_lb,
+        'eff_eq_hg':    eff_eq_hg,
+        'recettes_exc': recettes_dec,
+        'tarif_eq_lb':  tarif_eq_lb,
+        'tarif_eq_hg':  tarif_eq_hg,
         'tarif_eq_global': tarif_eq_global,
     }
 
@@ -5711,18 +5742,29 @@ def budget_simulation_pdf(request):
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
-    def _p(val):
+    def _p(val, lo=1, hi=9999):
         try:
-            v = int(val)
-            return v if 1 <= v <= 300 else None
+            v = int(str(val).strip())
+            return v if lo <= v <= hi else None
+        except (TypeError, ValueError):
+            return None
+
+    def _pd(val):
+        if not val:
+            return None
+        try:
+            v = float(str(val).replace(',', '.').strip())
+            return v if v >= 0 else None
         except (TypeError, ValueError):
             return None
 
     saison = int(request.GET.get('saison') or _annee_saison_courante())
     nb_membres_lb = _p(request.GET.get('nb_membres_lb'))
     nb_membres_hg = _p(request.GET.get('nb_membres_hg'))
+    recettes_exc  = _pd(request.GET.get('recettes_exc'))
 
-    sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg)
+    sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
+                          recettes_exc=recettes_exc)
     params = Parametres.get_instance()
 
     BLEU = colors.HexColor('#0F2137')
@@ -6141,19 +6183,44 @@ def budget_simulation(request):
     """Simulation de répartition des charges par loge."""
     from decimal import Decimal
 
-    def _parse_int_param(val, lo=1, hi=300):
+    def _parse_int_param(val, lo=1, hi=9999):
         try:
-            v = int(val)
+            v = int(str(val).strip())
             return v if lo <= v <= hi else None
         except (TypeError, ValueError):
             return None
 
-    saison       = int(request.GET.get('saison') or _annee_saison_courante())
-    nb_membres_lb = _parse_int_param(request.GET.get('nb_membres_lb'))
-    nb_membres_hg = _parse_int_param(request.GET.get('nb_membres_hg'))
+    def _parse_dec_param(val):
+        if not val:
+            return None
+        try:
+            v = float(str(val).replace(',', '.').strip())
+            return v if v >= 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+
+    # Effectifs réels des loges (fiches)
+    loges_lb = list(Loge.objects.filter(actif=True, type_loge='loge').values('nom', 'effectif_total'))
+    loges_hg = list(Loge.objects.filter(actif=True, type_loge='haut_grade').values('nom', 'effectif_total'))
+    effectif_reel_lb = sum(l['effectif_total'] for l in loges_lb if l['effectif_total'])
+    effectif_reel_hg = sum(l['effectif_total'] for l in loges_hg if l['effectif_total'])
+    nb_loges_lb = len(loges_lb)
+    nb_loges_hg = len(loges_hg)
+
+    nb_membres_lb_raw = request.GET.get('nb_membres_lb', '').strip()
+    nb_membres_hg_raw = request.GET.get('nb_membres_hg', '').strip()
+    recettes_exc_raw  = request.GET.get('recettes_exc', '').strip()
+
+    # Si non spécifié, pré-remplir avec l'effectif total des fiches
+    nb_membres_lb = _parse_int_param(nb_membres_lb_raw) if nb_membres_lb_raw else (effectif_reel_lb or None)
+    nb_membres_hg = _parse_int_param(nb_membres_hg_raw) if nb_membres_hg_raw else (effectif_reel_hg or None)
+    recettes_exc  = _parse_dec_param(recettes_exc_raw)
 
     postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
-    sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg) if postes_actifs > 0 else None
+    sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
+                          recettes_exc=recettes_exc) if postes_actifs > 0 else None
 
     temples = Temple.objects.all().order_by('nom')
     saisons_dispo = sorted(set(
@@ -6164,22 +6231,14 @@ def budget_simulation(request):
         p.montant_annuel_normalise
         for p in PosteCharge.objects.filter(saison=saison, actif=True, type_charge='fixe')
     )
-
     params = Parametres.get_instance()
-
-    # Effectifs réels des loges pour affichage
-    loges_lb = list(Loge.objects.filter(actif=True, type_loge='loge').values('nom', 'effectif_total'))
-    loges_hg = list(Loge.objects.filter(actif=True, type_loge='haut_grade').values('nom', 'effectif_total'))
-    effectif_reel_lb = sum(l['effectif_total'] for l in loges_lb if l['effectif_total'])
-    effectif_reel_hg = sum(l['effectif_total'] for l in loges_hg if l['effectif_total'])
-    nb_loges_lb = len(loges_lb)
-    nb_loges_hg = len(loges_hg)
 
     return render(request, 'administration/budget_simulation.html', {
         'saison': saison,
         'saisons_dispo': saisons_dispo,
         'nb_membres_lb': nb_membres_lb or '',
         'nb_membres_hg': nb_membres_hg or '',
+        'recettes_exc': recettes_exc_raw,
         'sim': sim,
         'postes_actifs': postes_actifs,
         'total_fixe_annuel': total_fixe_annuel,
@@ -7129,22 +7188,24 @@ def finance_saison(request):
         .order_by('loge__nom')
     ) if params.module_finance_actif else []
 
-    total_emis  = sum(f.total_ht for f in factures if f.statut in ('emise', 'payee'))
-    total_paye  = sum(f.total_ht for f in factures if f.statut == 'payee')
-    nb_brouillon = sum(1 for f in factures if f.statut == 'brouillon')
-    nb_emises    = sum(1 for f in factures if f.statut == 'emise')
-    nb_payees    = sum(1 for f in factures if f.statut == 'payee')
+    total_emis      = sum(f.total_ht for f in factures if f.statut in ('emise', 'payee'))
+    total_paye      = sum(f.total_ht for f in factures if f.statut == 'payee')
+    total_brouillon = sum(f.total_ht for f in factures if f.statut == 'brouillon')
+    nb_brouillon    = sum(1 for f in factures if f.statut == 'brouillon')
+    nb_emises       = sum(1 for f in factures if f.statut == 'emise')
+    nb_payees       = sum(1 for f in factures if f.statut == 'payee')
 
     return render(request, 'administration/finance_saison.html', {
         'saison':         saison,
         'saisons_dispo':  saisons_dispo,
         'factures':       factures,
-        'total_emis':     total_emis,
-        'total_paye':     total_paye,
-        'nb_brouillon':   nb_brouillon,
-        'nb_emises':      nb_emises,
-        'nb_payees':      nb_payees,
-        'params':         params,
+        'total_emis':      total_emis,
+        'total_paye':      total_paye,
+        'total_brouillon': total_brouillon,
+        'nb_brouillon':    nb_brouillon,
+        'nb_emises':       nb_emises,
+        'nb_payees':       nb_payees,
+        'params':          params,
     })
 
 

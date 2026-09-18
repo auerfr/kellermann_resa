@@ -83,45 +83,53 @@
         </select>
       </div>
 
-      <div class="col-md-3">
+      <div class="col-md-2">
         <label class="form-label fw-semibold" style="font-size:12px;">
-          Effectif moyen — Loges bleues
-          <span class="text-muted fw-normal">(vide = fiches loges)</span>
+          Effectif total LB
         </label>
         <div class="input-group input-group-sm">
           <input type="number" name="nb_membres_lb" class="form-control"
                  min="1" max="9999" step="1"
-                 value="{{ nb_membres_lb }}"
-                 placeholder="{% if effectif_reel_lb %}{{ effectif_reel_lb }} réel{% else %}non renseigné{% endif %}">
-          <span class="input-group-text text-muted">membres</span>
+                 value="{{ nb_membres_lb }}">
+          <span class="input-group-text text-muted">F/S</span>
         </div>
         <div class="form-text">
-          {% if nb_loges_lb %}{{ nb_loges_lb }} loge{% if nb_loges_lb > 1 %}s{% endif %} LB active{% if nb_loges_lb > 1 %}s{% endif %}{% if effectif_reel_lb %}, {{ effectif_reel_lb }} membres déclarés{% endif %}{% endif %}
+          {% if nb_loges_lb %}{{ nb_loges_lb }} loges · fiches : {{ effectif_reel_lb|default:"—" }}{% endif %}
+        </div>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Effectif total HG
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="nb_membres_hg" class="form-control"
+                 min="1" max="9999" step="1"
+                 value="{{ nb_membres_hg }}">
+          <span class="input-group-text text-muted">F/S</span>
+        </div>
+        <div class="form-text">
+          {% if nb_loges_hg %}{{ nb_loges_hg }} ateliers · fiches : {{ effectif_reel_hg|default:"—" }}{% endif %}
         </div>
       </div>
 
       <div class="col-md-3">
         <label class="form-label fw-semibold" style="font-size:12px;">
-          Effectif moyen — Hauts grades
-          <span class="text-muted fw-normal">(vide = fiches loges)</span>
+          Recettes exceptionnelles estimées
         </label>
         <div class="input-group input-group-sm">
-          <input type="number" name="nb_membres_hg" class="form-control"
-                 min="1" max="9999" step="1"
-                 value="{{ nb_membres_hg }}"
-                 placeholder="{% if effectif_reel_hg %}{{ effectif_reel_hg }} réel{% else %}non renseigné{% endif %}">
-          <span class="input-group-text text-muted">membres</span>
+          <input type="number" name="recettes_exc" class="form-control"
+                 min="0" step="100"
+                 value="{{ recettes_exc }}"
+                 placeholder="0">
+          <span class="input-group-text text-muted">€</span>
         </div>
-        <div class="form-text">
-          {% if nb_loges_hg %}{{ nb_loges_hg }} atelier{% if nb_loges_hg > 1 %}s{% endif %} HG actif{% if nb_loges_hg > 1 %}s{% endif %}{% if effectif_reel_hg %}, {{ effectif_reel_hg }} membres déclarés{% endif %}{% endif %}
-        </div>
+        <div class="form-text">Tenues facturées, salle, congrès… à déduire des charges</div>
       </div>
 
-      <div class="col-md-4 d-flex gap-2 align-items-end">
+      <div class="col-md-3 d-flex gap-2 align-items-end">
         <button type="submit" class="btn btn-primary btn-sm">Simuler</button>
-        {% if nb_membres_lb or nb_membres_hg %}
         <a href="?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">✕ Réinitialiser</a>
-        {% endif %}
       </div>
     </form>
   </div>
@@ -173,7 +181,7 @@
 
     {% if not sim.tarif_eq_lb and not sim.tarif_eq_hg %}
     <div class="alert alert-warning py-2 mb-0">
-      Aucun effectif renseigné dans les fiches loges. Saisissez un effectif simulé ci-dessus pour obtenir le tarif d'équilibre.
+      Aucun effectif renseigné. Saisissez les effectifs totaux LB et HG ci-dessus.
     </div>
     {% else %}
     <div class="row g-3">
@@ -192,7 +200,9 @@
           <span class="badge ms-1" style="background:#F0FDF4;color:#15803D;">à l'équilibre</span>
           {% endif %}
         </div>
-        <div class="text-muted mt-1" style="font-size:11px;">{{ sim.effectif_lb }} membres · {{ sim.charges_lb|floatformat:0 }} € de charges imputées</div>
+        <div class="text-muted mt-1" style="font-size:11px;">
+          {{ sim.eff_eq_lb }} membres · {{ sim.net_lb|floatformat:0 }} € net{% if sim.recettes_exc %} (après {{ sim.recettes_exc|floatformat:0 }} € déduits){% endif %}
+        </div>
       </div>
       {% endif %}
 
@@ -210,16 +220,21 @@
           <span class="badge ms-1" style="background:#F0FDF4;color:#15803D;">à l'équilibre</span>
           {% endif %}
         </div>
-        <div class="text-muted mt-1" style="font-size:11px;">{{ sim.effectif_hg }} membres · {{ sim.charges_hg|floatformat:0 }} € de charges imputées</div>
+        <div class="text-muted mt-1" style="font-size:11px;">
+          {{ sim.eff_eq_hg }} membres · {{ sim.net_hg|floatformat:0 }} € net
+        </div>
       </div>
       {% endif %}
 
       <div class="col-md-4">
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Recette estimée vs charges</div>
-        {% if sim.effectif_lb or sim.effectif_hg %}
+        {% if sim.eff_eq_lb or sim.eff_eq_hg %}
         <div style="font-size:12px;" class="mt-1">
-          LB : {{ params.tarif_membre_loge|floatformat:0 }} € × {{ sim.effectif_lb }} = <strong>{% widthratio params.tarif_membre_loge 1 sim.effectif_lb %} €</strong><br>
-          HG : {{ params.tarif_membre_hg|floatformat:0 }} € × {{ sim.effectif_hg }} = <strong>{% widthratio params.tarif_membre_hg 1 sim.effectif_hg %} €</strong>
+          LB : {{ params.tarif_membre_loge|floatformat:0 }} € × {{ sim.eff_eq_lb }} = <strong>{% widthratio params.tarif_membre_loge 1 sim.eff_eq_lb %} €</strong><br>
+          HG : {{ params.tarif_membre_hg|floatformat:0 }} € × {{ sim.eff_eq_hg }} = <strong>{% widthratio params.tarif_membre_hg 1 sim.eff_eq_hg %} €</strong>
+          {% if sim.recettes_exc %}
+          <br>Recettes exc. : <strong>{{ sim.recettes_exc|floatformat:0 }} €</strong>
+          {% endif %}
         </div>
         {% endif %}
         <div class="text-muted mt-2" style="font-size:11px;">Charges totales simulées : <strong>{{ sim.total_global|floatformat:0 }} €</strong></div>
@@ -229,10 +244,10 @@
     {% endif %}
 
     <div class="alert alert-info mt-3 py-2 mb-0" style="font-size:12px;">
-      Le tarif d'équilibre est calculé sur la base des tenues <em>validées</em> de la saison et des effectifs renseignés dans les fiches loges
-      (ou de l'effectif simulé saisi ci-dessus).
-      {% if nb_membres_lb %}<strong>LB simulé : {{ nb_membres_lb }} membres.</strong>{% endif %}
-      {% if nb_membres_hg %}<strong>HG simulé : {{ nb_membres_hg }} membres.</strong>{% endif %}
+      Tarif d'équilibre = charges nettes ÷ effectif total saisi.
+      {% if sim.recettes_exc %}
+      <strong>{{ sim.recettes_exc|floatformat:0 }} € de recettes exceptionnelles déduits des charges.</strong>
+      {% endif %}
     </div>
   </div>
 </div>

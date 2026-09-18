@@ -69,6 +69,9 @@
       <div class="card-body">
         <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Brouillons</div>
         <div class="fw-bold" style="font-size:1.5rem;color:#6B7280;">{{ nb_brouillon }}</div>
+        {% if total_brouillon %}
+        <div class="text-muted small mt-1">≈ {{ total_brouillon|floatformat:0 }} € attendus</div>
+        {% endif %}
       </div>
     </div>
   </div>
