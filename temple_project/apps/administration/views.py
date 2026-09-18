@@ -5953,7 +5953,7 @@ def activite_loges(request):
     from django.db.models.functions import Coalesce
     from datetime import date as _date
 
-    tri = request.GET.get('tri', 'total')
+    tri = request.GET.get('tri', 'saison')
     today = _date.today()
     annee = today.year if today.month >= 9 else today.year - 1
     d1 = _date(annee, 9, 1)
@@ -5964,32 +5964,52 @@ def activite_loges(request):
                                  output_field=IntegerField()), Value(0))
 
     loges = Loge.objects.filter(actif=True).annotate(
-        nb_total=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='validee')),
         nb_saison=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='validee',
                                                   date__gte=d1, date__lte=d2)),
-        nb_attente=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
-        nb_salle=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='validee')),
+        nb_attente_t=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
+        nb_salle_saison=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='validee',
+                                                             date__gte=d1, date__lte=d2)),
         nb_salle_attente=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
     )
 
     ordre = {
-        'total':   '-nb_total',
         'saison':  '-nb_saison',
-        'salle':   '-nb_salle',
-        'attente': '-nb_attente',
-    }.get(tri, '-nb_total')
-    loges = loges.order_by(ordre, 'nom')
+        'salle':   '-nb_salle_saison',
+        'attente': '-nb_attente_t',
+        'messages': '-nb_messages_py',  # tri Python post-fetch
+    }.get(tri, '-nb_saison')
 
-    portails = {p.loge_id: str(p.token)
-                for p in DemandeAccesPortail.objects.filter(statut='validee')}
+    if tri != 'messages':
+        loges = loges.order_by(ordre, 'nom')
+
+    # Portails validés : token + date de validation
+    portail_map = {p.loge_id: p for p in DemandeAccesPortail.objects.filter(statut='validee')}
+
+    # Messages reçus (non émis) groupés par email
+    from temple_project.apps.reservations.models import MessageContact
+    msg_by_email = {}
+    for row in MessageContact.objects.filter(emis=False).values('email').annotate(c=Count('pk')):
+        msg_by_email[row['email'].lower()] = row['c']
 
     loges_list = list(loges)
     for loge in loges_list:
-        loge.portail_token = portails.get(loge.id)
+        p = portail_map.get(loge.id)
+        loge.portail_token = str(p.token) if p else None
+        loge.portail_since = p.created_at if p else None
+        loge.nb_messages = msg_by_email.get(loge.email.lower(), 0) if loge.email else 0
+        loge.nb_attente = loge.nb_attente_t + loge.nb_salle_attente
+
+    if tri == 'messages':
+        loges_list.sort(key=lambda l: (-l.nb_messages, l.nom))
+
+    nb_portail_actif = sum(1 for l in loges_list if l.portail_token)
+    nb_attente_total = sum(l.nb_attente for l in loges_list)
 
     return render(request, 'administration/activite_loges.html', {
-        'loges':        loges_list,
-        'tri':          tri,
-        'annee_saison': annee,
-        'nb_loges':     len(loges_list),
+        'loges':            loges_list,
+        'tri':              tri,
+        'annee_saison':     annee,
+        'nb_loges':         len(loges_list),
+        'nb_portail_actif': nb_portail_actif,
+        'nb_attente_total': nb_attente_total,
     })
