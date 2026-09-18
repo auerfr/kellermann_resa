@@ -93,6 +93,74 @@
   </div>
 </div>
 
+{# ── Équilibre budgétaire ── #}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #C8A84B!important;">
+  <div class="card-body py-3 px-4">
+    <div class="fw-bold mb-3" style="color:#0F2137;font-size:15px;">⚖️ Tarif d'équilibre</div>
+    <div class="row g-3">
+
+      {% if sim.tarif_eq_lb %}
+      <div class="col-md-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Loges bleues</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ sim.tarif_eq_lb|floatformat:2 }} €<span style="font-size:13px;font-weight:400;color:#64748B;"> / membre</span></div>
+        <div class="mt-1" style="font-size:12px;">
+          Tarif actuel : <strong>{{ params.tarif_membre_loge|floatformat:2 }} €</strong>
+          {% with diff=params.tarif_membre_loge|add:0 %}
+          {% if params.tarif_membre_loge > sim.tarif_eq_lb %}
+          <span class="badge ms-1" style="background:#DCFCE7;color:#15803D;">
+            +{{ params.tarif_membre_loge|floatformat:2 }} / {{ sim.tarif_eq_lb|floatformat:2 }} ≈ excédent
+          </span>
+          {% elif params.tarif_membre_loge < sim.tarif_eq_lb %}
+          <span class="badge ms-1" style="background:#FEE2E2;color:#B91C1C;">sous le seuil</span>
+          {% else %}
+          <span class="badge ms-1" style="background:#F0FDF4;color:#15803D;">à l'équilibre</span>
+          {% endif %}
+          {% endwith %}
+        </div>
+        <div class="text-muted mt-1" style="font-size:11px;">{{ sim.effectif_lb }} membres · {{ sim.charges_lb|floatformat:0 }} € de charges imputées</div>
+      </div>
+      {% endif %}
+
+      {% if sim.tarif_eq_hg %}
+      <div class="col-md-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Hauts grades</div>
+        <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ sim.tarif_eq_hg|floatformat:2 }} €<span style="font-size:13px;font-weight:400;color:#64748B;"> / membre</span></div>
+        <div class="mt-1" style="font-size:12px;">
+          Tarif actuel : <strong>{{ params.tarif_membre_hg|floatformat:2 }} €</strong>
+          {% if params.tarif_membre_hg > sim.tarif_eq_hg %}
+          <span class="badge ms-1" style="background:#DCFCE7;color:#15803D;">excédent</span>
+          {% elif params.tarif_membre_hg < sim.tarif_eq_hg %}
+          <span class="badge ms-1" style="background:#FEE2E2;color:#B91C1C;">sous le seuil</span>
+          {% else %}
+          <span class="badge ms-1" style="background:#F0FDF4;color:#15803D;">à l'équilibre</span>
+          {% endif %}
+        </div>
+        <div class="text-muted mt-1" style="font-size:11px;">{{ sim.effectif_hg }} membres · {{ sim.charges_hg|floatformat:0 }} € de charges imputées</div>
+      </div>
+      {% endif %}
+
+      <div class="col-md-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;" class="mb-1">Recette estimée vs charges</div>
+        {% with recette_lb=params.tarif_membre_loge recette_hg=params.tarif_membre_hg %}
+        {% if sim.effectif_lb or sim.effectif_hg %}
+        <div style="font-size:12px;" class="mt-1">
+          LB : {{ params.tarif_membre_loge|floatformat:0 }} € × {{ sim.effectif_lb }} = <strong>{% widthratio params.tarif_membre_loge 1 sim.effectif_lb %} €</strong><br>
+          HG : {{ params.tarif_membre_hg|floatformat:0 }} € × {{ sim.effectif_hg }} = <strong>{% widthratio params.tarif_membre_hg 1 sim.effectif_hg %} €</strong>
+        </div>
+        {% endif %}
+        {% endwith %}
+        <div class="text-muted mt-2" style="font-size:11px;">Charges totales simulées : <strong>{{ sim.total_global|floatformat:0 }} €</strong></div>
+      </div>
+
+    </div>
+    <div class="alert alert-info mt-3 py-2 mb-0" style="font-size:12px;">
+      Le tarif d'équilibre est calculé sur la base des tenues <em>validées</em> de la saison et des effectifs renseignés dans les fiches loges.
+      {% if nb_membres %}Effectif forcé à {{ nb_membres }} membres pour cette simulation.{% endif %}
+      Ajustez les postes de charges ou le slider effectif pour affiner.
+    </div>
+  </div>
+</div>
+
 {# ── Décomposition ── #}
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-body py-3">

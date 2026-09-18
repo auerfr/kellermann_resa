@@ -5455,6 +5455,20 @@ def _simuler_budget(saison, nb_membres_global=None):
     total_mutualise  = sum(d['part_mutualise'] for d in detail)
     total_marginal   = sum(d['part_marginal']  for d in detail)
 
+    # ── Tarif d'équilibre ──────────────────────────────────────────
+    # Pour chaque type de loge : charges imputées / effectif total des loges de ce type
+    charges_lb  = sum(a['total_cout'] for a in par_loge if a['type_loge'] == 'loge')
+    charges_hg  = sum(a['total_cout'] for a in par_loge if a['type_loge'] == 'haut_grade')
+    charges_aut = sum(a['total_cout'] for a in par_loge if a['type_loge'] not in ('loge', 'haut_grade'))
+
+    effectif_lb  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'loge')
+    effectif_hg  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'haut_grade')
+    effectif_tot = sum(a['effectif'] for a in par_loge) or 1
+
+    tarif_eq_lb  = charges_lb  / Decimal(str(effectif_lb))  if effectif_lb  else None
+    tarif_eq_hg  = charges_hg  / Decimal(str(effectif_hg))  if effectif_hg  else None
+    tarif_eq_global = total_global / Decimal(str(effectif_tot))
+
     return {
         'par_loge': par_loge,
         'total_global':    total_global,
@@ -5464,6 +5478,14 @@ def _simuler_budget(saison, nb_membres_global=None):
         'nb_resas':        nb_resas,
         'cout_moyen_tenue': total_global / nb_resas if nb_resas else Decimal('0'),
         'detail': detail,
+        # équilibre
+        'charges_lb':  charges_lb,
+        'charges_hg':  charges_hg,
+        'effectif_lb': effectif_lb,
+        'effectif_hg': effectif_hg,
+        'tarif_eq_lb': tarif_eq_lb,
+        'tarif_eq_hg': tarif_eq_hg,
+        'tarif_eq_global': tarif_eq_global,
     }
 
 
@@ -5555,6 +5577,8 @@ def budget_simulation(request):
         for p in PosteCharge.objects.filter(saison=saison, actif=True, type_charge='fixe')
     )
 
+    params = Parametres.get_instance()
+
     return render(request, 'administration/budget_simulation.html', {
         'saison': saison,
         'saisons_dispo': saisons_dispo,
@@ -5563,6 +5587,7 @@ def budget_simulation(request):
         'postes_actifs': postes_actifs,
         'total_fixe_annuel': total_fixe_annuel,
         'temples': temples,
+        'params': params,
     })
 
 
