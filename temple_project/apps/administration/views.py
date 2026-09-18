@@ -5959,18 +5959,18 @@ def activite_loges(request):
     d2 = _date(annee + 1, 8, 31)
 
     loges = Loge.objects.filter(actif=True).annotate(
-        nb_total=Count('reservation',
-                        filter=Q(reservation__statut='validee'), distinct=True),
-        nb_saison=Count('reservation',
-                         filter=Q(reservation__statut='validee',
-                                  reservation__date__gte=d1,
-                                  reservation__date__lte=d2), distinct=True),
-        nb_attente=Count('reservation',
-                          filter=Q(reservation__statut='attente'), distinct=True),
-        nb_salle=Count('reservationsalle',
-                        filter=Q(reservationsalle__statut='validee'), distinct=True),
-        nb_salle_attente=Count('reservationsalle',
-                                filter=Q(reservationsalle__statut='attente'), distinct=True),
+        nb_total=Count('reservations',
+                        filter=Q(reservations__statut='validee'), distinct=True),
+        nb_saison=Count('reservations',
+                         filter=Q(reservations__statut='validee',
+                                  reservations__date__gte=d1,
+                                  reservations__date__lte=d2), distinct=True),
+        nb_attente=Count('reservations',
+                          filter=Q(reservations__statut='attente'), distinct=True),
+        nb_salle=Count('reservations_salle',
+                        filter=Q(reservations_salle__statut='validee'), distinct=True),
+        nb_salle_attente=Count('reservations_salle',
+                                filter=Q(reservations_salle__statut='attente'), distinct=True),
     )
 
     ordre = {
