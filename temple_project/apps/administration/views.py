@@ -5684,10 +5684,19 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     #  - agapes / salle : auto-financés par les tarifs à la tenue
     #  - occasionnels (membre_association=False) : couvert par leur facturation
     #    exceptionnelle à la tenue ; traité comme recette en face des charges
+    #
+    # Les membres de hauts grades sont déjà adhérents d'une loge bleue : leurs
+    # cotisations LB couvrent déjà les charges fixes du bâtiment.  La cotisation
+    # HG ne couvre donc que les coûts VARIABLES de leurs tenues HG
+    # (mutualise + marginal), pas à nouveau les frais de structure (fixe).
     charges_lb  = sum(a['total_cout'] - a['total_agapes'] - a['total_salle']
                       for a in par_loge if a['type_loge'] == 'loge' and a['membre_association'])
-    charges_hg  = sum(a['total_cout'] - a['total_agapes'] - a['total_salle']
+    # HG : seulement les coûts variables (mutualise + marginal), hors charges fixes
+    charges_hg  = sum(a['total_mutualise'] + a['total_marginal']
                       for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
+    # Charges fixes HG "absorbées" par la cotisation LB des mêmes membres
+    hg_fixe_absorbe = sum(a['total_fixe']
+                          for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
     # Recettes des occupants occasionnels au tarif voté (congrès, exceptionnel…)
     # On utilise tarif_reservation() pour refléter exactement ce qui est facturé
     # (ex. CAALA congrès = 300 €/jour × nb_jours, indépendamment du coût réel).
@@ -5752,6 +5761,7 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         # équilibre
         'charges_lb':        charges_lb,
         'charges_hg':        charges_hg,
+        'hg_fixe_absorbe':   hg_fixe_absorbe,
         'net_lb':            net_lb,
         'net_hg':            net_hg,
         'total_auto_finance':        total_auto_finance,

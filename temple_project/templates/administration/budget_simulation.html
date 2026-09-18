@@ -241,6 +241,18 @@
             <td class="text-end">{{ sim.charges_hg|floatformat:0 }} €</td>
             <td class="text-end fw-semibold">{{ sim.total_pour_equilibre|floatformat:0 }} €</td>
           </tr>
+          {% if sim.hg_fixe_absorbe %}
+          <tr style="color:#6B7280;font-size:12px;">
+            <td>
+              <span title="Les membres HG sont déjà en loge bleue : leurs cotisations LB couvrent déjà les charges fixes du bâtiment. La cotisation HG ne porte que sur les coûts variables (mutualise + marginal) de leurs tenues HG.">
+                ℹ️ Charges fixes HG absorbées par la cotisation LB
+              </span>
+            </td>
+            <td class="text-end text-muted">(+{{ sim.hg_fixe_absorbe|floatformat:0 }} €)</td>
+            <td class="text-end text-muted">−{{ sim.hg_fixe_absorbe|floatformat:0 }} €</td>
+            <td></td>
+          </tr>
+          {% endif %}
           {% if sim.recettes_exc_adherents %}
           <tr style="color:#059669;">
             <td>
