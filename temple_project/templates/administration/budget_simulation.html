@@ -243,14 +243,11 @@
           </tr>
           {% if sim.hg_fixe_absorbe %}
           <tr style="color:#6B7280;font-size:12px;">
-            <td>
-              <span title="Les membres HG sont déjà en loge bleue : leurs cotisations LB couvrent déjà les charges fixes du bâtiment. La cotisation HG ne porte que sur les coûts variables (mutualise + marginal) de leurs tenues HG.">
-                ℹ️ Charges fixes HG absorbées par la cotisation LB
+            <td colspan="4">
+              <span title="Les membres HG étant déjà en loge bleue, les charges fixes de leurs tenues HG ({{ sim.hg_fixe_absorbe|floatformat:0 }} €) sont considérées couvertes par leur cotisation LB. La cotisation HG ne porte que sur les coûts variables (énergie, nettoyage…) de leurs tenues.">
+                ℹ️ Charges fixes HG ({{ sim.hg_fixe_absorbe|floatformat:0 }} €) couvertes par la cotisation LB — la cotisation HG ne couvre que les coûts variables
               </span>
             </td>
-            <td class="text-end text-muted">(+{{ sim.hg_fixe_absorbe|floatformat:0 }} €)</td>
-            <td class="text-end text-muted">−{{ sim.hg_fixe_absorbe|floatformat:0 }} €</td>
-            <td></td>
           </tr>
           {% endif %}
           {% if sim.recettes_exc_adherents %}
@@ -433,8 +430,9 @@
         <div class="p-3 rounded h-100" style="background:#F5F3FF;border:2px solid #7C3AED;">
           <div class="fw-bold mb-1" style="color:#5B21B6;">3 · Modèle hybride ★ Recommandé</div>
           <div class="mb-1" style="font-size:13px;">
-            <strong>{{ tarif_hybride_membre|floatformat:0 }} €/membre/an</strong> (LB = HG)<br>
-            + <strong>{{ tarif_hybride_tenue|floatformat:0 }} €/tenue</strong> pour toutes les loges
+            <strong>{{ tarif_hybride_membre|floatformat:0 }} €/membre/an</strong> (LB uniquement — charges fixes)<br>
+            + <strong>{{ tarif_hybride_tenue|floatformat:0 }} €/tenue</strong> pour toutes les loges (LB &amp; HG)<br>
+            <span style="font-size:11px;color:#6B7280;">HG : tarif/tenue seulement — charges fixes déjà couvertes par la cotisation LB</span>
           </div>
           <div class="text-muted small mt-2">
             Fixes couvertes par cotisation égale. Variables (énergie + nettoyage) facturées à l'usage.

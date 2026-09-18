@@ -6324,12 +6324,16 @@ def budget_simulation(request):
         charges_nettes_total = None
 
     # ── Comparaison des modèles économiques par loge ────────────────────────
-    # Modèle hybride : cotisation fixe (charges fixes ÷ membres) + tarif tenue (variables ÷ tenues)
+    # Modèle hybride :
+    #   • LB : cotisation fixe (charges fixes ÷ membres LB) + tarif tenue (variables ÷ tenues)
+    #   • HG : tarif tenue SEULEMENT (les membres HG sont déjà LB → le composant
+    #          "charges fixes par membre" est déjà couvert par leur cotisation LB)
     tarif_hybride_membre = tarif_hybride_tenue = None
     if sim and sim.get('nb_resas'):
-        eff_total = (sim.get('eff_eq_lb') or 0) + (sim.get('eff_eq_hg') or 0)
-        if eff_total:
-            tarif_hybride_membre = sim['total_fixe'] / Decimal(str(eff_total))
+        eff_lb_eq = sim.get('eff_eq_lb') or 0
+        if eff_lb_eq:
+            # Charges fixes portées uniquement par les membres LB
+            tarif_hybride_membre = sim['total_fixe'] / Decimal(str(eff_lb_eq))
         nb_t = sim['nb_resas']
         if nb_t:
             tarif_hybride_tenue = (sim['total_mutualise'] + sim['total_marginal']) / Decimal(str(nb_t))
@@ -6364,9 +6368,16 @@ def budget_simulation(request):
             else:
                 l['cout_equilibre'] = None
             # Modèle hybride
-            if tarif_hybride_membre and tarif_hybride_tenue and eff and l.get('nb_tenues'):
-                l['cout_hybride'] = (tarif_hybride_membre * eff
-                                     + tarif_hybride_tenue * l['nb_tenues'])
+            # HG : seulement le composant variable (par tenue) — les membres HG
+            # sont déjà LB et ont déjà payé le composant fixe via leur cotisation LB.
+            if tarif_hybride_tenue and l.get('nb_tenues'):
+                if l['type_loge'] == 'haut_grade':
+                    l['cout_hybride'] = tarif_hybride_tenue * l['nb_tenues']
+                elif tarif_hybride_membre and eff:
+                    l['cout_hybride'] = (tarif_hybride_membre * eff
+                                         + tarif_hybride_tenue * l['nb_tenues'])
+                else:
+                    l['cout_hybride'] = None
             else:
                 l['cout_hybride'] = None
             # Écarts vs cotisation actuelle
