@@ -5589,12 +5589,13 @@ def _simuler_budget(saison, nb_membres_global=None):
 
     par_loge = sorted(agg.values(), key=lambda x: -x['total_cout'])
 
-    total_global     = sum(d['cout_total']     for d in detail)
+    total_tenues     = sum(d['cout_total']     for d in detail)
     total_fixe       = sum(d['part_fixe']      for d in detail)
     total_mutualise  = sum(d['part_mutualise'] for d in detail)
     total_marginal   = sum(d['part_marginal']  for d in detail)
     total_agapes     = sum(d['part_agapes']    for d in detail)
     total_salle      = sum(a['total_salle']    for a in agg.values())
+    total_global     = total_tenues + total_salle  # total réel toutes occupations
     nb_resas_salle_total = len(resas_salle)
 
     # ── Tarif d'équilibre ──────────────────────────────────────────
@@ -5621,7 +5622,7 @@ def _simuler_budget(saison, nb_membres_global=None):
         'total_salle':     total_salle,
         'nb_resas':        nb_resas,
         'nb_resas_salle':  nb_resas_salle_total,
-        'cout_moyen_tenue': total_global / nb_resas if nb_resas else Decimal('0'),
+        'cout_moyen_tenue': total_tenues / nb_resas if nb_resas else Decimal('0'),
         'detail': detail,
         # équilibre
         'charges_lb':  charges_lb,
