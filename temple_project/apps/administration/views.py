@@ -6554,7 +6554,7 @@ def facturation(request):
                 'tarif_membre_loge', 'tarif_membre_hg',
                 'tarif_loge_occasionnelle', 'tarif_hg_externe', 'tarif_hg_interne_non_regulier',
             ])
-            messages.success(request, "Tarifs mis à jour. Ils ne s'appliquent pas aux dates antérieures à leur entrée en vigueur.")
+            messages.success(request, "Tarifs mis à jour. Si des brouillons de facturation annuelle ont déjà été générés, relancez la génération depuis Finance → Saison pour les recalculer avec les nouveaux tarifs.")
         except (InvalidOperation, ValueError):
             messages.error(request, "Valeurs invalides : vérifiez les montants et la date.")
         qs = request.META.get('QUERY_STRING', '')
@@ -7527,7 +7527,7 @@ def finance_generer_brouillons(request):
         activite = _activite_loge_saison(loge, saison)
 
         # Une loge sans aucune réservation cette saison n'a pas de facture
-        if activite['nb_total'] == 0 and not activite['nb_salles']:
+        if activite['nb_total'] == 0:
             continue
 
         facture, created = Facture.objects.get_or_create(
@@ -7565,9 +7565,11 @@ def finance_generer_brouillons(request):
         t_exc_f    = _filtre_date(activite['tenues_exceptionnelles'])
         t_congres_f = _filtre_date(activite['tenues_congres'])
 
-        exc_sans    = [r for r in t_exc_f if not r.besoin_agapes and r.type_reservation != 'funebre']
-        exc_agapes  = [r for r in t_exc_f if r.besoin_agapes]
-        exc_funebres = [r for r in t_exc_f if r.type_reservation == 'funebre']
+        # regle_source : les tenues générées par règle récurrente sont des régulières
+        # et ne doivent pas gonfler les exceptionnelles si elles ont été reclassées par erreur
+        exc_sans    = [r for r in t_exc_f if not r.besoin_agapes and r.sous_type != 'funebre']
+        exc_agapes  = [r for r in t_exc_f if r.besoin_agapes and r.sous_type != 'funebre']
+        exc_funebres = [r for r in t_exc_f if r.sous_type == 'funebre']
 
         if exc_sans:
             n = len(exc_sans)
@@ -7607,7 +7609,7 @@ def finance_generer_brouillons(request):
 
         if t_congres_f:
             nb_jours = sum(
-                max(1, (r.date_fin - r.date).days + 1) if r.date_fin and r.date_fin > r.date else 1
+                (r.date_fin - r.date).days if r.date_fin and r.date_fin > r.date else 1
                 for r in t_congres_f
             )
             n = len(t_congres_f)
@@ -7762,9 +7764,9 @@ def finance_resa_reclasser(request, pk, resa_pk):
 
     t_exc_f     = _filtre_date(activite['tenues_exceptionnelles'])
     t_congres_f = _filtre_date(activite['tenues_congres'])
-    exc_sans    = [r for r in t_exc_f if not r.besoin_agapes and r.type_reservation != 'funebre']
-    exc_agapes  = [r for r in t_exc_f if r.besoin_agapes]
-    exc_funebres = [r for r in t_exc_f if r.type_reservation == 'funebre']
+    exc_sans    = [r for r in t_exc_f if not r.besoin_agapes and r.sous_type != 'funebre']
+    exc_agapes  = [r for r in t_exc_f if r.besoin_agapes and r.sous_type != 'funebre']
+    exc_funebres = [r for r in t_exc_f if r.sous_type == 'funebre']
 
     if exc_sans:
         n = len(exc_sans)
@@ -7801,7 +7803,7 @@ def finance_resa_reclasser(request, pk, resa_pk):
         ordre += 1
     if t_congres_f:
         nb_jours = sum(
-            max(1, (r.date_fin - r.date).days + 1) if r.date_fin and r.date_fin > r.date else 1
+            (r.date_fin - r.date).days if r.date_fin and r.date_fin > r.date else 1
             for r in t_congres_f
         )
         n = len(t_congres_f)
