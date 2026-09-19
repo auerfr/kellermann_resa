@@ -230,16 +230,6 @@
               Postes facturés séparément — exclus de la cotisation
             </td>
           </tr>
-          {% if sim.total_agapes %}
-          <tr style="color:#059669;">
-            <td class="ps-3">
-              − Agapes / cuisine
-              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Facturées directement par le traiteur à la loge</div>
-            </td>
-            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
-            <td class="text-end" style="color:#059669;">−{{ sim.total_agapes|floatformat:0 }} €</td>
-          </tr>
-          {% endif %}
           {% if sim.recettes_occasionnels %}
           <tr style="color:#059669;">
             <td class="ps-3">
@@ -554,7 +544,7 @@
       LB — Tarif d'équilibre = tarif_eq × effectif · Hybride = fixe/membre + variable/tenue.
       HG — Tarif d'équilibre = tarif_eq × nb_tenues · Hybride = variable/tenue uniquement (fixe couvert par cotisation LB).
       Écart = différence vs cotisation actuelle. Rouge = paierait plus · Vert = paierait moins.
-      Calculs hors agapes et loges occasionnelles.
+      Calculs hors loges occasionnelles (couvertes par leur tarif à la tenue).
     </div>
   </div>
 </div>

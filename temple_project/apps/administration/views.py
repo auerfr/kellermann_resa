@@ -5689,10 +5689,10 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     # cotisations LB couvrent déjà les charges fixes du bâtiment.  La cotisation
     # HG ne couvre donc que les coûts VARIABLES de leurs tenues HG
     # (mutualise + marginal), pas à nouveau les frais de structure (fixe).
-    charges_lb  = sum(a['total_cout'] - a['total_agapes']
+    charges_lb  = sum(a['total_cout']
                       for a in par_loge if a['type_loge'] == 'loge' and a['membre_association'])
-    # HG : coûts variables (mutualise + marginal + salle), hors charges fixes du bâtiment
-    charges_hg  = sum(a['total_mutualise'] + a['total_marginal'] + a['total_salle']
+    # HG : coûts variables (mutualise + marginal + salle + agapes), hors charges fixes du bâtiment
+    charges_hg  = sum(a['total_mutualise'] + a['total_marginal'] + a['total_salle'] + a['total_agapes']
                       for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
     # Charges fixes HG "absorbées" par la cotisation LB des mêmes membres
     hg_fixe_absorbe = sum(a['total_fixe']
@@ -5707,7 +5707,7 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         for r in resas
         if r.loge and not r.loge.membre_association
     )
-    total_auto_finance = total_agapes + recettes_occasionnels
+    total_auto_finance = recettes_occasionnels
 
     # effectif_lb/hg = somme des effectifs des loges ADHÉRENTES uniquement
     # Les occupants occasionnels (membre_association=False) ne paient pas de cotisation annuelle
@@ -6346,8 +6346,7 @@ def budget_simulation(request):
             tarif_hybride_tenue = (sim['total_mutualise'] + sim['total_marginal']) / Decimal(str(nb_t))
 
         for l in sim['par_loge']:
-            # Usage pur (hors agapes auto-financées par tenue)
-            l['cout_usage_pur'] = l['total_cout'] - l['total_agapes']
+            l['cout_usage_pur'] = l['total_cout']
             # Loges occasionnelles : pas de modèle cotisation/hybride
             if not l.get('membre_association'):
                 l['cotisation_actuelle'] = None
