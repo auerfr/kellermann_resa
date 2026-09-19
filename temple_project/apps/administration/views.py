@@ -6278,11 +6278,16 @@ def budget_simulation(request):
     pct_lb_raw    = request.GET.get('pct_lb', '').strip()
     pct_lb_custom = _parse_dec_param(pct_lb_raw)
 
-    # Tarifs personnalisés à tester (saisie libre)
+    # Tarifs personnalisés à tester — modèle par membre
     tarif_lb_p_raw = request.GET.get('tarif_lb_p', '').strip()
     tarif_hg_p_raw = request.GET.get('tarif_hg_p', '').strip()
     tarif_lb_propose_input = _parse_dec_param(tarif_lb_p_raw)
     tarif_hg_propose_input = _parse_dec_param(tarif_hg_p_raw)
+    # Tarifs personnalisés à tester — modèle hybride
+    tarif_h_membre_p_raw = request.GET.get('tarif_h_membre_p', '').strip()
+    tarif_h_tenue_p_raw  = request.GET.get('tarif_h_tenue_p',  '').strip()
+    tarif_h_membre_propose = _parse_dec_param(tarif_h_membre_p_raw)
+    tarif_h_tenue_propose  = _parse_dec_param(tarif_h_tenue_p_raw)
 
     params = Parametres.get_instance()
     postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
@@ -6455,6 +6460,44 @@ def budget_simulation(request):
                 else:
                     l['ecart_propose'] = None
 
+    # ── Scénario hybride personnalisé ──────────────────────────────────────────
+    # Utilise tarif_h_membre_p (€/membre LB) et tarif_h_tenue_p (€/tenue tous)
+    scenario_hybride_propose = None
+    if sim and charges_nettes_total is not None:
+        th_m = Decimal(str(tarif_h_membre_propose)) if tarif_h_membre_propose is not None else tarif_hybride_membre
+        th_t = Decimal(str(tarif_h_tenue_propose))  if tarif_h_tenue_propose  is not None else tarif_hybride_tenue
+        if th_m is not None and th_t is not None:
+            eff_lb_s = sim.get('eff_eq_lb') or 0
+            is_custom = tarif_h_membre_propose is not None or tarif_h_tenue_propose is not None
+            rec_h_lb = rec_h_hg = Decimal('0')
+            for l in sim['par_loge']:
+                if not l.get('membre_association'):
+                    l['cout_hybride_p'] = None
+                    l['ecart_hybride_p'] = None
+                    continue
+                eff   = l.get('effectif') or 0
+                nb_tl = l.get('nb_tenues') or 0
+                if l['type_loge'] == 'loge' and (eff or nb_tl):
+                    l['cout_hybride_p'] = (th_m * eff if eff else Decimal('0')) + th_t * nb_tl
+                    rec_h_lb += l['cout_hybride_p']
+                elif l['type_loge'] == 'haut_grade' and nb_tl:
+                    l['cout_hybride_p'] = th_t * nb_tl
+                    rec_h_hg += l['cout_hybride_p']
+                else:
+                    l['cout_hybride_p'] = None
+                if l['cout_hybride_p'] is not None and l.get('cotisation_actuelle'):
+                    l['ecart_hybride_p'] = l['cout_hybride_p'] - l['cotisation_actuelle']
+                else:
+                    l['ecart_hybride_p'] = None
+            rec_h_tot = rec_h_lb + rec_h_hg
+            scenario_hybride_propose = {
+                'tarif_membre': th_m, 'tarif_tenue': th_t,
+                'recettes_lb': rec_h_lb, 'recettes_hg': rec_h_hg,
+                'recettes_total': rec_h_tot,
+                'solde': rec_h_tot - charges_nettes_total,
+                'is_custom': is_custom,
+            }
+
     # ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ─────────────
     # Les charges fixes sont déjà couvertes par la cotisation des adhérents.
     # Une tenue externe ne supporte que : énergie (mutualisée) + nettoyage (marginal).
@@ -6496,6 +6539,9 @@ def budget_simulation(request):
         'tarif_lb_p': tarif_lb_p_raw,
         'tarif_hg_p': tarif_hg_p_raw,
         'scenario_propose': scenario_propose,
+        'tarif_h_membre_p': tarif_h_membre_p_raw,
+        'tarif_h_tenue_p':  tarif_h_tenue_p_raw,
+        'scenario_hybride_propose': scenario_hybride_propose,
         'pct_lb_defaut': pct_lb_defaut,
         'pct_hg_defaut': pct_hg_defaut,
         'sim': sim,
@@ -7526,6 +7572,11 @@ def finance_generer_brouillons(request):
 
     for loge in loges_actives:
         activite = _activite_loge_saison(loge, saison)
+
+        # Seules les loges adhérentes ont une facture annuelle.
+        # Les loges extérieures/occasionnelles sont facturées à la tenue via le module facturation.
+        if not loge.membre_association:
+            continue
 
         # Une loge sans aucune réservation cette saison n'a pas de facture
         if activite['nb_total'] == 0:

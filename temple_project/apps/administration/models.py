@@ -61,6 +61,12 @@ class Parametres(models.Model):
         help_text="Active le module de facturation annuelle par loge "
                   "(factures cristallisées, PDF, envoi email). "
                   "À activer après validation du modèle avec le trésorier.")
+    # Lien vers le schéma de tarification actuellement actif (nullable, compatibilité)
+    schema_actif = models.ForeignKey(
+        'SchemaTarification', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+        help_text="Schéma de tarification voté en AG et actuellement en vigueur."
+    )
 
     class Meta:
         verbose_name = "Paramètres"
@@ -262,6 +268,117 @@ class FAQ(models.Model):
         return f"[{self.get_categorie_display()}] {self.question[:60]}"
 
 
+# ── Module Finance — Schémas de tarification & Décisions d'AG ────────────────
+
+class SchemaTarification(models.Model):
+    """Schéma de tarification versionné, lié ou non à une décision d'AG."""
+    MODES = [
+        ('membre',  'Par membre'),
+        ('hybride', 'Hybride (membre + tenue)'),
+    ]
+    STATUTS = [
+        ('simule', 'Simulé'),
+        ('vote',   'Voté en AG'),
+    ]
+
+    nom          = models.CharField(max_length=200)
+    saison       = models.PositiveSmallIntegerField(help_text="Année de début de saison (ex : 2026 pour 2026-2027)")
+    date_effet   = models.DateField(null=True, blank=True)
+    statut       = models.CharField(max_length=10, choices=STATUTS, default='simule')
+    mode         = models.CharField(max_length=10, choices=MODES, default='membre')
+
+    # Tarifs cotisation annuelle
+    tarif_membre_loge = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_membre_hg   = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    # Tarifs part tenue (mode hybride)
+    tarif_tenue_lb    = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_tenue_hg    = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    # Tarifs tenues exceptionnelles
+    tarif_exc_sans_agapes = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_exc_avec_agapes = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_congres_jour    = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_funebre         = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    # Contraintes optionnelles
+    tarif_minimum      = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True,
+                                             help_text="Minimum de cotisation par structure (€, optionnel)")
+    plafond_hausse_pct = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True,
+                                             help_text="Plafond de hausse par rapport au tarif précédent (%)")
+    notes    = models.TextField(blank=True)
+    cree_par = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name='schemas_crees')
+    cree_le    = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = "Schéma de tarification"
+        verbose_name_plural = "Schémas de tarification"
+        ordering = ['-saison', '-cree_le']
+
+    def __str__(self):
+        return f"{self.nom} ({self.saison}-{self.saison + 1}) [{self.get_statut_display()}]"
+
+
+POSTES_BUDGET = [
+    ('budget_energie',       'Énergie (électricité, gaz)'),
+    ('budget_fluides',       'Eau et fluides'),
+    ('budget_consommables',  'Consommables et petits équipements'),
+    ('budget_entretien',     'Entretien et réparations'),
+    ('budget_maintenance',   'Maintenance et contrôles réglementaires'),
+    ('budget_assurances',    'Assurances'),
+    ('budget_services_ext',  'Autres services extérieurs (dont nettoyage)'),
+    ('budget_impots',        'Impôts et taxes'),
+    ('budget_personnel',     'Frais de personnel'),
+    ('budget_amortissements','Dotation aux amortissements'),
+]
+
+
+class DecisionAG(models.Model):
+    """Décision d'Assemblée Générale : budget voté + schéma de tarification voté."""
+    STATUTS = [
+        ('brouillon', 'Brouillon'),
+        ('votee',     'Votée'),
+    ]
+
+    saison              = models.PositiveSmallIntegerField(help_text="Saison concernée (ex : 2026 pour 2026-2027)")
+    date_ag             = models.DateField()
+    libelle_resolution  = models.CharField(max_length=500, help_text="Titre ou numéro de résolution")
+    pv                  = models.FileField(upload_to='pv_ag/', null=True, blank=True,
+                                           help_text="Procès-verbal de l'AG (PDF)")
+    statut              = models.CharField(max_length=10, choices=STATUTS, default='brouillon')
+    schema              = models.ForeignKey(SchemaTarification, null=True, blank=True,
+                                            on_delete=models.SET_NULL, related_name='decisions_ag')
+
+    # Budget voté par poste (nomenclature comptable)
+    budget_energie       = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_fluides       = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_consommables  = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_entretien     = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_maintenance   = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_assurances    = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_services_ext  = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_impots        = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_personnel     = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_amortissements= models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+
+    notes    = models.TextField(blank=True)
+    cree_par = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name='decisions_ag_creees')
+    cree_le    = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    @property
+    def budget_total(self):
+        return sum(getattr(self, champ) for champ, _ in POSTES_BUDGET)
+
+    class Meta:
+        verbose_name        = "Décision d'AG"
+        verbose_name_plural = "Décisions d'AG"
+        ordering = ['-saison', '-date_ag']
+
+    def __str__(self):
+        return f"AG {self.date_ag.strftime('%d/%m/%Y')} — {self.libelle_resolution[:60]}"
+
+
 # ── Module Finance — Facturation annuelle par loge ────────────────────────────
 
 class Facture(models.Model):
@@ -281,8 +398,13 @@ class Facture(models.Model):
     date_emission = models.DateField(null=True, blank=True)
     date_echeance = models.DateField(null=True, blank=True)
     statut        = models.CharField(max_length=20, choices=STATUT_CHOICES, default='brouillon', db_index=True)
-    notes         = models.TextField(blank=True, help_text="Notes libres (exonération partielle, accord trésorier…)")
-    total_ht      = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    notes            = models.TextField(blank=True, help_text="Notes libres (exonération partielle, accord trésorier…)")
+    total_ht         = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    schema_applique  = models.ForeignKey(
+        'SchemaTarification', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='factures',
+        help_text="Schéma de tarification utilisé pour générer cette facture"
+    )
     created_at    = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 
