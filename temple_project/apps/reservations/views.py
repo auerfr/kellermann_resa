@@ -1,7 +1,7 @@
 import json
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_admin, get_email_traiteur
 from django.db.models import Q, Sum
 from .emails import envoyer_email_nouvelle_demande
@@ -9,7 +9,8 @@ from .models import (
     Reservation, ReservationSalle, SalleReunion, DemandeRegleRecurrence,
     RegleRecurrence, RegleRecurrenceSalle, DemandeRegleRecurrenceSalle,
     Temple, DemandeAccesPortail,
-    ValidationSaison, ValidationSaisonLigne, MessageContact,
+    ValidationSaison, ValidationSaisonLigne, MessageContact, AccessLog,
+    DemandeModificationReservation,
 )
 from temple_project.apps.loges.models import Loge
 from .forms import DemandeReservationForm, DemandeReservationSalleForm, DemandeCabinetsForm, DemandeBanquetForm
@@ -367,7 +368,7 @@ def demande_cabinets(request):
                 )
                 reservations_creees.append(resa)
 
-            # Envoyer un email de confirmation
+            # Envoyer un email de confirmation au demandeur
             send_mail_kellermann(
                 subject="Confirmation de votre demande de cabinets de réflexion",
                 message=(
@@ -378,6 +379,18 @@ def demande_cabinets(request):
                     f"{request.build_absolute_uri('/reservations/suivi-salle/' + str(reservations_creees[0].uuid) + '/')}"
                 ),
                 recipient_list=[form.cleaned_data['email_demandeur']],
+            )
+            # Notifier l'admin
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande cabinets — {form.cleaned_data['organisation']}",
+                message=(
+                    f"Nouvelle demande de {nombre_cabinets_demandes} cabinet(s) de réflexion :\n"
+                    f"Organisation : {form.cleaned_data['organisation']}\n"
+                    f"Date : {date} · {heure_debut}–{heure_fin}\n"
+                    f"Demandeur : {form.cleaned_data['nom_demandeur']} <{form.cleaned_data['email_demandeur']}>\n"
+                    f"Référence : {reservations_creees[0].uuid}"
+                ),
+                recipient_list=[get_email_admin()],
             )
 
             messages.success(request, f"Votre demande de {nombre_cabinets_demandes} cabinet(s) a été soumise avec succès.")
@@ -510,6 +523,20 @@ def demande_banquet(request):
                 subject="Confirmation de votre demande de banquet d'ordre",
                 message=message,
                 recipient_list=destinataires,
+            )
+            # Notifier l'admin
+            send_mail_kellermann(
+                subject=f"[Kellermann] Nouvelle demande banquet — {form.cleaned_data.get('loge', 'N/A')}",
+                message=(
+                    f"Nouvelle demande de banquet d'ordre :\n"
+                    f"Loge : {form.cleaned_data.get('loge', '—')}\n"
+                    f"Date : {date:%d/%m/%Y} · {heure_debut}–{heure_fin}\n"
+                    f"Salle : {salle_banquet.nom}\n"
+                    f"Repas : {form.cleaned_data['nombre_repas']}\n"
+                    f"Demandeur : {form.cleaned_data['nom_demandeur']} <{form.cleaned_data['email_demandeur']}>\n"
+                    f"Référence : {resa.uuid}"
+                ),
+                recipient_list=[get_email_admin()],
             )
 
             messages.success(request, "Votre demande de banquet d'ordre a été soumise avec succès.")
@@ -771,6 +798,35 @@ def suivi_recurrence(request, uuid):
     return render(request, 'reservations/suivi_recurrence.html', {'demande': demande})
 
 
+def _prochaine_dispo(date_str, heure_debut, heure_fin, temple_id, salle_id, max_days=90):
+    """Retourne la prochaine date libre (jj/mm/aaaa) après date_str, ou None."""
+    from datetime import date as _date, timedelta, datetime as _dt
+    try:
+        start = _dt.strptime(date_str, '%Y-%m-%d').date() + timedelta(days=1)
+    except ValueError:
+        return None
+    end = start + timedelta(days=max_days)
+    chevauchement = Q(heure_debut__lt=heure_fin, heure_fin__gt=heure_debut)
+    if temple_id:
+        occupied = set(
+            Reservation.objects.filter(
+                temple=temple_id, date__gte=start, date__lte=end, statut='validee',
+            ).filter(chevauchement).values_list('date', flat=True)
+        )
+    else:
+        occupied = set(
+            ReservationSalle.objects.filter(
+                salle=salle_id, date__gte=start, date__lte=end, statut='validee',
+            ).filter(chevauchement).values_list('date', flat=True)
+        )
+    current = start
+    while current <= end:
+        if current not in occupied:
+            return current.strftime('%d/%m/%Y')
+        current += timedelta(days=1)
+    return None
+
+
 def api_verifier_conflit(request):
     """API pour vérifier les conflits de réservation en temps réel."""
     date = request.GET.get('date')
@@ -794,10 +850,12 @@ def api_verifier_conflit(request):
         en_attente = base_qs.filter(statut='attente').exists()
 
     if validees:
+        prochaine = _prochaine_dispo(date, heure_debut, heure_fin, temple, salle)
         return JsonResponse({
             'conflit': True,
             'niveau': 'erreur',
             'message': 'Ce créneau est déjà validé et occupé.',
+            'prochaine_dispo': prochaine,
         })
     if en_attente:
         return JsonResponse({
@@ -1054,8 +1112,18 @@ def contact_portail(request):
                 messages.error(request, "Nom, email et message sont obligatoires.")
                 return render(request, 'reservations/contact.html', {'loges': loges, 'onglet': 'message'})
 
-            # Enregistre le message (consultable + répondable dans la messagerie admin)
-            MessageContact.objects.create(nom=nom, email=email, sujet=sujet, message=message)
+            loge_msg = None
+            loge_id_msg = request.POST.get('loge_id_message') or None
+            if loge_id_msg:
+                try:
+                    loge_msg = Loge.objects.get(pk=loge_id_msg)
+                except Loge.DoesNotExist:
+                    pass
+            if not loge_msg:
+                # Fallback : tenter de retrouver la loge par email
+                loge_msg = Loge.objects.filter(email__iexact=email, actif=True).first()
+
+            MessageContact.objects.create(nom=nom, email=email, sujet=sujet, message=message, loge=loge_msg)
 
             # Notification à l'admin
             send_mail_kellermann(
@@ -1089,6 +1157,13 @@ def portail_loge(request, token):
     today   = date_cls.today()
     loge    = demande.loge
 
+    # Log de l'accès portail (GET seulement pour éviter les doublons POST)
+    if request.method == 'GET':
+        try:
+            AccessLog.objects.create(type='portail', loge=loge)
+        except Exception:
+            pass
+
     # ── Mise à jour des informations de la loge par la loge elle-même ──────────
     if request.method == 'POST' and request.POST.get('action') == 'modifier_infos':
         if not loge:
@@ -1112,10 +1187,9 @@ def portail_loge(request, token):
         return redirect('reservations:portail_loge', token=token)
 
     # ── Saison courante (par défaut) ─────────────────────────────────────────
-    # De juillet à décembre on pointe sur la saison à venir (sept→juin) pour que
-    # les loges voient leurs réservations de la prochaine saison sans changer de
-    # sélecteur ; de janvier à juin, sur la saison en cours.
-    annee_courante = today.year if today.month >= 7 else today.year - 1
+    # Sept→déc : on pointe sur la nouvelle saison ; janv→août : saison en cours
+    # (juillet-août = été entre deux saisons, rattaché à la saison précédente).
+    annee_courante = today.year - 1 if today.month <= 8 else today.year
 
     # ── Saison sélectionnée (GET ?saison=, sinon courante) ───────────────────
     try:
@@ -1127,7 +1201,7 @@ def portail_loge(request, token):
     saisons_disponibles = [annee_courante - 1, annee_courante, annee_courante + 1]
 
     debut_saison = date_cls(annee_saison, 9, 1)
-    fin_saison   = date_cls(annee_saison + 1, 6, 30)
+    fin_saison   = date_cls(annee_saison + 1, 8, 31)
 
     # ── Réservations temple : saison complète sélectionnée, validée ou en attente ───
     reservations_temple = Reservation.objects.filter(
@@ -1170,6 +1244,8 @@ def portail_loge(request, token):
             'date': r.date, 'heure_debut': r.heure_debut, 'heure_fin': r.heure_fin,
             'statut': r.statut, 'get_statut_display': r.get_statut_display(),
             'type_code': ts, 'type_label': TYPE_SALLE_LABELS.get(ts, ts),
+            'type_reunion': getattr(r, 'type_reunion', ''),
+            'type_reunion_display': r.get_type_reunion_display() if hasattr(r, 'get_type_reunion_display') else '',
             'lieu': str(r.salle) if r.salle else '–',
             'detail': r.objet or '',
             'obj': r,
@@ -1289,6 +1365,7 @@ def portail_loge(request, token):
         'today':                 today,
         'rites':                 Loge.RITE_CHOICES,
         'tarifs':                Parametres.get_instance(),
+        'token':                 token,
     })
 
 
@@ -1537,4 +1614,360 @@ def portail_demande_recurrence_salle(request, token):
         'jour_choices':    RegleRecurrenceSalle.JOUR_CHOICES,
         'semaine_choices': RegleRecurrenceSalle.SEMAINE_CHOICES,
         'token':           token,
+    })
+
+
+def portail_loge_ics(request, token):
+    """Flux iCalendar abonnable pour une loge (via token portail)."""
+    from datetime import date as date_cls, datetime, time as time_cls
+    from django.utils import timezone as tz
+
+    demande = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    loge    = demande.loge
+
+    today      = date_cls.today()
+    date_debut = date_cls(today.year - 1, 9, 1)
+    date_fin   = date_cls(today.year + 2, 8, 31)
+
+    tenues = (
+        Reservation.objects.select_related('temple')
+        .filter(loge=loge, statut='validee',
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+    resas_salle = (
+        ReservationSalle.objects.select_related('salle')
+        .filter(loge=loge, statut__in=['validee', 'attente'],
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+
+    now_utc = tz.now().strftime('%Y%m%dT%H%M%SZ')
+
+    def _dt(d, t):
+        from datetime import datetime as _dt_cls, timezone as _utc
+        h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
+        m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
+        dt_naive = _dt_cls(d.year, d.month, d.day, h, m)
+        dt_aware = tz.make_aware(dt_naive)
+        return dt_aware.astimezone(_utc.utc).strftime('%Y%m%dT%H%M%SZ')
+
+    def _dt_end(d, t_start, t_end):
+        from datetime import datetime as _dt_cls, timedelta, timezone as _utc
+        t = t_end if t_end else None
+        if t:
+            h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
+            m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
+        else:
+            h = t_start.hour if hasattr(t_start, 'hour') else int(str(t_start)[:2])
+            m = t_start.minute if hasattr(t_start, 'minute') else int(str(t_start)[3:5])
+        dt_naive = _dt_cls(d.year, d.month, d.day, h, m)
+        if not t_end:
+            dt_naive += timedelta(hours=2)
+        dt_aware = tz.make_aware(dt_naive)
+        return dt_aware.astimezone(_utc.utc).strftime('%Y%m%dT%H%M%SZ')
+
+    def _esc(s):
+        return (str(s).replace('\\', '\\\\')
+                      .replace(';', '\\;')
+                      .replace(',', '\\,')
+                      .replace('\n', '\\n'))
+
+    def _fold(line):
+        enc = line.encode('utf-8')
+        if len(enc) <= 75:
+            return line
+        parts = []
+        while enc:
+            chunk = enc[:75]
+            while len(chunk) > 1 and (chunk[-1] & 0xC0) == 0x80:
+                chunk = chunk[:-1]
+            parts.append(chunk.decode('utf-8'))
+            enc = enc[len(chunk):]
+            if enc:
+                enc = b' ' + enc
+        return '\r\n'.join(parts)
+
+    TYPE_REUNION = {
+        'banquet':  "Banquet d'ordre",
+        'reunion':  'Reunion de travail',
+        'chantier': 'Chantier',
+        'conseil':  "Conseil d'officiers",
+    }
+
+    lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Temples Kellermann//Reservations//FR',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+        'X-PUBLISHED-TTL:PT1H',
+        f'X-WR-CALNAME:Kellermann {loge.nom}',
+        'X-WR-TIMEZONE:Europe/Paris',
+        'X-WR-CALDESC:Planning reservations Temples Kellermann',
+    ]
+
+    for t in tenues:
+        desc_parts = [f'Type : {t.get_type_reservation_display()}']
+        if t.sous_type and t.sous_type != 'standard':
+            desc_parts.append(f'Nature : {t.get_sous_type_display()}')
+        if t.besoin_agapes:
+            desc_parts.append(f'Agapes : {t.nombre_repas} couverts')
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:temple-{t.pk}@kellermann-resa',
+            f'DTSTAMP:{now_utc}',
+            f'DTSTART:{_dt(t.date, t.heure_debut)}',
+            f'DTEND:{_dt_end(t.date, t.heure_debut, t.heure_fin)}',
+            f'SUMMARY:{_esc("T. " + loge.nom)}',
+            f'LOCATION:{_esc(str(t.temple) if t.temple else "")}',
+            f'DESCRIPTION:{_esc(chr(10).join(desc_parts))}',
+            'END:VEVENT',
+        ]
+
+    for rs in resas_salle:
+        type_label = TYPE_REUNION.get(rs.type_reunion, rs.type_reunion)
+        salle_name = str(rs.salle) if rs.salle else 'Salle'
+        desc = rs.objet or ''
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:salle-{rs.pk}@kellermann-resa',
+            f'DTSTAMP:{now_utc}',
+            f'DTSTART:{_dt(rs.date, rs.heure_debut)}',
+            f'DTEND:{_dt_end(rs.date, rs.heure_debut, rs.heure_fin)}',
+            f'SUMMARY:{_esc(type_label + " - " + salle_name)}',
+            f'LOCATION:{_esc(salle_name)}',
+            f'DESCRIPTION:{_esc(desc)}',
+            'END:VEVENT',
+        ]
+
+    lines.append('END:VCALENDAR')
+
+    content  = '\r\n'.join(_fold(line) for line in lines) + '\r\n'
+    response = HttpResponse(content, content_type='text/calendar; charset=utf-8')
+    response['Content-Disposition'] = (
+        f'inline; filename="kellermann_{loge.abreviation or loge.pk}.ics"'
+    )
+    return response
+
+
+def ics_global(request):
+    """Flux iCalendar public — toutes les réservations de tous les temples."""
+    from datetime import date as date_cls
+    from django.utils import timezone as tz
+
+    today      = date_cls.today()
+    date_debut = date_cls(today.year - 1, 9, 1)
+    date_fin   = date_cls(today.year + 2, 8, 31)
+
+    tenues = (
+        Reservation.objects.select_related('temple', 'loge')
+        .filter(statut='validee',
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+    resas_salle = (
+        ReservationSalle.objects.select_related('salle', 'loge')
+        .filter(statut__in=['validee', 'attente'],
+                date__gte=date_debut, date__lte=date_fin)
+        .order_by('date')
+    )
+
+    now_utc = tz.now().strftime('%Y%m%dT%H%M%SZ')
+
+    def _dt(d, t):
+        from datetime import datetime as _dt_cls, timezone as _utc
+        h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
+        m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
+        dt_naive = _dt_cls(d.year, d.month, d.day, h, m)
+        dt_aware = tz.make_aware(dt_naive)
+        return dt_aware.astimezone(_utc.utc).strftime('%Y%m%dT%H%M%SZ')
+
+    def _dt_end(d, t_start, t_end):
+        from datetime import datetime as _dt_cls, timedelta, timezone as _utc
+        t = t_end if t_end else None
+        if t:
+            h = t.hour if hasattr(t, 'hour') else int(str(t)[:2])
+            m = t.minute if hasattr(t, 'minute') else int(str(t)[3:5])
+        else:
+            h = t_start.hour if hasattr(t_start, 'hour') else int(str(t_start)[:2])
+            m = t_start.minute if hasattr(t_start, 'minute') else int(str(t_start)[3:5])
+        dt_naive = _dt_cls(d.year, d.month, d.day, h, m)
+        if not t_end:
+            dt_naive += timedelta(hours=2)
+        dt_aware = tz.make_aware(dt_naive)
+        return dt_aware.astimezone(_utc.utc).strftime('%Y%m%dT%H%M%SZ')
+
+    def _esc(s):
+        return (str(s).replace('\\', '\\\\')
+                      .replace(';', '\\;')
+                      .replace(',', '\\,')
+                      .replace('\n', '\\n'))
+
+    def _fold(line):
+        enc = line.encode('utf-8')
+        if len(enc) <= 75:
+            return line
+        parts = []
+        while enc:
+            chunk = enc[:75]
+            while len(chunk) > 1 and (chunk[-1] & 0xC0) == 0x80:
+                chunk = chunk[:-1]
+            parts.append(chunk.decode('utf-8'))
+            enc = enc[len(chunk):]
+            if enc:
+                enc = b' ' + enc
+        return '\r\n'.join(parts)
+
+    TYPE_REUNION = {
+        'banquet':  "Banquet d'ordre",
+        'reunion':  'Reunion de travail',
+        'chantier': 'Chantier',
+        'conseil':  "Conseil d'officiers",
+    }
+
+    lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Temples Kellermann//Reservations//FR',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+        'X-PUBLISHED-TTL:PT1H',
+        'X-WR-CALNAME:Temples Kellermann Global',
+        'X-WR-TIMEZONE:Europe/Paris',
+        'X-WR-CALDESC:Toutes les reservations des Temples Kellermann',
+    ]
+
+    for t in tenues:
+        loge_abbr = (t.loge.abreviation if t.loge and t.loge.abreviation
+                     else (t.loge.nom[:8] if t.loge else '?'))
+        temple_str = str(t.temple) if t.temple else 'Temple'
+        summary = f'{loge_abbr} - {temple_str}'
+        desc = t.get_type_reservation_display()
+        if t.besoin_agapes:
+            desc += f'\nAgapes : {t.nombre_repas} couverts'
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:temple-{t.pk}@kellermann-resa',
+            f'DTSTAMP:{now_utc}',
+            f'DTSTART:{_dt(t.date, t.heure_debut)}',
+            f'DTEND:{_dt_end(t.date, t.heure_debut, t.heure_fin)}',
+            f'SUMMARY:{_esc(summary)}',
+            f'LOCATION:{_esc(temple_str)}',
+            f'DESCRIPTION:{_esc(desc)}',
+            'END:VEVENT',
+        ]
+
+    for rs in resas_salle:
+        loge_abbr = (rs.loge.abreviation if rs.loge and rs.loge.abreviation
+                     else (rs.loge.nom[:8] if rs.loge else '?'))
+        salle_str = str(rs.salle) if rs.salle else 'Salle'
+        type_label = TYPE_REUNION.get(rs.type_reunion, rs.type_reunion)
+        summary = f'{loge_abbr} - {salle_str}'
+        lines += [
+            'BEGIN:VEVENT',
+            f'UID:salle-{rs.pk}@kellermann-resa',
+            f'DTSTAMP:{now_utc}',
+            f'DTSTART:{_dt(rs.date, rs.heure_debut)}',
+            f'DTEND:{_dt_end(rs.date, rs.heure_debut, rs.heure_fin)}',
+            f'SUMMARY:{_esc(summary)}',
+            f'LOCATION:{_esc(salle_str)}',
+            f'DESCRIPTION:{_esc(type_label)}',
+            'END:VEVENT',
+        ]
+
+    lines.append('END:VCALENDAR')
+
+    content  = '\r\n'.join(_fold(line) for line in lines) + '\r\n'
+    response = HttpResponse(content, content_type='text/calendar; charset=utf-8')
+    response['Content-Disposition'] = 'inline; filename="kellermann_global.ics"'
+    return response
+
+
+def portail_demande_modif(request, token):
+    """Permet à une loge de demander l'annulation ou le déplacement d'une tenue validée."""
+    from datetime import date as _date
+    demande_portail = get_object_or_404(DemandeAccesPortail, token=token, statut='validee')
+    loge = demande_portail.loge
+    today = _date.today()
+
+    resa_pk   = request.POST.get('resa_pk') or request.GET.get('resa_pk')
+    resa_type = request.POST.get('resa_type') or request.GET.get('resa_type', 'temple')
+
+    # Retrieve reservation (must belong to loge, be validated, and in the future)
+    resa_obj = None
+    if resa_type == 'temple':
+        resa_obj = get_object_or_404(Reservation, pk=resa_pk, loge=loge, statut='validee', date__gt=today)
+    else:
+        resa_obj = get_object_or_404(ReservationSalle, pk=resa_pk, loge=loge, statut='validee', date__gt=today)
+
+    if request.method == 'POST':
+        type_demande  = request.POST.get('type_demande', 'annulation')
+        nouvelle_date = request.POST.get('nouvelle_date', '').strip() or None
+        motif         = request.POST.get('motif', '').strip()
+
+        # Check new date is in the future for deployments
+        if type_demande == 'deplacement':
+            if not nouvelle_date:
+                messages.error(request, "La nouvelle date est obligatoire pour un déplacement.")
+                return render(request, 'reservations/portail_demande_modif.html', {
+                    'demande_portail': demande_portail, 'token': token,
+                    'resa': resa_obj, 'resa_type': resa_type, 'today': today,
+                })
+            from datetime import datetime as _dt
+            try:
+                nd = _dt.strptime(nouvelle_date, '%Y-%m-%d').date()
+            except ValueError:
+                messages.error(request, "Format de date invalide.")
+                return render(request, 'reservations/portail_demande_modif.html', {
+                    'demande_portail': demande_portail, 'token': token,
+                    'resa': resa_obj, 'resa_type': resa_type, 'today': today,
+                })
+            if nd <= today:
+                messages.error(request, "La nouvelle date doit être dans le futur.")
+                return render(request, 'reservations/portail_demande_modif.html', {
+                    'demande_portail': demande_portail, 'token': token,
+                    'resa': resa_obj, 'resa_type': resa_type, 'today': today,
+                })
+
+        kwargs = {
+            'loge': loge,
+            'type_demande': type_demande,
+            'motif': motif,
+            'nouvelle_date': nouvelle_date if type_demande == 'deplacement' else None,
+        }
+        if resa_type == 'temple':
+            kwargs['reservation'] = resa_obj
+        else:
+            kwargs['reservation_salle'] = resa_obj
+
+        DemandeModificationReservation.objects.create(**kwargs)
+
+        # Notify admin
+        type_label = "annulation" if type_demande == 'annulation' else "déplacement"
+        loge_nom = str(loge) if loge else 'Loge inconnue'
+        nd_str = f" → nouvelle date : {nouvelle_date}" if nouvelle_date else ""
+        send_mail_kellermann(
+            subject=f"[Kellermann] Demande de {type_label} — {loge_nom}",
+            message=(
+                f"Demande de {type_label} reçue depuis le portail.\n\n"
+                f"Loge    : {loge_nom}\n"
+                f"Réservation : {resa_obj.date.strftime('%d/%m/%Y')} — {resa_obj}\n"
+                f"Motif   : {motif or '(non précisé)'}{nd_str}\n\n"
+                f"À traiter dans l'administration."
+            ),
+            recipient_list=[get_email_admin()],
+        )
+
+        messages.success(request, f"Votre demande de {type_label} a bien été enregistrée. L'administration vous contactera.")
+        return redirect('reservations:portail_loge', token=token)
+
+    return render(request, 'reservations/portail_demande_modif.html', {
+        'demande_portail': demande_portail,
+        'token': token,
+        'resa': resa_obj,
+        'resa_type': resa_type,
+        'today': today,
     })

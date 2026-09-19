@@ -5,8 +5,9 @@ from django.db.models import Q
 import calendar
 
 from temple_project.apps.reservations.models import (
-    Reservation, ReservationSalle, SalleReunion, BlocageCreneaux
+    Reservation, ReservationSalle, SalleReunion, BlocageCreneaux, MessageContact
 )
+from temple_project.apps.administration.email_utils import send_mail_kellermann, get_email_traiteur
 from temple_project.apps.loges.models import Loge
 from .forms import (
     ReservationDirecteForm, TraiteurReservationDirecteForm,
@@ -119,7 +120,7 @@ def _build_repas(r, type_label):
         org  = loge.nom if loge else (r.organisation or r.nom_demandeur or "—")
         # Banquet d'ordre en salle = agapes confirmées ; salle agapes standard aussi
         tr = getattr(r, 'type_reunion', '')
-        status = "confirme" if (getattr(r.salle, 'type_salle', '') == 'agapes' or tr == 'banquet') else "probable"
+        status = "confirme" if tr == 'banquet' else "probable"
 
     nom_c, email_c, tel_c = _contact_loge(loge)
     return {
@@ -175,7 +176,7 @@ def tableau_de_bord(request):
             date__lte=dernier_jour,
             statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(type_reunion="banquet")
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -260,7 +261,7 @@ def calendrier(request):
             date__gte=premier_jour, date__lte=dernier_jour,
             statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(type_reunion="banquet")
         .select_related("salle", "loge")
         .order_by("date", "heure_debut")
     )
@@ -316,8 +317,7 @@ def calendrier(request):
         couverts, est = _couverts_effectifs(r)
         nom_c, email_c, tel_c = _contact_loge(r.loge)
         tr = getattr(r, 'type_reunion', '')
-        salle_type = getattr(r.salle, 'type_salle', '') if r.salle else ''
-        is_banquet = (salle_type == 'agapes' or tr == 'banquet')
+        is_banquet = (tr == 'banquet')
         salle_status = "confirme" if is_banquet else "probable"
         events_by_date.setdefault(r.date, []).append({
             "type": "salle", "obj": r,
@@ -400,7 +400,7 @@ def planning(request):
             date__gte=premier_jour, date__lte=dernier_jour,
             statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(type_reunion="banquet")
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -539,7 +539,7 @@ def etat_des_lieux(request):
             date__lte=fin_annee,
             statut__in=["attente", "validee"],
         )
-        .filter(Q(salle__type_salle="agapes") | Q(type_reunion="banquet"))
+        .filter(type_reunion="banquet")
         .select_related("loge", "salle")
         .order_by("date", "heure_debut")
     )
@@ -584,21 +584,137 @@ def guide_traiteur(request):
 
 
 @traiteur_required
+def calendrier_annuel(request):
+    """Calendrier annuel A3 — grille mois × temple, une ligne par jour 1-31."""
+    import calendar as cal_module
+    from collections import defaultdict
+    from temple_project.apps.reservations.models import Temple
+
+    today = date.today()
+
+    # Saison : septembre → juin
+    annee_param = request.GET.get('annee', '')
+    if annee_param.isdigit():
+        debut = int(annee_param)
+    else:
+        debut = today.year if today.month >= 9 else today.year - 1
+    fin = debut + 1
+
+    MOIS_SAISON = [
+        (debut, 9), (debut, 10), (debut, 11), (debut, 12),
+        (fin,   1), (fin,   2),  (fin,   3),  (fin,   4), (fin, 5), (fin, 6),
+    ]
+    MOIS_NOM = {
+        1: 'Janvier', 2: 'Février', 3: 'Mars', 4: 'Avril',
+        5: 'Mai', 6: 'Juin', 9: 'Septembre', 10: 'Octobre',
+        11: 'Novembre', 12: 'Décembre',
+    }
+    JOURS_FR = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di']
+    FERIES_FR = {  # fériés fixes courants
+        (1, 1), (5, 1), (5, 8), (7, 14), (8, 15), (11, 1), (11, 11), (12, 25),
+    }
+
+    # Temples
+    temples = list(Temple.objects.all().order_by('nom'))
+
+    # Date range
+    d_debut = date(debut, 9, 1)
+    d_fin   = date(fin,   6, 30)
+
+    # Index reservations : date → temple_pk → [abréviations]
+    resa_idx = defaultdict(lambda: defaultdict(list))
+    for r in (
+        Reservation.objects.filter(statut='validee', date__gte=d_debut, date__lte=d_fin)
+        .select_related('loge', 'temple')
+        .order_by('date', 'heure_debut')
+    ):
+        if not r.temple:
+            continue
+        abbr = (r.loge.abreviation or r.loge.nom[:4]) if r.loge else '?'
+        resa_idx[r.date][r.temple.pk].append(abbr)
+
+    # Index banquets (ReservationSalle) : date → [abréviations]
+    bq_idx = defaultdict(list)
+    for s in (
+        ReservationSalle.objects.filter(statut='validee', date__gte=d_debut, date__lte=d_fin)
+        .select_related('loge')
+        .order_by('date')
+    ):
+        abbr = (s.loge.abreviation or s.loge.nom[:4]) if s.loge else '?'
+        bq_idx[s.date].append(abbr)
+
+    # Règles récurrentes → noms courts (pour enrichir les cases vides)
+    from temple_project.apps.reservations.models import RegleRecurrence
+    regles = list(
+        RegleRecurrence.objects.filter(actif=True)
+        .select_related('loge', 'temple')
+        .prefetch_related('mois_actifs_field') if hasattr(RegleRecurrence, 'mois_actifs_field')
+        else RegleRecurrence.objects.filter(actif=True).select_related('loge', 'temple')
+    )
+
+    # Construire grille : 31 lignes × nb_mois colonnes
+    rows = []
+    for jour in range(1, 32):
+        cells = []
+        for annee, mois in MOIS_SAISON:
+            _, nb_j = cal_module.monthrange(annee, mois)
+            if jour > nb_j:
+                cells.append(None)
+            else:
+                d = date(annee, mois, jour)
+                is_we = d.weekday() >= 5
+                is_ferie = (mois, jour) in FERIES_FR
+                # valeurs par temple (liste ordonnée)
+                tv = [' '.join(resa_idx[d].get(t.pk, [])) for t in temples]
+                bq = ' '.join(bq_idx.get(d, []))
+                cells.append({
+                    'j':   JOURS_FR[d.weekday()],
+                    'we':  is_we,
+                    'fer': is_ferie,
+                    'nt':  d == today,
+                    'tv':  tv,     # ordered list matching temples
+                    'bq':  bq,     # banquets ce jour
+                })
+        rows.append({'n': jour, 'c': cells})
+
+    # Entêtes mois (nom + colspan = 1 jour + nb_temples)
+    mois_headers = [
+        {'nom': MOIS_NOM[m], 'annee': a, 'cols': 1 + len(temples)}
+        for a, m in MOIS_SAISON
+    ]
+
+    # Légende : loges avec réservations validées cette saison
+    loges_legende = (
+        Loge.objects.filter(
+            reservations__date__gte=d_debut,
+            reservations__date__lte=d_fin,
+            reservations__statut='validee',
+        )
+        .distinct()
+        .order_by('abreviation', 'nom')
+    )
+
+    return render(request, 'traiteur/calendrier_annuel.html', {
+        'rows':          rows,
+        'temples':       temples,
+        'mois_headers':  mois_headers,
+        'loges_legende': loges_legende,
+        'debut':         debut,
+        'fin':           fin,
+        'prec':          debut - 1,
+        'suiv':          debut + 1,
+        'today':         today,
+    })
+
+
+@traiteur_required
 def contact_traiteur(request):
-    """Page contacts : coordonnées admin + loges avec tenues à venir."""
+    """Page contacts : formulaires d'envoi de message (loges + admin)."""
     from django.contrib.auth import get_user_model
     User = get_user_model()
 
     today   = date.today()
     horizon = today + timedelta(days=60)
-
-    # Contacts admin (staff)
-    admins = list(
-        User.objects.filter(is_staff=True)
-        .exclude(email="")
-        .values("first_name", "last_name", "email")
-        .order_by("first_name")
-    )
 
     # Loges avec tenues de soir ou agapes dans les 60 prochains jours
     tenues = (
@@ -620,21 +736,65 @@ def contact_traiteur(request):
         loge = t.loge
         if loge.pk not in loges_vues:
             loges_vues[loge.pk] = {
+                "pk":          loge.pk,
                 "nom":         loge.nom,
-                "contact_nom": loge.nom_contact or "",
-                "email":       loge.email or "",
-                "telephone":   loge.telephone or "",
                 "prochaine":   t.date,
-                "agapes":      _agapes_status(t),
+                "has_email":   bool(loge.email),
             }
 
-    contacts_loges = sorted(loges_vues.values(), key=lambda x: x["prochaine"])
+    loges_choices = sorted(loges_vues.values(), key=lambda x: x["prochaine"])
+
+    # Nombre d'admins disponibles
+    nb_admins = User.objects.filter(is_staff=True).exclude(email="").count()
+
+    if request.method == "POST":
+        cible = request.POST.get("cible")
+
+        if cible == "loge":
+            loge_pk = request.POST.get("loge_pk")
+            sujet   = request.POST.get("sujet", "").strip()
+            msg     = request.POST.get("message", "").strip()
+            if not msg:
+                messages.error(request, "Le message ne peut pas être vide.")
+            else:
+                try:
+                    loge = Loge.objects.get(pk=loge_pk)
+                    if loge.email:
+                        send_mail_kellermann(
+                            subject=f"[Kellermann Traiteur] {sujet or 'Message du traiteur'}",
+                            message=(
+                                f"Message transmis par le traiteur des Temples Kellermann :\n\n"
+                                f"{msg}\n\n"
+                                f"(Ce message a été envoyé via l'espace traiteur du site de réservation.)"
+                            ),
+                            recipient_list=[loge.email],
+                        )
+                        messages.success(request, f"Message envoyé à {loge.nom}.")
+                    else:
+                        messages.error(request, f"Aucun e-mail enregistré pour {loge.nom}.")
+                except Loge.DoesNotExist:
+                    messages.error(request, "Loge introuvable.")
+
+        elif cible == "admin":
+            sujet = request.POST.get("sujet", "").strip()
+            msg   = request.POST.get("message", "").strip()
+            if not msg:
+                messages.error(request, "Le message ne peut pas être vide.")
+            else:
+                email_tr = get_email_traiteur() or "traiteur@kellermann.local"
+                MessageContact.objects.create(
+                    nom="Traiteur",
+                    email=email_tr,
+                    sujet=sujet or "Message traiteur",
+                    message=msg,
+                )
+                messages.success(request, "Message envoyé à l'administrateur.")
+
+        return redirect("traiteur:contact")
 
     return render(request, "traiteur/contact.html", {
-        "admins":         admins,
-        "contacts_loges": contacts_loges,
-        "horizon":        horizon,
-        "today":          today,
+        "loges_choices": loges_choices,
+        "nb_admins":     nb_admins,
     })
 
 
@@ -706,7 +866,7 @@ def export_agapes_excel(request):
     if type_export in ('tout', 'banquet', 'soir'):
         for b in (
             ReservationSalle.objects.filter(
-                salle__type_salle='agapes', statut='validee', date__gte=debut, date__lte=fin
+                type_reunion='banquet', statut='validee', date__gte=debut, date__lte=fin
             )
             .select_related('loge', 'salle')
             .order_by('date')

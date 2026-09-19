@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Valider demande récurrence temple{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="mb-4">
+      <h1 class="h3 mb-1">🏛 Demande de récurrence temple</h1>
+      <p class="text-muted small">Soumise par le portail de la loge — à valider ou refuser.</p>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+      <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">
+        Détail de la demande
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Loge</dt>
+          <dd class="col-sm-8">{{ demande.loge }}</dd>
+
+          <dt class="col-sm-4">Temple demandé</dt>
+          <dd class="col-sm-8"><span class="badge bg-secondary">{{ demande.temple }}</span></dd>
+
+          <dt class="col-sm-4">Fréquence</dt>
+          <dd class="col-sm-8">{{ demande.get_numero_semaine_display }} {{ demande.get_jour_semaine_display }}</dd>
+
+          <dt class="col-sm-4">Horaires</dt>
+          <dd class="col-sm-8">{{ demande.heure_debut|time:"H\hi" }} – {{ demande.heure_fin|time:"H\hi" }}</dd>
+
+          <dt class="col-sm-4">Mois actifs</dt>
+          <dd class="col-sm-8">
+            {% if demande.mois_actifs %}
+              {{ demande.mois_actifs|join:", " }}
+            {% else %}
+              Tous (hors juil.–août)
+            {% endif %}
+          </dd>
+
+          <dt class="col-sm-4">Contact</dt>
+          <dd class="col-sm-8">{{ demande.nom_demandeur }} — {{ demande.email_demandeur }}</dd>
+
+          <dt class="col-sm-4">Commentaire loge</dt>
+          <dd class="col-sm-8">{{ demande.commentaire|default:"—" }}</dd>
+
+          <dt class="col-sm-4">Soumise le</dt>
+          <dd class="col-sm-8">{{ demande.date_demande|date:"d/m/Y à H\hi" }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">
+          Décision
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Commentaire pour la loge <span class="text-muted fw-normal">(optionnel)</span></label>
+            <textarea name="commentaire_admin" class="form-control" rows="3"
+              placeholder="Ex : Demande validée. La règle sera active dès septembre…"></textarea>
+          </div>
+          <div class="alert alert-info small mb-3">
+            <strong>ℹ Validation :</strong> créera automatiquement une règle de récurrence temple active.
+            Elle sera prise en compte lors de la prochaine génération des réservations.
+          </div>
+          <div class="d-flex gap-3">
+            <button type="submit" name="action" value="valider"
+                    class="btn btn-success px-4 fw-semibold">
+              ✅ Valider — créer la règle
+            </button>
+            <button type="submit" name="action" value="refuser"
+                    class="btn btn-danger px-4 fw-semibold">
+              ❌ Refuser
+            </button>
+            <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary">← Retour</a>
+          </div>
+        </div>
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,6 +1,6 @@
 from django.shortcuts import redirect
 
-URLS_PUBLIQUES = ["/auth/", "/static/", "/media/", "/django-admin/"]
+URLS_PUBLIQUES = ["/auth/", "/static/", "/media/", "/django-admin/", "/ics/"]
 
 
 class AuthMiddleware:

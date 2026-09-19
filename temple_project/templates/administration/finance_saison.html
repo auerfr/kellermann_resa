@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Finance — Saison {{ saison }}-{{ saison|add:1 }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">💶 Cotisations annuelles</h1>
+    <p class="text-muted small mb-0">Saison {{ saison }}-{{ saison|add:1 }}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    {% if params.module_finance_actif %}
+    <form method="post" action="{% url 'administration:finance_generer' %}">
+      {% csrf_token %}
+      <input type="hidden" name="saison" value="{{ saison }}">
+      <button class="btn btn-success btn-sm"
+              onclick="return confirm('Générer les brouillons pour la saison {{ saison }}-{{ saison|add:1 }} ?\n\nBase : effectif × tarif voté en AG + tenues exceptionnelles.\nLes factures déjà émises ou payées ne seront pas modifiées.')">
+        ⚡ Générer les brouillons
+      </button>
+    </form>
+    {% endif %}
+    <a href="{% url 'administration:finance_export' %}?saison={{ saison }}" class="btn btn-outline-success btn-sm">📥 Export Excel</a>
+    <a href="{% url 'administration:facturation' %}" class="btn btn-outline-secondary btn-sm">📋 Récap tenues exceptionnelles</a>
+    <a href="{% url 'administration:budget_simulation' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">📊 Simulation budgétaire</a>
+    <a href="{% url 'administration:occupation' %}" class="btn btn-outline-secondary btn-sm">🏛 Occupation / capacité</a>
+  </div>
+</div>
+
+{% if messages %}{% for msg in messages %}
+<div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
+{% endfor %}{% endif %}
+
+{# ── Module inactif : bannière d'activation ── #}
+{% if not params.module_finance_actif %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #D97706!important;">
+  <div class="card-body d-flex align-items-center gap-3 flex-wrap py-3">
+    <div style="font-size:2rem;">🔒</div>
+    <div class="flex-grow-1">
+      <div class="fw-bold" style="color:#0F2137;">Module Finance désactivé</div>
+      <div class="text-muted small">
+        Ce module génère les factures annuelles par loge (cotisations + tenues exceptionnelles).
+        Il doit être activé après validation des tarifs en assemblée générale.
+      </div>
+    </div>
+    <a href="{% url 'administration:parametres' %}#module_finance_actif" class="btn btn-primary btn-sm">
+      ⚙️ Activer dans les Paramètres
+    </a>
+  </div>
+</div>
+{% endif %}
+
+{# ── Sélecteur de saison ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-2 px-3 d-flex align-items-center gap-3 flex-wrap">
+    <span class="text-muted small fw-semibold">Saison :</span>
+    {% for s in saisons_dispo %}
+    <a href="?saison={{ s }}"
+       class="btn btn-sm {% if s == saison %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+      {{ s }}-{{ s|add:1 }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if params.module_finance_actif %}
+
+{# ── KPI ── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Brouillons</div>
+        <div class="fw-bold" style="font-size:1.5rem;color:#6B7280;">{{ nb_brouillon }}</div>
+        {% if total_brouillon %}
+        <div class="text-muted small mt-1">≈ {{ total_brouillon|floatformat:0 }} € attendus</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Émises</div>
+        <div class="fw-bold" style="font-size:1.5rem;color:#D97706;">{{ nb_emises }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Payées</div>
+        <div class="fw-bold" style="font-size:1.5rem;color:#059669;">{{ nb_payees }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small fw-semibold mb-1" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Encaissé</div>
+        <div class="fw-bold" style="font-size:1.5rem;color:#0F2137;">{{ total_paye|floatformat:0 }} €</div>
+        <div class="text-muted small">sur {{ total_emis|floatformat:0 }} € émis</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Tableau des factures ── #}
+<div class="card border-0 shadow-sm">
+  <div class="card-header temple-header">Factures — Saison {{ saison }}-{{ saison|add:1 }}</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th class="ps-3">Loge</th>
+          <th>Type</th>
+          <th class="text-center">Statut</th>
+          <th class="text-center">N° facture</th>
+          <th class="text-end">Total</th>
+          <th class="text-end pe-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in factures %}
+        <tr>
+          <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ f.loge.nom }}</td>
+          <td class="text-muted small">
+            {% if f.loge.type_loge == 'loge' %}Loge bleue{% else %}Haut grade{% endif %}
+          </td>
+          <td class="text-center">
+            {% if f.statut == 'brouillon' %}
+              <span class="badge bg-secondary">Brouillon</span>
+            {% elif f.statut == 'emise' %}
+              <span class="badge" style="background:#FEF3C7;color:#B45309;">Émise</span>
+            {% elif f.statut == 'payee' %}
+              <span class="badge" style="background:#D1FAE5;color:#065F46;">Payée</span>
+            {% elif f.statut == 'annulee' %}
+              <span class="badge bg-danger">Annulée</span>
+            {% endif %}
+          </td>
+          <td class="text-center text-muted small">{{ f.numero|default:"—" }}</td>
+          <td class="text-end fw-semibold">{{ f.total_ht|floatformat:2 }} €</td>
+          <td class="text-end pe-3">
+            <a href="{% url 'administration:finance_facture_detail' f.pk %}"
+               class="btn btn-sm btn-outline-primary" style="padding:2px 10px;font-size:11px;">
+              Ouvrir →
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">
+          Aucune facture pour cette saison.
+          Cliquez sur <strong>Générer les brouillons</strong> pour créer les factures (effectif × tarif AG + exceptionnelles).
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+{# ── Module inactif : aperçu des tarifs en vigueur ── #}
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-header temple-header">Tarifs en vigueur</div>
+  <div class="card-body">
+    <div class="row g-3 text-center">
+      <div class="col-6 col-md-3">
+        <div class="text-muted small text-uppercase" style="font-size:11px;">Membre — Loge bleue</div>
+        <div class="fw-bold" style="font-size:1.2rem;color:#0F2137;">{{ params.tarif_membre_loge|floatformat:0 }} €</div>
+        <div class="text-muted" style="font-size:10px;">/ membre / an</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-muted small text-uppercase" style="font-size:11px;">Membre — Haut grade</div>
+        <div class="fw-bold" style="font-size:1.2rem;color:#0F2137;">{{ params.tarif_membre_hg|floatformat:0 }} €</div>
+        <div class="text-muted" style="font-size:10px;">/ membre / an</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-muted small text-uppercase" style="font-size:11px;">Exceptionnel sans agapes</div>
+        <div class="fw-bold" style="font-size:1.2rem;color:#0F2137;">{{ params.tarif_exc_sans_agapes|floatformat:0 }} €</div>
+        <div class="text-muted" style="font-size:10px;">/ tenue</div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="text-muted small text-uppercase" style="font-size:11px;">Exceptionnel avec agapes</div>
+        <div class="fw-bold" style="font-size:1.2rem;color:#0F2137;">{{ params.tarif_exc_avec_agapes|floatformat:0 }} €</div>
+        <div class="text-muted" style="font-size:10px;">/ tenue</div>
+      </div>
+    </div>
+    <div class="text-center mt-3">
+      <a href="{% url 'administration:facturation' %}" class="btn btn-outline-primary btn-sm">
+        ⚙️ Modifier les tarifs →
+      </a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

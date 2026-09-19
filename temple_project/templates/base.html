@@ -7,6 +7,7 @@
     <title>{% block title %}Kellermann Réservations{% endblock %}</title>
     <!-- Favicon + PWA -->
     {% include "_head_meta.html" %}
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/css/select2.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
@@ -29,8 +30,8 @@
 
         /* ── Base ── */
         body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            background: #F8FAFC;
+            font-family: 'Manrope', 'Segoe UI', Arial, sans-serif;
+            background: #EBF1FA;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
@@ -46,8 +47,9 @@
         }
         .navbar-brand {
             color: var(--temple-gold) !important;
-            font-weight: 700;
-            font-size: 1.1rem;
+            font-weight: 800;
+            font-size: 1.15rem;
+            letter-spacing: -.01em;
         }
         .nav-link {
             color: var(--temple-gold) !important;
@@ -191,10 +193,10 @@
         :root {
             --temple-gold-light:   #F5D98A;
             --temple-gold-pale:    #FEFCE8;
-            --temple-surface:      #F8FAFC;
-            --temple-surface-2:    #F1F5F9;
-            --temple-border:       #E2E8F0;
-            --temple-border-light: #F1F5F9;
+            --temple-surface:      #EBF1FA;
+            --temple-surface-2:    #E0EAF8;
+            --temple-border:       #CDD8E8;
+            --temple-border-light: #DDE7F4;
             --temple-text:         #1E293B;
             --temple-text-sub:     #64748B;
             --temple-text-muted:   #94A3B8;
@@ -214,7 +216,7 @@
             --bs-border-radius:    8px;
             --bs-border-radius-sm: 5px;
             --bs-border-radius-lg: 12px;
-            --bs-border-color:     #E2E8F0;
+            --bs-border-color:     #CDD8E8;
             --bs-body-color:       #1E293B;
             --bs-secondary-color:  #64748B;
             --bs-link-color:       #0F2137;
@@ -224,16 +226,16 @@
         /* ── Typographie ──────────────────────────────────────────────────── */
         h1, h2, h3, h4, h5, h6 {
             color: var(--temple-text);
-            font-weight: 600;
-            letter-spacing: -.01em;
+            font-weight: 700;
+            letter-spacing: -.02em;
         }
         .text-muted { color: var(--temple-text-sub) !important; }
         small, .small { color: var(--temple-text-sub); }
 
         /* ── Boutons ──────────────────────────────────────────────────────── */
         .btn {
-            border-radius: var(--radius-sm);
-            font-weight: 500;
+            border-radius: var(--radius-md);
+            font-weight: 600;
             font-size: .875rem;
             transition: background-color .15s, border-color .15s,
                         box-shadow .15s, transform .1s;
@@ -302,7 +304,7 @@
             border-bottom: 1px solid var(--temple-border);
         }
         .table-hover > tbody > tr:hover > * {
-            background-color: #F0F9FF;
+            background-color: #E8F0FA;
             --bs-table-accent-bg: transparent;
         }
 
@@ -335,11 +337,11 @@
 
         /* ── Badges ───────────────────────────────────────────────────────── */
         .badge {
-            border-radius: var(--radius-xs);
+            border-radius: 999px;
             font-weight:   600;
             font-size:     .72rem;
             letter-spacing: .02em;
-            padding:       .28em .6em;
+            padding:       .28em .65em;
         }
         .badge-soft-success { background: #DCFCE7; color: #166534; }
         .badge-soft-warning { background: #FEF9C3; color: #92400E; }
@@ -440,10 +442,16 @@
                 <li class="nav-item">
                     <a class="nav-link" href="/traiteur/bloquer/">🔒 Bloquer</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'faq_traiteur' %}">❓ Aide</a>
+                </li>
                 {% elif visiteur_connecte or user.is_staff %}
                 {# ── Menu membre / admin ── #}
                 <li class="nav-item">
                     <a class="nav-link" href="/calendrier/">📅 Calendrier</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'calendrier:annuel' %}">🗓 Vue annuelle</a>
                 </li>
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
@@ -463,6 +471,9 @@
                 <li class="nav-item">
                     <a class="nav-link" href="/loges/">🏛 Loges</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'faq_membres' %}">❓ Aide</a>
+                </li>
                 {% endif %}
                 <li class="nav-item">
                     {% if traiteur_connecte %}
@@ -480,14 +491,16 @@
                         <li><h6 class="dropdown-header">Pilotage</h6></li>
                         <li><a class="dropdown-item" href="{% url 'administration:accueil' %}">🏠 Accueil (pilotage)</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:recherche_globale' %}">🔎 Recherche</a></li>
-                        <li><a class="dropdown-item d-flex align-items-center justify-content-between" href="{% url 'administration:messagerie' %}">
+                        <li><a class="dropdown-item" href="{% url 'administration:messagerie' %}">
                           <span>📨 Messagerie</span>
                           {% if nb_messages_nouveaux %}<span class="badge rounded-pill" style="background:#2563EB;">{{ nb_messages_nouveaux }}</span>{% endif %}
                         </a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:faq_liste' %}">❓ Gestion FAQ</a></li>
                         <li><a class="dropdown-item" href="/admin/">📊 Tableau de bord</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><h6 class="dropdown-header">Loges &amp; contacts</h6></li>
                         <li><a class="dropdown-item" href="{% url 'administration:annuaire' %}">📇 Annuaire des loges</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:activite_loges' %}">📊 Activité des loges</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:relance_contacts' %}">📣 Relance des contacts</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:loges_saison' %}">🔄 Suivi loges / saison</a></li>
                         <li><a class="dropdown-item" href="{% url 'administration:fusion_loges' %}">🔗 Fusionner des loges</a></li>
@@ -505,7 +518,10 @@
                         <li><a class="dropdown-item" href="{% url 'administration:annonces_liste' %}">📢 Annonces / Pop-up</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><h6 class="dropdown-header">Finances &amp; statistiques</h6></li>
-                        <li><a class="dropdown-item" href="{% url 'administration:facturation' %}">💶 Facturation</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:finance_saison' %}">💶 Cotisations annuelles</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:facturation' %}">📋 Récap tenues exceptionnelles</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:budget_simulation' %}">📊 Simulation budgétaire</a></li>
+                        <li><a class="dropdown-item" href="{% url 'administration:ag_decisions_liste' %}">⚖ Décisions d'AG</a></li>
                         <li><a class="dropdown-item" href="{% url 'exports:reporting' %}">📈 Statistiques &amp; reporting</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><h6 class="dropdown-header">Données &amp; système</h6></li>

@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}Calendrier {{ debut }}/{{ fin }} — Temples Kellermann{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ══ ÉCRAN ══════════════════════════════════════════════════════ */
+.cal-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.cal-tbl {
+  border-collapse: collapse;
+  font-size: 8.5px;
+  font-family: Arial, Helvetica, sans-serif;
+  white-space: nowrap;
+  min-width: max-content;
+}
+.cal-tbl th, .cal-tbl td {
+  border: 0.5px solid #94A3B8;
+  padding: 1px 3px;
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+.th-mois {
+  background: #0F2137;
+  color: #fff;
+  font-weight: 700;
+  font-size: 7.5px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 4px;
+}
+.th-sub {
+  background: #1E3A8A;
+  color: #E0E7FF;
+  font-weight: 600;
+  font-size: 7px;
+  padding: 1px 3px;
+}
+
+.td-num {
+  background: #F1F5F9;
+  font-weight: 700;
+  font-size: 9px;
+  min-width: 14px;
+  color: #0F2137;
+}
+.td-j  { color: #475569; font-size: 7px; min-width: 14px; background: #F8FAFC; }
+.td-t  { min-width: 38px; max-width: 72px; font-size: 7.5px; color: #0F2137; }
+.td-sep { width: 3px; background: #CBD5E1; border-color: #94A3B8; padding: 0; }
+
+/* ── Code couleur (classes sur le même élément → pas d'espace) ── */
+.td-j.we, .td-t.we    { background: #FEF9C3 !important; }
+.td-j.ferie, .td-t.ferie { background: #FEE2E2 !important; }
+.td-j.today            { background: #DBEAFE !important; color: #1E3A8A; font-weight: 700; }
+
+/* Banquet d'ordre */
+.td-j.bq               { background: #FEF3C7 !important; }
+.bq-mark               { font-size: 6px; line-height: 1; display: block; color: #92400E; font-style: italic; }
+.bq-bg                 { background: #FFFBEB !important; }
+.td-t.bq-bg.we, .td-j.bq.we { background: #FDE68A !important; } /* overlap weekend + banquet */
+
+.td-void  { background: #E2E8F0; border-color: #CBD5E1; }
+.row-5 .td-num { border-top: 1.5px solid #475569; }
+
+/* ── Légende écran ── */
+.legende-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 12px; font-size: 8px; margin-top: 8px; }
+.legende-item { display: flex; gap: 5px; white-space: nowrap; overflow: hidden; }
+.legende-abbr { font-weight: 700; min-width: 30px; color: #0F2137; }
+.legende-nom  { color: #475569; overflow: hidden; text-overflow: ellipsis; }
+
+/* ══ IMPRESSION A3 PAYSAGE ══════════════════════════════════════ */
+@media print {
+  @page { size: A3 landscape; margin: 5mm 7mm; }
+
+  /* Masquer tout ce qui ne fait pas partie de l'impression */
+  .no-print, nav, .navbar, footer, .breadcrumb,
+  .btn, .alert { display: none !important; }
+
+  /* Conteneur principal : flex vertical remplissant la page */
+  #print-page {
+    display: flex;
+    flex-direction: column;
+    width:  100%;
+    height: 100%;   /* = hauteur de la zone utile A3 landscape */
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Titre */
+  #print-title {
+    font-size: 8pt;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: .07em;
+    margin-bottom: 2mm;
+    font-family: Arial, Helvetica, sans-serif;
+    flex-shrink: 0;
+  }
+
+  /* Corps : grille + légende côte à côte */
+  #print-body {
+    display: flex;
+    flex: 1;
+    gap: 5mm;
+    align-items: stretch;
+    min-height: 0;
+  }
+
+  /* Tableau */
+  .cal-wrap {
+    flex: 1;
+    overflow: visible;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cal-tbl {
+    width: 100%;
+    height: 100%;          /* ← remplit toute la hauteur disponible */
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 6pt;
+    font-family: Arial, Helvetica, sans-serif;
+    white-space: normal;
+  }
+
+  .cal-tbl th, .cal-tbl td {
+    border: 0.4pt solid #888;
+    padding: 0 1.5pt;
+    vertical-align: middle;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  /* Forcer une hauteur minimale mais laisser le navigateur équilibrer */
+  .cal-tbl tbody tr { height: calc((100% - 12pt) / 31); }
+
+  /* Couleurs à l'impression */
+  .th-mois, .th-sub, .td-num, .td-j,
+  .td-j.we, .td-t.we,
+  .td-j.ferie, .td-t.ferie,
+  .td-j.today, .td-void, .td-sep {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .th-mois { font-size: 6.5pt; padding: 1pt 2pt; }
+  .th-sub  { font-size: 5.5pt; padding: 0 1pt; }
+  .td-num  { font-size: 7pt; font-weight: 700; }
+  .td-j    { font-size: 5.5pt; }
+  .td-t    { font-size: 6pt; }
+  .td-sep  { width: 1.5mm; }
+
+  /* Légende à droite */
+  .legende-side {
+    width: 58mm;
+    flex-shrink: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 5.5pt;
+    padding-top: 10pt;
+    display: flex;
+    flex-direction: column;
+  }
+  .legende-side-title {
+    font-size: 6pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #1E3A8A;
+    border-bottom: 0.5pt solid #CBD5E1;
+    margin-bottom: 2pt;
+    padding-bottom: 1pt;
+    flex-shrink: 0;
+  }
+  .legende-items {
+    columns: 2;
+    column-gap: 4mm;
+    flex: 1;
+  }
+  .legende-item {
+    display: flex;
+    gap: 3pt;
+    margin-bottom: 1.5pt;
+    break-inside: avoid;
+    white-space: normal;
+  }
+  .legende-abbr { font-weight: 700; min-width: 24pt; color: #0F2137; }
+  .legende-nom  { color: #475569; font-size: 5pt; }
+
+  /* Pied de page légende */
+  .print-footer {
+    font-size: 5pt;
+    color: #888;
+    margin-top: 3mm;
+    border-top: 0.5pt solid #E2E8F0;
+    padding-top: 2pt;
+    flex-shrink: 0;
+  }
+
+  /* Masquer légende écran, afficher légende print */
+  .legende-screen { display: none !important; }
+  .legende-side   { display: flex !important; }
+}
+
+/* Masquer légende print à l'écran */
+.legende-side { display: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Boutons de navigation (masqués à l'impression) -->
+<div class="no-print d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div>
+    <h1 class="h4 mb-0">📅 Calendrier {{ debut }}/{{ fin }}</h1>
+    <p class="text-muted small mb-0">Vue annuelle des tenues · Impression A3 paysage</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="?annee={{ prec }}" class="btn btn-sm btn-outline-secondary">‹ {{ prec }}/{{ debut }}</a>
+    <button onclick="window.print()" class="btn btn-sm btn-primary">🖨 Imprimer A3</button>
+    <a href="?annee={{ suiv }}" class="btn btn-sm btn-outline-secondary">{{ fin }}/{{ suiv|add:1 }} ›</a>
+    <a href="{% url 'calendrier:principal' %}" class="btn btn-sm btn-outline-secondary">← Calendrier</a>
+  </div>
+</div>
+<!-- Légende couleurs (écran seulement) -->
+<div class="no-print d-flex gap-3 mb-2 flex-wrap" style="font-size:.78rem;">
+  <span style="background:#FEF9C3;padding:1px 8px;border-radius:4px;border:1px solid #FDE68A;">🟡 Weekend</span>
+  <span style="background:#FEE2E2;padding:1px 8px;border-radius:4px;border:1px solid #FCA5A5;">🔴 Jour férié</span>
+  <span style="background:#DBEAFE;padding:1px 8px;border-radius:4px;border:1px solid #93C5FD;">■ Aujourd'hui</span>
+  <span style="background:#FEF3C7;padding:1px 8px;border-radius:4px;border:1px solid #FCD34D;">🥂 Banquet d'ordre</span>
+</div>
+
+<!-- ══ ZONE D'IMPRESSION ══ -->
+<div id="print-page">
+
+  <div id="print-title">TEMPLES KELLERMANN — CALENDRIER DES TENUES {{ debut }}/{{ fin }}</div>
+
+  <div id="print-body">
+
+    <!-- Grille calendrier -->
+    <div class="cal-wrap">
+    <table class="cal-tbl">
+      <thead>
+        <!-- Ligne 1 : noms des mois -->
+        <tr>
+          <th class="th-sub" style="width:14px;" rowspan="2">J.</th>
+          {% for mh in mois_headers %}
+          <th class="th-mois" colspan="{{ mh.cols }}">{{ mh.nom }}&nbsp;{{ mh.annee }}</th>
+          <th class="td-sep" rowspan="2"></th>
+          {% endfor %}
+        </tr>
+        <!-- Ligne 2 : J + temples -->
+        <tr>
+          {% for mh in mois_headers %}
+          <th class="th-sub">J</th>
+          {% for t in temples %}
+          <th class="th-sub" title="{{ t.nom }}">{{ t.nom|truncatechars:5 }}</th>
+          {% endfor %}
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if row.n|divisibleby:5 %}row-5{% endif %}">
+          <td class="td-num">{{ row.n }}</td>
+          {% for cell in row.c %}
+            {% if cell %}
+              <td class="td-j{% if cell.we %} we{% endif %}{% if cell.fer %} ferie{% endif %}{% if cell.nt %} today{% endif %}{% if cell.bq %} bq{% endif %}">{{ cell.j }}{% if cell.bq %}<span class="bq-mark">🥂</span>{% endif %}</td>
+              {% for val in cell.tv %}
+              <td class="td-t{% if cell.we %} we{% endif %}{% if cell.fer %} ferie{% endif %}{% if cell.bq %} bq-bg{% endif %}">{{ val }}{% if cell.bq and forloop.first %}<span class="bq-mark">{{ cell.bq }}</span>{% endif %}</td>
+              {% endfor %}
+            {% else %}
+              <td class="td-void"></td>
+              {% for t in temples %}
+              <td class="td-void"></td>
+              {% endfor %}
+            {% endif %}
+            <td class="td-sep"></td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <!-- Légende (droite — visible seulement à l'impression) -->
+    <div class="legende-side">
+      <div class="legende-side-title">LOGES — ABRÉVIATIONS</div>
+      <div class="legende-items">
+        {% for loge in loges_legende %}
+        <div class="legende-item">
+          <span class="legende-abbr">{{ loge.abreviation|default:loge.nom|slice:":5" }}</span>
+          <span class="legende-nom">{{ loge.nom }}{% if loge.obedience %} · {{ loge.obedience }}{% endif %}</span>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="print-footer">
+        🟡 Weekend &nbsp;|&nbsp; 🔴 Férié &nbsp;|&nbsp; ■ Auj.<br>
+        Édité le {{ today|date:"d/m/Y" }} — kellermannadmin.eu.pythonanywhere.com
+      </div>
+    </div>
+
+  </div><!-- /#print-body -->
+</div><!-- /#print-page -->
+
+<!-- Légende écran (sous le calendrier) -->
+{% if loges_legende %}
+<div class="legende-screen mt-3" style="border-top:1.5px solid #CBD5E1;padding-top:8px;">
+  <div style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#475569;margin-bottom:4px;">
+    LOGES — Abréviations
+  </div>
+  <div class="legende-wrap">
+    {% for loge in loges_legende %}
+    <div class="legende-item">
+      <span class="legende-abbr">{{ loge.abreviation|default:loge.nom|slice:":5" }}</span>
+      <span class="legende-nom">{{ loge.nom }}{% if loge.obedience %} · {{ loge.obedience }}{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

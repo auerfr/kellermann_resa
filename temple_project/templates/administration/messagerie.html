@@ -5,8 +5,14 @@
 <div class="stx-wrap">
 
   <div class="mb-4">
-    <h1 class="mb-1" style="font-size:22px;font-weight:600;letter-spacing:-.01em;color:#0F2137;">Messagerie</h1>
-    <div style="font-size:13px;color:#64748B;">Messages reçus via le formulaire de contact du site.</div>
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <h1 class="mb-1" style="font-size:22px;font-weight:600;letter-spacing:-.01em;color:#0F2137;">Messagerie</h1>
+        <div style="font-size:13px;color:#64748B;">Messages reçus via le formulaire de contact du site.</div>
+      </div>
+      <a href="{% url 'administration:messagerie_nouveau' %}" class="btn btn-sm fw-semibold"
+         style="background:#0F2137;color:#C8A84B;border:none;padding:7px 16px;border-radius:9px;">✉️ Nouveau message</a>
+    </div>
   </div>
 
   <div class="d-flex gap-2 mb-3 flex-wrap">
@@ -24,7 +30,8 @@
         <div style="min-width:0;flex:1;">
           <div class="d-flex align-items-center gap-2">
             <span style="color:#0F2137;{% if m.statut == 'nouveau' %}font-weight:600;{% endif %}">{{ m.nom }}</span>
-            {% if m.repondu %}<span class="stx-badge-ok" style="font-size:11px;">Répondu</span>{% endif %}
+            {% if m.emis %}<span class="stx-pill" style="font-size:11px;color:#7C3AED;border-color:#7C3AED;">↗ Émis</span>
+            {% elif m.repondu %}<span class="stx-badge-ok" style="font-size:11px;">Répondu</span>{% endif %}
           </div>
           <div style="font-size:13px;color:#334155;{% if m.statut == 'nouveau' %}font-weight:500;{% endif %}overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
             {{ m.sujet|default:"(sans objet)" }} <span style="color:#94A3B8;">— {{ m.message|truncatechars:70 }}</span>

@@ -1,12 +1,17 @@
 {% extends "base.html" %}
+{% load i18n l10n %}
 {% block title %}Facturation{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <div>
-    <h1 class="h3 temple-title mb-1">💶 Facturation</h1>
-    <p class="text-muted mb-0">Récapitulatif des réservations exceptionnelles et congrès (validées) pour le trésorier.</p>
+    <h1 class="h3 temple-title mb-1">📋 Récap tenues exceptionnelles</h1>
+    <p class="text-muted mb-0">Réservations exceptionnelles et congrès validées — récapitulatif pour le trésorier.</p>
   </div>
-  <a href="/admin/" class="btn btn-sm btn-outline-secondary">← Tableau de bord</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'administration:finance_saison' %}" class="btn btn-sm btn-outline-secondary">💶 Cotisations annuelles</a>
+    <a href="{% url 'administration:budget_simulation' %}" class="btn btn-sm btn-outline-secondary">📊 Simulation budgétaire</a>
+    <a href="{% url 'administration:budget_config' %}" class="btn btn-sm btn-outline-secondary">⚙️ Budget infrastructure</a>
+  </div>
 </div>
 
 {% if not params.facturation_active %}
@@ -64,19 +69,19 @@
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label fw-semibold">Exceptionnelle sans agapes (€)</label>
-            <input type="number" step="0.01" min="0" name="tarif_exc_sans_agapes" class="form-control" value="{{ params.tarif_exc_sans_agapes }}">
+            <input type="number" step="0.01" min="0" name="tarif_exc_sans_agapes" class="form-control" value="{{ params.tarif_exc_sans_agapes|unlocalize }}">
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Exceptionnelle avec agapes (€)</label>
-            <input type="number" step="0.01" min="0" name="tarif_exc_avec_agapes" class="form-control" value="{{ params.tarif_exc_avec_agapes }}">
+            <input type="number" step="0.01" min="0" name="tarif_exc_avec_agapes" class="form-control" value="{{ params.tarif_exc_avec_agapes|unlocalize }}">
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Congrès, par jour (€)</label>
-            <input type="number" step="0.01" min="0" name="tarif_congres_jour" class="form-control" value="{{ params.tarif_congres_jour }}">
+            <input type="number" step="0.01" min="0" name="tarif_congres_jour" class="form-control" value="{{ params.tarif_congres_jour|unlocalize }}">
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Tenue funèbre (week-end / vacances) (€)</label>
-            <input type="number" step="0.01" min="0" name="tarif_funebre" class="form-control" value="{{ params.tarif_funebre }}">
+            <input type="number" step="0.01" min="0" name="tarif_funebre" class="form-control" value="{{ params.tarif_funebre|unlocalize }}">
             <div class="form-text">Tarif spécifique des tenues funèbres ; à ajuster quand il sera décidé.</div>
           </div>
         </div>
@@ -88,22 +93,54 @@
           </div>
         </div>
         <hr>
-        <div class="small text-muted mb-2">Redevance par membre (récurrent — modèle à confirmer avec le trésorier, sert au potentiel financier) :</div>
+        <div class="small text-muted mb-2 fw-semibold">Redevances annuelles par membre (loges régulières) :</div>
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label fw-semibold">€ / membre — Loge bleue</label>
-            <input type="number" step="0.01" min="0" name="tarif_membre_loge" class="form-control" value="{{ params.tarif_membre_loge }}">
+            <input type="number" step="0.01" min="0" name="tarif_membre_loge" class="form-control" value="{{ params.tarif_membre_loge|unlocalize }}">
           </div>
           <div class="col-md-4">
-            <label class="form-label fw-semibold">€ / membre — Haut grade</label>
-            <input type="number" step="0.01" min="0" name="tarif_membre_hg" class="form-control" value="{{ params.tarif_membre_hg }}">
+            <label class="form-label fw-semibold">€ / membre — Haut grade (interne régulier)</label>
+            <input type="number" step="0.01" min="0" name="tarif_membre_hg" class="form-control" value="{{ params.tarif_membre_hg|unlocalize }}">
           </div>
         </div>
-        <div class="form-check mt-3">
-          <input type="checkbox" class="form-check-input" id="facturation_active" name="facturation_active" {% if params.facturation_active %}checked{% endif %}>
-          <label class="form-check-label" for="facturation_active">
-            <strong>Facturation active</strong> — décochez tant que le modèle n'est pas validé avec le trésorier (affiche un bandeau « provisoire »).
-          </label>
+        <hr>
+        <div class="small text-muted mb-2 fw-semibold">Tarifs à la tenue — occupants externes et occasionnels :</div>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Loge externe / occasionnelle (par tenue, €)</label>
+            <input type="number" step="0.01" min="0" name="tarif_loge_occasionnelle" class="form-control" value="{{ params.tarif_loge_occasionnelle|unlocalize }}">
+            <div class="form-text">Loge invitée, loge de passage, non membre de l'association.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Haut grade externe (par tenue, €)</label>
+            <input type="number" step="0.01" min="0" name="tarif_hg_externe" class="form-control" value="{{ params.tarif_hg_externe|unlocalize }}">
+            <div class="form-text">Atelier inter-obédientiel ou HG de passage.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">HG interne non régulier (par tenue, €)</label>
+            <input type="number" step="0.01" min="0" name="tarif_hg_interne_non_regulier" class="form-control" value="{{ params.tarif_hg_interne_non_regulier|unlocalize }}">
+            <div class="form-text">Atelier interne avec peu de tenues/an, sans règle récurrente.</div>
+          </div>
+        </div>
+        <hr>
+        <div class="row g-3 align-items-center">
+          <div class="col-auto">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="facturation_active" name="facturation_active" {% if params.facturation_active %}checked{% endif %}>
+              <label class="form-check-label" for="facturation_active">
+                <strong>Facturation exceptionnelle active</strong>
+              </label>
+            </div>
+          </div>
+          <div class="col-auto">
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" id="module_finance_actif" name="module_finance_actif" {% if params.module_finance_actif %}checked{% endif %}>
+              <label class="form-check-label" for="module_finance_actif">
+                <strong>Module Finance (facturation annuelle) actif</strong>
+              </label>
+            </div>
+          </div>
         </div>
         <button type="submit" class="btn btn-temple mt-3">💾 Enregistrer</button>
       </form>

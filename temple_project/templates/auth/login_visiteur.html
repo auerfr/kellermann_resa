@@ -75,5 +75,22 @@
         <div class="retour"><a href="{% url 'acces:lien_portail' %}">📩 Recevoir mon lien d'espace loge</a></div>
         <div class="retour" style="margin-top:.4rem;"><a href="{% url 'acces:bienvenue' %}">← Retour à l'accueil</a></div>
     </div>
+
+    {% if mini_faq %}
+    <div style="width:100%;max-width:420px;margin-top:1.5rem;">
+      <div style="font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.5);margin-bottom:.75rem;text-align:center;">Questions fréquentes</div>
+      {% for item in mini_faq %}
+      <details style="background:rgba(255,255,255,.07);border-radius:10px;margin-bottom:.5rem;overflow:hidden;">
+        <summary style="padding:.65rem 1rem;font-size:.82rem;font-weight:600;color:rgba(255,255,255,.9);cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;">
+          {{ item.question }}
+          <span style="font-size:.7rem;opacity:.6;flex-shrink:0;margin-left:.5rem;">▼</span>
+        </summary>
+        <div style="padding:.5rem 1rem .75rem;font-size:.8rem;color:rgba(255,255,255,.7);line-height:1.55;border-top:1px solid rgba(255,255,255,.1);">
+          {{ item.reponse }}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+    {% endif %}
 </body>
 </html>
