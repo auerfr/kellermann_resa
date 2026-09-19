@@ -240,16 +240,6 @@
             <td class="text-end" style="color:#059669;">−{{ sim.total_agapes|floatformat:0 }} €</td>
           </tr>
           {% endif %}
-          {% if sim.total_salle %}
-          <tr style="color:#059669;">
-            <td class="ps-3">
-              − Locations salles annexes
-              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Salles de réunion facturées à part</div>
-            </td>
-            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
-            <td class="text-end" style="color:#059669;">−{{ sim.total_salle|floatformat:0 }} €</td>
-          </tr>
-          {% endif %}
           {% if sim.recettes_occasionnels %}
           <tr style="color:#059669;">
             <td class="ps-3">
@@ -435,7 +425,7 @@
 </div>
 
 {# ── Comparaison des modèles économiques ── #}
-{% if sim.par_loge and tarif_hybride_membre %}
+{% if sim.par_loge and tarif_hybride_tenue %}
 <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #7C3AED!important;">
   <div class="card-body py-3 px-4">
     <div class="fw-bold mb-1" style="color:#0F2137;font-size:15px;">🔬 Comparaison des modèles de facturation</div>
@@ -466,7 +456,7 @@
             <span class="badge bg-secondary me-1">LB</span>
             {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an<br>
             <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
-            {% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an
+            {% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }}{% else %}—{% endif %} €/tenue
           </div>
           <div class="text-muted small mt-2">Équilibre exact selon l'usage simulé. HG presque doublé → transition difficile en une seule AG.</div>
           <div class="mt-2 fw-semibold" style="color:#059669;font-size:12px;">✓ Résultat : 0 € de déficit</div>
@@ -561,9 +551,10 @@
       </table>
     </div>
     <div class="text-muted mt-2" style="font-size:11px;">
-      Tarif d'équilibre = tarif_eq × effectif de la loge · Hybride = cotisation fixe/membre + tarif/tenue.
-      Écart = différence avec la cotisation actuelle. Rouge = paierait plus · Vert = paierait moins.
-      Calculs hors agapes, salle et loges occasionnelles (auto-financés).
+      LB — Tarif d'équilibre = tarif_eq × effectif · Hybride = fixe/membre + variable/tenue.
+      HG — Tarif d'équilibre = tarif_eq × nb_tenues · Hybride = variable/tenue uniquement (fixe couvert par cotisation LB).
+      Écart = différence vs cotisation actuelle. Rouge = paierait plus · Vert = paierait moins.
+      Calculs hors agapes et loges occasionnelles.
     </div>
   </div>
 </div>

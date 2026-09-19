@@ -5689,10 +5689,10 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
     # cotisations LB couvrent déjà les charges fixes du bâtiment.  La cotisation
     # HG ne couvre donc que les coûts VARIABLES de leurs tenues HG
     # (mutualise + marginal), pas à nouveau les frais de structure (fixe).
-    charges_lb  = sum(a['total_cout'] - a['total_agapes'] - a['total_salle']
+    charges_lb  = sum(a['total_cout'] - a['total_agapes']
                       for a in par_loge if a['type_loge'] == 'loge' and a['membre_association'])
-    # HG : seulement les coûts variables (mutualise + marginal), hors charges fixes
-    charges_hg  = sum(a['total_mutualise'] + a['total_marginal']
+    # HG : coûts variables (mutualise + marginal + salle), hors charges fixes du bâtiment
+    charges_hg  = sum(a['total_mutualise'] + a['total_marginal'] + a['total_salle']
                       for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
     # Charges fixes HG "absorbées" par la cotisation LB des mêmes membres
     hg_fixe_absorbe = sum(a['total_fixe']
@@ -5707,7 +5707,7 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         for r in resas
         if r.loge and not r.loge.membre_association
     )
-    total_auto_finance = total_agapes + total_salle + recettes_occasionnels
+    total_auto_finance = total_agapes + recettes_occasionnels
 
     # effectif_lb/hg = somme des effectifs des loges ADHÉRENTES uniquement
     # Les occupants occasionnels (membre_association=False) ne paient pas de cotisation annuelle
@@ -6346,8 +6346,8 @@ def budget_simulation(request):
             tarif_hybride_tenue = (sim['total_mutualise'] + sim['total_marginal']) / Decimal(str(nb_t))
 
         for l in sim['par_loge']:
-            # Usage pur (hors agapes + salle auto-financés)
-            l['cout_usage_pur'] = l['total_cout'] - l['total_agapes'] - l['total_salle']
+            # Usage pur (hors agapes auto-financées par tenue)
+            l['cout_usage_pur'] = l['total_cout'] - l['total_agapes']
             # Loges occasionnelles : pas de modèle cotisation/hybride
             if not l.get('membre_association'):
                 l['cotisation_actuelle'] = None
@@ -7494,22 +7494,31 @@ def finance_generer_brouillons(request):
         effectif  = loge.effectif_total or 0
         loge_reguliere = activite['nb_regulieres'] > 0
 
-        # ── Ligne principale : cotisation annuelle par membre ──────────────────
-        # Uniquement pour les loges ADHÉRENTES (membre_association) avec tenues régulières
-        if loge_reguliere and effectif > 0 and loge.membre_association:
-            tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
-            if tarif > 0:
-                type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
-                cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
+        # ── Ligne principale : cotisation annuelle ─────────────────────────────
+        # LB : par membre · HG : par tenue régulière (membres venant d'orients mixtes)
+        if loge_reguliere and loge.membre_association:
+            if type_loge == 'loge' and effectif > 0 and params.tarif_membre_loge > 0:
                 LigneFacture.objects.create(
-                    facture=facture, type_ligne=type_l,
-                    libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €)",
+                    facture=facture, type_ligne='cotisation_lb',
+                    libelle=f"Cotisation annuelle — loge bleue ({effectif} membre{_p(effectif)} × {params.tarif_membre_loge} €)",
                     quantite=D(str(effectif)), unite='membre',
-                    montant_unitaire=tarif,
-                    montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
+                    montant_unitaire=params.tarif_membre_loge,
+                    montant_total=(params.tarif_membre_loge * D(str(effectif))).quantize(D('0.01')),
                     ordre=ordre,
                 )
                 ordre += 1
+            elif type_loge == 'haut_grade' and params.tarif_membre_hg > 0:
+                nb_t_reg = activite['nb_regulieres']
+                if nb_t_reg > 0:
+                    LigneFacture.objects.create(
+                        facture=facture, type_ligne='cotisation_hg',
+                        libelle=f"Cotisation annuelle — haut grade ({nb_t_reg} tenue{_p(nb_t_reg)} régulière{_p(nb_t_reg)} × {params.tarif_membre_hg} €)",
+                        quantite=D(str(nb_t_reg)), unite='tenue',
+                        montant_unitaire=params.tarif_membre_hg,
+                        montant_total=(params.tarif_membre_hg * D(str(nb_t_reg))).quantize(D('0.01')),
+                        ordre=ordre,
+                    )
+                    ordre += 1
 
         # ── Tenues exceptionnelles (toutes loges, après date d'effet) ─────────
         t_exc_f    = _filtre_date(activite['tenues_exceptionnelles'])
