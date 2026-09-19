@@ -7713,7 +7713,7 @@ def finance_resa_reclasser(request, pk, resa_pk):
         return redirect('administration:finance_facture_detail', pk=pk)
 
     resa = get_object_or_404(Reservation, pk=resa_pk, loge=facture.loge)
-    nouveau_type = request.POST.get('type_reservation')
+    nouveau_type = request.POST.get('type_reservation') or request.POST.get('nouveau_type')
     types_valides = ('reguliere', 'exceptionnelle', 'congres')
     if nouveau_type not in types_valides:
         messages.error(request, "Type de réservation invalide.")
