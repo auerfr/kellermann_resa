@@ -6367,14 +6367,13 @@ def budget_simulation(request):
                 continue
             eff = l.get('effectif') or 0
             nb_t = l.get('nb_tenues') or 0
-            # Cotisation actuelle (tarif voté)
-            # LB : par membre   | HG : par tenue (nouveau modèle)
+            # Cotisation actuelle (tarif voté en AG)
+            # LB : tarif_membre_loge × effectif
+            # HG : tarif_membre_hg × effectif (système voté actuel, même si la cible est par tenue)
             if l['type_loge'] == 'loge' and params.tarif_membre_loge and eff:
                 l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_loge)) * eff
-            elif l['type_loge'] == 'haut_grade' and params.tarif_membre_hg and nb_t:
-                # Cotisation actuelle HG reste affichée en par-tenue si on a un tarif_tenue_hg,
-                # sinon on ne peut pas calculer (effectif non fiable pour HG)
-                l['cotisation_actuelle'] = None   # à renseigner dans Paramètres (tarif_tenue_hg futur)
+            elif l['type_loge'] == 'haut_grade' and params.tarif_membre_hg and eff:
+                l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_hg)) * eff
             else:
                 l['cotisation_actuelle'] = None
             # Tarif d'équilibre
