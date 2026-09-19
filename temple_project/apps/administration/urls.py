@@ -72,10 +72,13 @@ urlpatterns = [
     path("facturation/pdf/", views.facturation_pdf, name="facturation_pdf"),
     # ── Module Finance (facturation annuelle par loge) ─────────────────────────
     path("finance/", views.finance_saison, name="finance_saison"),
+    path("finance/export/", views.finance_export_excel, name="finance_export"),
     path("finance/generer/", views.finance_generer_brouillons, name="finance_generer"),
     path("finance/facture/<int:pk>/", views.finance_facture_detail, name="finance_facture_detail"),
+    path("finance/facture/<int:pk>/ligne/ajouter/", views.finance_ligne_ajouter, name="finance_ligne_ajouter"),
     path("finance/facture/<int:pk>/ligne/<int:ligne_pk>/toggle/", views.finance_ligne_toggle, name="finance_ligne_toggle"),
     path("finance/facture/<int:pk>/ligne/<int:ligne_pk>/edit/", views.finance_ligne_edit, name="finance_ligne_edit"),
+    path("finance/facture/<int:pk>/ligne/<int:ligne_pk>/supprimer/", views.finance_ligne_supprimer, name="finance_ligne_supprimer"),
     path("finance/facture/<int:pk>/notes/", views.finance_facture_notes, name="finance_facture_notes"),
     path("finance/facture/<int:pk>/emettre/", views.finance_facture_emettre, name="finance_facture_emettre"),
     path("finance/facture/<int:pk>/annuler/", views.finance_facture_annuler, name="finance_facture_annuler"),
@@ -94,4 +97,11 @@ urlpatterns = [
     path("demande-recurrence-salle/<int:pk>/valider/", views.valider_demande_recurrence_salle, name="valider_demande_recurrence_salle"),
     path("demande-recurrence-temple/<int:pk>/valider/", views.valider_demande_recurrence_temple, name="valider_demande_recurrence_temple"),
     path("demande-modif/<int:pk>/valider/", views.valider_demande_modif, name="valider_demande_modif"),
+    # ── Module AG : Décisions d'assemblée générale ─────────────────────────────
+    path("ag/", views.ag_decisions_liste, name="ag_decisions_liste"),
+    path("ag/nouvelle/", views.ag_decision_form, name="ag_decision_ajouter"),
+    path("ag/<int:pk>/", views.ag_decision_detail, name="ag_decision_detail"),
+    path("ag/<int:pk>/modifier/", views.ag_decision_form, name="ag_decision_modifier"),
+    path("ag/<int:pk>/voter/", views.ag_decision_voter, name="ag_decision_voter"),
+    path("ag/<int:pk>/activer-schema/", views.ag_activer_schema, name="ag_activer_schema"),
 ]

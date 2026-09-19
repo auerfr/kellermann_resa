@@ -18,6 +18,7 @@
       </button>
     </form>
     {% endif %}
+    <a href="{% url 'administration:finance_export' %}?saison={{ saison }}" class="btn btn-outline-success btn-sm">📥 Export Excel</a>
     <a href="{% url 'administration:facturation' %}" class="btn btn-outline-secondary btn-sm">📋 Récap tenues exceptionnelles</a>
     <a href="{% url 'administration:budget_simulation' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">📊 Simulation budgétaire</a>
     <a href="{% url 'administration:occupation' %}" class="btn btn-outline-secondary btn-sm">🏛 Occupation / capacité</a>

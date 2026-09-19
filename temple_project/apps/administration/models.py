@@ -61,6 +61,11 @@ class Parametres(models.Model):
         help_text="Active le module de facturation annuelle par loge "
                   "(factures cristallisées, PDF, envoi email). "
                   "À activer après validation du modèle avec le trésorier.")
+    # Effectif par défaut quand la fiche loge n'est pas encore renseignée
+    effectif_par_defaut = models.PositiveSmallIntegerField(
+        default=25,
+        help_text="Effectif utilisé (en estimation) pour le calcul des cotisations "
+                  "quand la fiche loge n'a pas encore d'effectif saisi.")
     # Lien vers le schéma de tarification actuellement actif (nullable, compatibilité)
     schema_actif = models.ForeignKey(
         'SchemaTarification', null=True, blank=True,

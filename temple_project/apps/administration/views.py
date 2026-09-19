@@ -16,7 +16,11 @@ from temple_project.apps.reservations.models import (
     DemandeRegleRecurrenceSalle, DemandeRegleRecurrence,
 )
 from temple_project.apps.loges.models import Loge, Obedience
-from .models import Parametres, JournalEvenement, Annonce, FAQ, PosteCharge
+from .models import (
+    Parametres, JournalEvenement, Annonce, FAQ, PosteCharge,
+    SchemaTarification, DecisionAG, POSTES_BUDGET, Facture, LigneFacture,
+)
+from django.db import models as dj_models
 from .journal import log_evenement
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -4082,6 +4086,10 @@ def parametres(request):
         params.smtp_tls = request.POST.get('smtp_tls') == 'on'
         params.facturation_active   = request.POST.get('facturation_active') == 'on'
         params.module_finance_actif = request.POST.get('module_finance_actif') == 'on'
+        try:
+            params.effectif_par_defaut = max(1, int(request.POST.get('effectif_par_defaut', 25)))
+        except (ValueError, TypeError):
+            pass
         params.save()
         messages.success(request, "Paramètres sauvegardés.")
         return redirect('administration:parametres')
@@ -7532,6 +7540,128 @@ def finance_saison(request):
 
 
 @staff_required
+def finance_export_excel(request):
+    """Export Excel de toutes les factures d'une saison (une ligne par ligne de facture)."""
+    from .models import Facture, LigneFacture
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    factures = (
+        Facture.objects.filter(saison=saison)
+        .select_related('loge')
+        .prefetch_related('lignes')
+        .order_by('loge__nom')
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Factures {saison}-{saison+1}"
+
+    BLEU   = "0F2137"
+    OR     = "C8A84B"
+    HEADER = PatternFill("solid", fgColor=BLEU)
+    HDR_F  = Font(color="FFFFFF", bold=True, size=10)
+    ALT    = PatternFill("solid", fgColor="EBF1FA")
+    BORDER = Border(
+        bottom=Side(style='thin', color='CCCCCC'),
+    )
+
+    headers = [
+        "Loge", "Type loge", "Statut facture", "N° facture",
+        "Type ligne", "Libellé", "Qté", "Unité", "P.U. (€)", "Total (€)",
+        "Incluse", "Note correction",
+    ]
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill   = HEADER
+        cell.font   = HDR_F
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    row_n = 2
+    for facture in factures:
+        lignes = list(facture.lignes.all())
+        if not lignes:
+            ws.append([
+                facture.loge.nom,
+                facture.loge.get_type_loge_display(),
+                facture.get_statut_display(),
+                facture.numero or "—",
+                "", "Aucune ligne", "", "", "", "", "", "",
+            ])
+            row_n += 1
+            continue
+        fill = ALT if row_n % 2 == 0 else None
+        for ligne in lignes:
+            row_data = [
+                facture.loge.nom,
+                facture.loge.get_type_loge_display(),
+                facture.get_statut_display(),
+                facture.numero or "Brouillon",
+                ligne.get_type_ligne_display(),
+                ligne.libelle,
+                float(ligne.quantite),
+                ligne.unite,
+                float(ligne.montant_unitaire),
+                float(ligne.montant_total) if ligne.facturable else 0,
+                "Oui" if ligne.facturable else "Non",
+                ligne.note_override or "",
+            ]
+            ws.append(row_data)
+            if fill:
+                for col_idx in range(1, len(headers) + 1):
+                    ws.cell(row=row_n, column=col_idx).fill = fill
+            row_n += 1
+
+    # ── Ligne de total par facture en bas ──────────────────────────────────
+    ws.append([])
+    ws.append(["", "", "", "", "", "TOTAL PAR FACTURE", "", "", "", "", "", ""])
+    header_row2 = row_n + 2
+    ws.cell(row=header_row2, column=1).value = "Loge"
+    ws.cell(row=header_row2, column=3).value = "Statut"
+    ws.cell(row=header_row2, column=4).value = "N° facture"
+    ws.cell(row=header_row2, column=10).value = "Total HT (€)"
+    for col_idx in range(1, len(headers) + 1):
+        ws.cell(row=header_row2, column=col_idx).fill   = HEADER
+        ws.cell(row=header_row2, column=col_idx).font   = HDR_F
+    row_n = header_row2 + 1
+    for facture in factures:
+        ws.append([
+            facture.loge.nom, "",
+            facture.get_statut_display(),
+            facture.numero or "Brouillon",
+            "", "", "", "", "",
+            float(facture.total_ht), "", "",
+        ])
+        row_n += 1
+
+    # ── Mise en forme colonnes ─────────────────────────────────────────────
+    col_widths = [32, 14, 12, 16, 22, 55, 6, 9, 10, 10, 8, 30]
+    for idx, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = w
+
+    ws.freeze_panes = "A2"
+
+    from io import BytesIO
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"Factures_{saison}-{saison+1}.xlsx"
+    resp = HttpResponse(
+        buf.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+    return resp
+
+
+@staff_required
 def finance_generer_brouillons(request):
     """Génère (ou régénère) les brouillons de factures annuelles par loge.
 
@@ -7558,7 +7688,7 @@ def finance_generer_brouillons(request):
     loges_actives = Loge.objects.filter(actif=True).order_by('nom')
 
     nb_crees = nb_maj = nb_ignores = 0
-    loges_sans_effectif = []
+    loges_estimation = []
     date_effet = params.tarif_date_effet
 
     def _p(n):
@@ -7593,28 +7723,30 @@ def finance_generer_brouillons(request):
         facture.lignes.all().delete()
         ordre = 0
         type_loge = loge.type_loge  # 'loge' ou 'haut_grade'
-        effectif  = loge.effectif_total
+        effectif_reel = loge.effectif_total
+        effectif_est  = effectif_reel == 0  # estimation = pas de valeur saisie
+        effectif      = effectif_reel if effectif_reel > 0 else params.effectif_par_defaut
         loge_reguliere = activite['nb_regulieres'] > 0
 
         # ── Ligne principale : cotisation annuelle ─────────────────────────────
-        # LB : par membre · HG : par membre (tarif voté en AG — modèle par tenue à soumettre)
         if loge_reguliere and loge.membre_association:
-            if effectif == 0:
-                loges_sans_effectif.append(loge.nom)
-            else:
-                tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
-                if tarif > 0:
-                    type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
-                    cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
-                    LigneFacture.objects.create(
-                        facture=facture, type_ligne=type_l,
-                        libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €)",
-                        quantite=D(str(effectif)), unite='membre',
-                        montant_unitaire=tarif,
-                        montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
-                        ordre=ordre,
-                    )
-                    ordre += 1
+            tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
+            if tarif > 0:
+                type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
+                cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
+                suffix = " — estimation, effectif à renseigner" if effectif_est else ""
+                LigneFacture.objects.create(
+                    facture=facture, type_ligne=type_l,
+                    libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €){suffix}",
+                    quantite=D(str(effectif)), unite='membre',
+                    montant_unitaire=tarif,
+                    montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
+                    ordre=ordre,
+                    note_override="Effectif estimé (par défaut)" if effectif_est else "",
+                )
+                ordre += 1
+                if effectif_est:
+                    loges_estimation.append(loge.nom)
 
         # ── Tenues exceptionnelles (toutes loges, après date d'effet) ─────────
         t_exc_f    = _filtre_date(activite['tenues_exceptionnelles'])
@@ -7689,12 +7821,12 @@ def finance_generer_brouillons(request):
     if nb_ignores:
         parts.append(f"{nb_ignores} ignoré{'s' if nb_ignores > 1 else ''} (déjà émis/payé)")
     messages.success(request, f"Brouillons générés — {', '.join(parts)}.")
-    if loges_sans_effectif:
-        noms = ', '.join(loges_sans_effectif)
+    if loges_estimation:
+        noms = ', '.join(loges_estimation)
         messages.warning(
             request,
-            f"Effectif non renseigné → cotisation annuelle absente pour : {noms}. "
-            "Renseignez l'effectif dans chaque fiche loge puis régénérez."
+            f"Effectif estimé à {params.effectif_par_defaut} membres (valeur par défaut) pour : {noms}. "
+            "Corrigez l'effectif dans chaque fiche loge et régénérez pour actualiser les montants."
         )
     from django.urls import reverse
     return redirect(reverse('administration:finance_saison') + f'?saison={saison}')
@@ -7731,6 +7863,89 @@ def finance_facture_detail(request, pk):
         'activite':     activite,
         'resas_saison': resas_saison,
     })
+
+
+@staff_required
+def finance_ligne_ajouter(request, pk):
+    """Ajoute une ligne libre à un brouillon (remise, ajustement, poste divers…)."""
+    from .models import Facture, LigneFacture
+    from decimal import Decimal, InvalidOperation
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'brouillon':
+        messages.error(request, "Seul un brouillon peut être modifié.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+    libelle   = request.POST.get('libelle', '').strip()
+    raw_pu    = request.POST.get('montant_unitaire', '0').strip().replace(',', '.')
+    raw_qty   = request.POST.get('quantite', '1').strip().replace(',', '.')
+    unite     = request.POST.get('unite', '').strip()
+    motif     = request.POST.get('note_override', '').strip()
+
+    if not libelle:
+        messages.error(request, "Le libellé est obligatoire.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+    try:
+        pu  = Decimal(raw_pu)
+        qty = Decimal(raw_qty)
+        if qty <= 0:
+            raise ValueError
+    except (InvalidOperation, ValueError):
+        messages.error(request, "Montant ou quantité invalide.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+    ordre_max = facture.lignes.aggregate(m=dj_models.Max('ordre'))['m'] or 0
+    LigneFacture.objects.create(
+        facture=facture, type_ligne='autre',
+        libelle=libelle, quantite=qty, unite=unite,
+        montant_unitaire=pu,
+        montant_total=(pu * qty).quantize(Decimal('0.01')),
+        facturable=True, ordre=ordre_max + 1,
+        note_override=motif,
+    )
+    facture.recalculer_total()
+    messages.success(request, f"Ligne ajoutée : {libelle}.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_ligne_supprimer(request, pk, ligne_pk):
+    """Supprime définitivement une ligne libre (type='autre') d'un brouillon."""
+    from .models import Facture, LigneFacture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    ligne   = get_object_or_404(LigneFacture, pk=ligne_pk, facture=facture)
+
+    if facture.statut != 'brouillon':
+        messages.error(request, "Seul un brouillon peut être modifié.")
+    elif ligne.type_ligne != 'autre':
+        messages.error(request, "Seules les lignes ajoutées manuellement peuvent être supprimées. Utilisez le toggle pour les autres.")
+    else:
+        ligne.delete()
+        facture.recalculer_total()
+        messages.success(request, "Ligne supprimée.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
 
 
 @staff_required
@@ -7844,25 +8059,28 @@ def finance_resa_reclasser(request, pk, resa_pk):
 
     facture.lignes.all().delete()
     ordre = 0
-    type_loge = facture.loge.type_loge
-    effectif  = facture.loge.effectif_total
+    type_loge    = facture.loge.type_loge
+    effectif_reel = facture.loge.effectif_total
+    effectif_est  = effectif_reel == 0
+    effectif      = effectif_reel if effectif_reel > 0 else params.effectif_par_defaut
     loge_reguliere = activite['nb_regulieres'] > 0
 
     if loge_reguliere and facture.loge.membre_association:
-        if effectif > 0:
-            tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
-            if tarif > 0:
-                type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
-                cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne=type_l,
-                    libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €)",
-                    quantite=D(str(effectif)), unite='membre',
-                    montant_unitaire=tarif,
-                    montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
+        tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
+        if tarif > 0:
+            type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
+            cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
+            suffix = " — estimation, effectif à renseigner" if effectif_est else ""
+            LigneFacture.objects.create(
+                facture=facture, type_ligne=type_l,
+                libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €){suffix}",
+                quantite=D(str(effectif)), unite='membre',
+                montant_unitaire=tarif,
+                montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
+                ordre=ordre,
+                note_override="Effectif estimé (par défaut)" if effectif_est else "",
+            )
+            ordre += 1
 
     t_exc_f     = _filtre_date(activite['tenues_exceptionnelles'])
     t_congres_f = _filtre_date(activite['tenues_congres'])
@@ -8272,3 +8490,188 @@ def finance_facture_envoyer(request, pk):
 
     from django.urls import reverse
     return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+# ── Module AG : Schémas de tarification & Décisions d'AG ──────────────────────
+
+def _parse_decimal(val, default=None):
+    from decimal import Decimal, InvalidOperation
+    try:
+        return Decimal(str(val).replace(',', '.'))
+    except (InvalidOperation, TypeError, ValueError):
+        return default
+
+
+@staff_required
+def ag_decisions_liste(request):
+    """Liste toutes les décisions d'AG, triées par saison décroissante."""
+    decisions = DecisionAG.objects.select_related('schema', 'cree_par').order_by('-saison', '-date_ag')
+    return render(request, 'administration/ag_decisions_liste.html', {
+        'decisions': decisions,
+        'saison_courante': _annee_saison_courante(),
+    })
+
+
+@staff_required
+def ag_decision_form(request, pk=None):
+    """Crée ou modifie une décision d'AG + son schéma de tarification inline."""
+    from decimal import Decimal as D
+    decision = get_object_or_404(DecisionAG, pk=pk) if pk else None
+
+    if request.method == 'POST':
+        saison  = int(request.POST.get('saison') or _annee_saison_courante())
+        date_ag_raw = request.POST.get('date_ag', '')
+        libelle = request.POST.get('libelle_resolution', '').strip()
+        notes   = request.POST.get('notes', '').strip()
+
+        from datetime import date as ddate
+        try:
+            date_ag = ddate.fromisoformat(date_ag_raw)
+        except (ValueError, TypeError):
+            date_ag = ddate.today()
+
+        schema_pk = request.POST.get('schema_pk')
+        if schema_pk:
+            schema = get_object_or_404(SchemaTarification, pk=schema_pk)
+        else:
+            schema = SchemaTarification()
+
+        schema.nom    = request.POST.get('schema_nom', '').strip() or f"AG {date_ag.strftime('%d/%m/%Y')}"
+        schema.saison = saison
+        schema.mode   = request.POST.get('schema_mode', 'membre')
+        schema.statut = 'simule'
+
+        for champ in [
+            'tarif_membre_loge', 'tarif_membre_hg',
+            'tarif_tenue_lb', 'tarif_tenue_hg',
+            'tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
+            'tarif_congres_jour', 'tarif_funebre',
+        ]:
+            v = _parse_decimal(request.POST.get(champ, '0'), D('0'))
+            setattr(schema, champ, v)
+
+        schema.tarif_minimum      = _parse_decimal(request.POST.get('tarif_minimum', ''))
+        schema.plafond_hausse_pct = _parse_decimal(request.POST.get('plafond_hausse_pct', ''))
+        schema.notes   = request.POST.get('schema_notes', '')
+        schema.cree_par = request.user
+        schema.save()
+
+        if decision is None:
+            decision = DecisionAG()
+        decision.saison             = saison
+        decision.date_ag            = date_ag
+        decision.libelle_resolution = libelle
+        decision.notes              = notes
+        decision.schema             = schema
+        decision.cree_par           = request.user
+
+        for champ, _ in POSTES_BUDGET:
+            v = _parse_decimal(request.POST.get(champ, '0'), D('0'))
+            setattr(decision, champ, v)
+
+        if 'pv' in request.FILES:
+            decision.pv = request.FILES['pv']
+
+        decision.save()
+        messages.success(request, f"Décision enregistrée : {decision.libelle_resolution[:60]}")
+        from django.urls import reverse as _rev
+        return redirect(_rev('administration:ag_decision_detail', args=[decision.pk]))
+
+    params = Parametres.get_instance()
+    if decision and decision.schema:
+        schema_init = decision.schema
+    else:
+        schema_init = SchemaTarification(
+            saison=_annee_saison_courante(),
+            tarif_membre_loge=params.tarif_membre_loge,
+            tarif_membre_hg=params.tarif_membre_hg,
+            tarif_exc_sans_agapes=params.tarif_exc_sans_agapes,
+            tarif_exc_avec_agapes=params.tarif_exc_avec_agapes,
+            tarif_congres_jour=params.tarif_congres_jour,
+            tarif_funebre=params.tarif_funebre,
+        )
+
+    budget_rows = [
+        {
+            'champ': champ,
+            'label': label,
+            'valeur': getattr(decision, champ, 0) if decision else 0,
+        }
+        for champ, label in POSTES_BUDGET
+    ]
+
+    return render(request, 'administration/ag_decision_form.html', {
+        'decision':        decision,
+        'schema':          schema_init,
+        'postes':          POSTES_BUDGET,
+        'budget_rows':     budget_rows,
+        'saison_courante': _annee_saison_courante(),
+    })
+
+
+@staff_required
+def ag_decision_detail(request, pk):
+    """Affiche le détail d'une décision d'AG avec budget ventilé."""
+    decision     = get_object_or_404(DecisionAG.objects.select_related('schema', 'cree_par'), pk=pk)
+    params       = Parametres.get_instance()
+    schema_actif = params.schema_actif
+
+    budget_rows = [
+        {'champ': champ, 'label': label, 'valeur': getattr(decision, champ, 0)}
+        for champ, label in POSTES_BUDGET
+    ]
+
+    return render(request, 'administration/ag_decision_detail.html', {
+        'decision':     decision,
+        'postes':       POSTES_BUDGET,
+        'budget_rows':  budget_rows,
+        'schema_actif': schema_actif,
+    })
+
+
+@staff_required
+def ag_decision_voter(request, pk):
+    """Passe une décision brouillon à l'état 'votée en AG'."""
+    if request.method != 'POST':
+        return redirect('administration:ag_decisions_liste')
+
+    decision = get_object_or_404(DecisionAG, pk=pk, statut='brouillon')
+    decision.statut = 'votee'
+    decision.save(update_fields=['statut', 'modifie_le'])
+    if decision.schema:
+        decision.schema.statut = 'vote'
+        decision.schema.save(update_fields=['statut', 'modifie_le'])
+    messages.success(request, "Décision marquée comme votée en AG.")
+    from django.urls import reverse as _rev
+    return redirect(_rev('administration:ag_decision_detail', args=[pk]))
+
+
+@staff_required
+def ag_activer_schema(request, pk):
+    """Active le schéma d'une décision votée dans les Paramètres (applique les tarifs)."""
+    if request.method != 'POST':
+        return redirect('administration:ag_decisions_liste')
+
+    decision = get_object_or_404(DecisionAG, pk=pk, statut='votee')
+    if not decision.schema:
+        messages.error(request, "Cette décision n'a pas de schéma de tarification attaché.")
+        from django.urls import reverse as _rev
+        return redirect(_rev('administration:ag_decision_detail', args=[pk]))
+
+    params = Parametres.get_instance()
+    params.schema_actif          = decision.schema
+    params.tarif_membre_loge     = decision.schema.tarif_membre_loge
+    params.tarif_membre_hg       = decision.schema.tarif_membre_hg
+    params.tarif_exc_sans_agapes = decision.schema.tarif_exc_sans_agapes
+    params.tarif_exc_avec_agapes = decision.schema.tarif_exc_avec_agapes
+    params.tarif_congres_jour    = decision.schema.tarif_congres_jour
+    params.tarif_funebre         = decision.schema.tarif_funebre
+    if decision.schema.date_effet:
+        params.tarif_date_effet = decision.schema.date_effet
+    params.save()
+    messages.success(
+        request,
+        f"Schéma « {decision.schema.nom} » activé — tarifs mis à jour dans les Paramètres."
+    )
+    from django.urls import reverse as _rev
+    return redirect(_rev('administration:ag_decision_detail', args=[pk]))

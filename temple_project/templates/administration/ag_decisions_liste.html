@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Décisions d'AG{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">⚖ Décisions d'Assemblée Générale</h1>
+    <p class="text-muted small mb-0">Budget voté + schémas de tarification</p>
+  </div>
+  <a href="{% url 'administration:ag_decision_ajouter' %}" class="btn btn-sm" style="background:#0F2137;color:#fff;">
+    + Nouvelle décision
+  </a>
+</div>
+
+{% if messages %}{% for msg in messages %}
+<div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
+{% endfor %}{% endif %}
+
+{% if not decisions %}
+<div class="text-center text-muted py-5">
+  <div style="font-size:2.5rem;">⚖</div>
+  <p class="mb-3">Aucune décision d'AG enregistrée.</p>
+  <a href="{% url 'administration:ag_decision_ajouter' %}" class="btn btn-primary btn-sm">Créer la première décision</a>
+</div>
+{% else %}
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr style="background:#0F2137;color:#fff;font-size:12px;">
+          <th class="ps-3">Saison</th>
+          <th>Date AG</th>
+          <th>Résolution</th>
+          <th>Schéma</th>
+          <th class="text-end">Budget total</th>
+          <th class="text-center">Statut</th>
+          <th class="text-end pe-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in decisions %}
+        <tr>
+          <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ d.saison }}-{{ d.saison|add:1 }}</td>
+          <td class="text-muted small">{{ d.date_ag|date:"d/m/Y" }}</td>
+          <td style="font-size:13px;">{{ d.libelle_resolution|truncatechars:60 }}</td>
+          <td class="text-muted small">
+            {% if d.schema %}
+              {{ d.schema.nom|truncatechars:30 }}
+              <span class="ms-1 text-muted">({{ d.schema.get_mode_display }})</span>
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end fw-semibold" style="font-variant-numeric:tabular-nums;">
+            {{ d.budget_total|floatformat:0 }} €
+          </td>
+          <td class="text-center">
+            {% if d.statut == 'votee' %}
+              <span class="badge" style="background:#D1FAE5;color:#065F46;">✓ Votée</span>
+            {% else %}
+              <span class="badge" style="background:#FEF3C7;color:#92400E;">Brouillon</span>
+            {% endif %}
+          </td>
+          <td class="text-end pe-3">
+            <a href="{% url 'administration:ag_decision_detail' d.pk %}" class="btn btn-sm btn-outline-primary" style="font-size:11px;">Détail</a>
+            {% if d.statut == 'brouillon' %}
+            <a href="{% url 'administration:ag_decision_modifier' d.pk %}" class="btn btn-sm btn-outline-secondary ms-1" style="font-size:11px;">Modifier</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
