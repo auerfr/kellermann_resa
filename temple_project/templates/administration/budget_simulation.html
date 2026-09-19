@@ -482,56 +482,57 @@
     {# 3 modèles en cards #}
     <div class="row g-3 mb-4">
       <div class="col-md-4">
-        <div class="p-3 rounded h-100" style="background:#FFF7ED;border:1px solid #FDBA74;">
-          <div class="fw-bold mb-1" style="color:#C2410C;">1 · Cotisation actuelle (tarif voté)</div>
-          <div class="mb-1" style="font-size:13px;">
-            <span class="badge bg-secondary me-1">LB</span> {{ params.tarif_membre_loge|floatformat:2 }} €/membre/an<br>
-            <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span> {{ params.tarif_membre_hg|floatformat:2 }} €/membre/an
-            <span class="text-muted" style="font-size:11px;">(modèle par membre — à migrer vers par tenue)</span>
+        <div class="p-3 rounded h-100" style="background:#EFF6FF;border:1px solid #93C5FD;">
+          <div class="fw-bold mb-2" style="color:#1D4ED8;font-size:13px;">Modèle A — Par membre <span class="badge" style="background:#DBEAFE;color:#1D4ED8;font-weight:500;font-size:10px;">LB + HG</span></div>
+          <div style="font-size:13px;line-height:1.8;">
+            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>
+            {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an<br>
+            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>
+            {% if tarif_eq_hg_membre_display %}{{ tarif_eq_hg_membre_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an
           </div>
-          <div class="text-muted small mt-2">Simple. Prévisible. Mais effectif HG peu fiable (membres d'autres orients) et LB ne paie pas à l'usage.</div>
-          {% if deficit_votee and deficit_votee > 0 %}
-          <div class="mt-2 fw-semibold" style="color:#B91C1C;font-size:12px;">⚠ Déficit : −{{ deficit_votee|floatformat:0 }} €/an</div>
+          <div class="text-muted mt-2" style="font-size:11px;">LB et HG tous deux facturés au prorata de leurs membres. Simple et cohérent — mais effectif HG variable d'une saison à l'autre.</div>
+          {% if solde_m1 is not None %}
+          <div class="mt-2 fw-semibold" style="font-size:11px;{% if solde_m1 >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}">
+            {% if solde_m1 >= 0 %}✓ Équilibre{% else %}⚠ Déficit : −{{ solde_m1|floatformat:0 }} €{% endif %}
+          </div>
           {% endif %}
         </div>
       </div>
       <div class="col-md-4">
-        <div class="p-3 rounded h-100" style="background:#EFF6FF;border:1px solid #93C5FD;">
-          <div class="fw-bold mb-1" style="color:#1D4ED8;">2 · Tarif d'équilibre (usage-based)</div>
-          <div class="mb-1" style="font-size:13px;">
-            <span class="badge bg-secondary me-1">LB</span>
+        <div class="p-3 rounded h-100" style="background:#F0FDF4;border:1px solid #86EFAC;">
+          <div class="fw-bold mb-2" style="color:#166534;font-size:13px;">Modèle B — LB/membre + HG/tenue <span class="badge" style="background:#DCFCE7;color:#166534;font-weight:500;font-size:10px;">Split</span></div>
+          <div style="font-size:13px;line-height:1.8;">
+            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>
             {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an<br>
-            <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
+            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>
             {% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }}{% else %}—{% endif %} €/tenue
           </div>
-          <div class="text-muted small mt-2">Équilibre exact selon l'usage simulé. HG presque doublé → transition difficile en une seule AG.</div>
-          <div class="mt-2 fw-semibold" style="color:#059669;font-size:12px;">✓ Résultat : 0 € de déficit</div>
+          <div class="text-muted mt-2" style="font-size:11px;">LB cotise par membre (prévisible). HG à la tenue (usage réel). Évite le problème de l'effectif HG incertain.</div>
+          <div class="mt-2 fw-semibold" style="color:#059669;font-size:11px;">✓ Équilibre exact</div>
         </div>
       </div>
       <div class="col-md-4">
         <div class="p-3 rounded h-100" style="background:#F5F3FF;border:2px solid #7C3AED;">
-          <div class="fw-bold mb-1" style="color:#5B21B6;">3 · Modèle hybride ★ Recommandé</div>
-          <div class="mb-1" style="font-size:13px;">
-            <strong>{{ tarif_hybride_membre|floatformat:0 }} €/membre/an</strong> (LB uniquement — charges fixes)<br>
-            + <strong>{{ tarif_hybride_tenue|floatformat:0 }} €/tenue</strong> pour toutes les loges (LB &amp; HG)<br>
-            <span style="font-size:11px;color:#6B7280;">HG : tarif/tenue seulement — charges fixes déjà couvertes par la cotisation LB</span>
+          <div class="fw-bold mb-2" style="color:#5B21B6;font-size:13px;">Modèle C — Hybride <span class="badge" style="background:#EDE9FE;color:#5B21B6;font-weight:500;font-size:10px;">★ Recommandé</span></div>
+          <div style="font-size:13px;line-height:1.8;">
+            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>
+            {{ tarif_hybride_membre|floatformat:0 }} €/membre/an + {{ tarif_hybride_tenue|floatformat:0 }} €/tenue<br>
+            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>
+            {{ tarif_hybride_tenue|floatformat:0 }} €/tenue <span style="font-size:11px;color:#9CA3AF;">(charges fixes couvertes par LB)</span>
           </div>
-          <div class="text-muted small mt-2">
-            Fixes couvertes par cotisation égale. Variables (énergie + nettoyage) facturées à l'usage.
-            <strong>LB et HG contribuent équitablement au bâtiment.</strong>
-          </div>
-          <div class="mt-2 fw-semibold" style="color:#059669;font-size:12px;">✓ Équilibre exact · Transition douce</div>
+          <div class="text-muted mt-2" style="font-size:11px;">Fixes réparties sur les membres LB. Variables (énergie, nettoyage) à la tenue pour tous. Contribution équitable au bâtiment.</div>
+          <div class="mt-2 fw-semibold" style="color:#059669;font-size:11px;">✓ Équilibre exact · Transition douce</div>
         </div>
       </div>
     </div>
 
     {# Note sur la transition douce #}
     <div class="alert alert-light border py-2 mb-3" style="font-size:12.5px;">
-      <strong>💡 Transition sans effrayer :</strong>
-      Le modèle hybride peut être introduit progressivement — commencer par corriger le tarif HG
-      (ex. +5€/membre chaque année jusqu'à {{ tarif_eq_hg_display|floatformat:0 }} €)
-      tout en préparant les loges à la facturation à la tenue via le récap exceptionnel existant.
-      Le tarif tenue de {{ tarif_hybride_tenue|floatformat:0 }} €/tenue = ce que paie déjà une loge pour une tenue exceptionnelle ({{ params.tarif_exc_sans_agapes|floatformat:0 }} € sans agapes).
+      <strong>💡 Transition progressive :</strong>
+      Commencer par le modèle A ou B (cohérents et lisibles en AG), puis migrer vers le modèle C hybride
+      une fois les loges habituées à la notion de tenue facturée.
+      Le tarif tenue de {{ tarif_hybride_tenue|floatformat:0 }} €/tenue (modèle C) est proche du tarif exceptionnel voté
+      ({{ params.tarif_exc_sans_agapes|floatformat:0 }} € sans agapes) — le passage sera naturel.
     </div>
 
     {# Table comparaison par loge #}
@@ -539,15 +540,16 @@
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0" style="font-size:12px;">
         <thead>
-          <tr style="background:#F8FAFC;">
+          <tr style="background:#F8FAFC;font-size:11px;">
             <th class="ps-3">Loge</th>
             <th class="text-center">Type</th>
+            <th class="text-center">Mbr</th>
             <th class="text-center">Tenues</th>
-            <th class="text-end">Cotisation actuelle</th>
-            <th class="text-end">Tarif d'équilibre</th>
-            <th class="text-end">Hybride ★</th>
-            <th class="text-end">Écart équil.</th>
-            <th class="text-end pe-2">Écart hybride</th>
+            <th class="text-end">Actuelle</th>
+            <th class="text-end" style="color:#1D4ED8;">Mod. A<br><span style="font-weight:400;color:#64748B;">/mbr</span></th>
+            <th class="text-end" style="color:#166534;">Mod. B<br><span style="font-weight:400;color:#64748B;">split</span></th>
+            <th class="text-end" style="color:#5B21B6;">Mod. C ★<br><span style="font-weight:400;color:#64748B;">hybride</span></th>
+            <th class="text-end pe-2" style="color:#5B21B6;">Écart C</th>
           </tr>
         </thead>
         <tbody>
@@ -557,31 +559,26 @@
             <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
             <td class="text-center">
               {% if l.type_loge == 'haut_grade' %}
-              <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
+              <span class="badge" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>
               {% else %}
-              <span class="badge bg-secondary">LB</span>
+              <span class="badge bg-secondary" style="font-size:10px;">LB</span>
               {% endif %}
             </td>
+            <td class="text-center text-muted">{{ l.effectif|default:"—" }}</td>
             <td class="text-center text-muted">{{ l.nb_tenues }}</td>
-            <td class="text-end">
+            <td class="text-end text-muted" style="font-size:12px;">
               {% if l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €{% else %}—{% endif %}
             </td>
-            <td class="text-end fw-semibold" style="color:#0F2137;">
+            <td class="text-end fw-semibold" style="color:#1D4ED8;font-size:12px;">
+              {% if l.cout_equilibre_m1 %}{{ l.cout_equilibre_m1|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end fw-semibold" style="color:#166534;font-size:12px;">
               {% if l.cout_equilibre %}{{ l.cout_equilibre|floatformat:0 }} €{% else %}—{% endif %}
             </td>
-            <td class="text-end fw-semibold" style="color:#5B21B6;">
+            <td class="text-end fw-semibold" style="color:#5B21B6;font-size:12px;">
               {% if l.cout_hybride %}{{ l.cout_hybride|floatformat:0 }} €{% else %}—{% endif %}
             </td>
-            <td class="text-end">
-              {% if l.ecart_equilibre is not None %}
-                {% if l.ecart_equilibre > 0 %}
-                  <span style="color:#B91C1C;font-weight:600;">+{{ l.ecart_equilibre|floatformat:0 }} €</span>
-                {% elif l.ecart_equilibre < 0 %}
-                  <span style="color:#059669;font-weight:600;">{{ l.ecart_equilibre|floatformat:0 }} €</span>
-                {% else %}<span class="text-muted">= 0</span>{% endif %}
-              {% else %}—{% endif %}
-            </td>
-            <td class="text-end pe-2">
+            <td class="text-end pe-2" style="font-size:12px;">
               {% if l.ecart_hybride is not None %}
                 {% if l.ecart_hybride > 0 %}
                   <span style="color:#B91C1C;font-weight:600;">+{{ l.ecart_hybride|floatformat:0 }} €</span>
@@ -597,9 +594,8 @@
       </table>
     </div>
     <div class="text-muted mt-2" style="font-size:11px;">
-      LB — Tarif d'équilibre = tarif_eq × effectif · Hybride = fixe/membre + variable/tenue.
-      HG — Tarif d'équilibre = tarif_eq × nb_tenues · Hybride = variable/tenue uniquement (fixe couvert par cotisation LB).
-      Écart = différence vs cotisation actuelle. Rouge = paierait plus · Vert = paierait moins.
+      Mod. A = LB et HG au tarif par membre · Mod. B = LB par membre + HG par tenue · Mod. C = LB (fixe/membre + variable/tenue) + HG par tenue.
+      Écart C = différence vs cotisation actuelle pour le modèle hybride. Rouge = paierait plus · Vert = paierait moins.
       Calculs hors loges occasionnelles (couvertes par leur tarif à la tenue).
     </div>
   </div>

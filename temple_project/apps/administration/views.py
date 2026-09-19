@@ -5748,13 +5748,14 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         net_hg = charges_hg
 
     tarif_eq_lb  = net_lb / Decimal(str(eff_eq_lb)) if eff_eq_lb else None
-    # HG : tarif par TENUE (pas par membre — les membres HG viennent de divers orients,
-    # on ne peut pas raisonner en effectif local fiable)
+    # HG : tarif par TENUE (modèle B — les membres HG viennent de divers orients)
     nb_resas_hg_adherents = sum(
         a['nb_tenues'] for a in par_loge
         if a['type_loge'] == 'haut_grade' and a['membre_association']
     )
     tarif_eq_hg  = net_hg / Decimal(str(nb_resas_hg_adherents)) if nb_resas_hg_adherents else None
+    # HG : tarif par MEMBRE (modèle A — par membre pour tous)
+    tarif_eq_hg_per_membre = net_hg / Decimal(str(eff_eq_hg)) if eff_eq_hg else None
     eff_eq_tot   = (eff_eq_lb or 0) + sum(
         a['effectif'] for a in par_loge if a['type_loge'] not in ('loge',))
     total_pour_equilibre = total_global - total_auto_finance
@@ -5790,7 +5791,8 @@ def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membr
         'nb_resas_hg_adherents': nb_resas_hg_adherents,
         'recettes_exc': recettes_dec,
         'tarif_eq_lb':  tarif_eq_lb,
-        'tarif_eq_hg':  tarif_eq_hg,   # par TENUE (pas par membre)
+        'tarif_eq_hg':  tarif_eq_hg,              # par TENUE — modèle B
+        'tarif_eq_hg_per_membre': tarif_eq_hg_per_membre,  # par MEMBRE — modèle A
         'tarif_eq_global': tarif_eq_global,
     }
 
@@ -6317,7 +6319,8 @@ def budget_simulation(request):
     net_lb_display = sim.get('net_lb') if sim else None
     net_hg_display = sim.get('net_hg') if sim else None
     tarif_eq_lb_display = sim.get('tarif_eq_lb') if sim else None
-    tarif_eq_hg_display = sim.get('tarif_eq_hg') if sim else None
+    tarif_eq_hg_display = sim.get('tarif_eq_hg') if sim else None          # modèle B — par tenue
+    tarif_eq_hg_membre_display = sim.get('tarif_eq_hg_per_membre') if sim else None  # modèle A — par membre
 
     pct_hg_defaut = None
     if sim and sim.get('total_global') and sim['total_global'] > 0:
@@ -6333,7 +6336,8 @@ def budget_simulation(request):
         if sim.get('eff_eq_lb'):
             tarif_eq_lb_display = net_lb_display / Decimal(str(sim['eff_eq_lb']))
         if sim.get('eff_eq_hg'):
-            tarif_eq_hg_display = net_hg_display / Decimal(str(sim['eff_eq_hg']))
+            tarif_eq_hg_display = net_hg_display / Decimal(str(sim['nb_resas_hg_adherents'])) if sim.get('nb_resas_hg_adherents') else None
+            tarif_eq_hg_membre_display = net_hg_display / Decimal(str(sim['eff_eq_hg']))
 
     # Calcul des recettes au tarif voté (multiplication décimale impossible en template)
     # charges_nettes_total = ce que les cotisations annuelles doivent couvrir
@@ -6373,8 +6377,10 @@ def budget_simulation(request):
             # Loges occasionnelles : pas de modèle cotisation/hybride
             if not l.get('membre_association'):
                 l['cotisation_actuelle'] = None
+                l['cout_equilibre_m1']   = None
                 l['cout_equilibre']      = None
                 l['cout_hybride']        = None
+                l['ecart_m1']            = None
                 l['ecart_equilibre']     = None
                 l['ecart_hybride']       = None
                 continue
@@ -6389,8 +6395,14 @@ def budget_simulation(request):
                 l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_hg)) * eff
             else:
                 l['cotisation_actuelle'] = None
-            # Tarif d'équilibre
-            # LB : tarif_eq_lb × effectif   | HG : tarif_eq_hg × nb_tenues
+            # Modèle A : tarif par MEMBRE pour LB et HG
+            if l['type_loge'] == 'loge' and tarif_eq_lb_display and eff:
+                l['cout_equilibre_m1'] = tarif_eq_lb_display * eff
+            elif l['type_loge'] == 'haut_grade' and tarif_eq_hg_membre_display and eff:
+                l['cout_equilibre_m1'] = tarif_eq_hg_membre_display * eff
+            else:
+                l['cout_equilibre_m1'] = None
+            # Modèle B : LB par membre + HG par tenue
             if l['type_loge'] == 'loge' and tarif_eq_lb_display and eff:
                 l['cout_equilibre'] = tarif_eq_lb_display * eff
             elif l['type_loge'] == 'haut_grade' and tarif_eq_hg_display and nb_t:
@@ -6412,21 +6424,24 @@ def budget_simulation(request):
                 l['cout_hybride'] = None
             # Écarts vs cotisation actuelle
             if l['cotisation_actuelle']:
-                l['ecart_equilibre'] = l['cout_equilibre'] - l['cotisation_actuelle'] if l['cout_equilibre'] else None
-                l['ecart_hybride']   = l['cout_hybride']   - l['cotisation_actuelle'] if l['cout_hybride']   else None
+                l['ecart_m1']       = l['cout_equilibre_m1'] - l['cotisation_actuelle'] if l['cout_equilibre_m1'] else None
+                l['ecart_equilibre'] = l['cout_equilibre']   - l['cotisation_actuelle'] if l['cout_equilibre']    else None
+                l['ecart_hybride']   = l['cout_hybride']     - l['cotisation_actuelle'] if l['cout_hybride']      else None
             else:
-                l['ecart_equilibre'] = l['ecart_hybride'] = None
+                l['ecart_m1'] = l['ecart_equilibre'] = l['ecart_hybride'] = None
 
     # ── Totaux modèles économiques (pour affichage dans le tableau d'équilibre) ──
-    recettes_hybride_total = recettes_eq_total = recettes_actuelles_total = None
-    deficit_hybride = solde_hybride = None
+    recettes_m1_total = recettes_hybride_total = recettes_eq_total = recettes_actuelles_total = None
+    solde_m1 = deficit_hybride = solde_hybride = None
     if sim:
         _rec_exc_adh = sim.get('recettes_exc_adherents') or Decimal('0')
+        recettes_m1_total        = sum(l['cout_equilibre_m1']   for l in sim['par_loge'] if l.get('cout_equilibre_m1')) + _rec_exc_adh
         recettes_hybride_total   = sum(l['cout_hybride']        for l in sim['par_loge'] if l.get('cout_hybride'))       + _rec_exc_adh
         recettes_eq_total        = sum(l['cout_equilibre']      for l in sim['par_loge'] if l.get('cout_equilibre'))     + _rec_exc_adh
         recettes_actuelles_total = sum(l['cotisation_actuelle'] for l in sim['par_loge'] if l.get('cotisation_actuelle'))+ _rec_exc_adh
         if charges_nettes_total is not None:
-            deficit_hybride = charges_nettes_total - recettes_hybride_total
+            solde_m1        = recettes_m1_total      - charges_nettes_total
+            deficit_hybride = charges_nettes_total   - recettes_hybride_total
             solde_hybride   = recettes_hybride_total - charges_nettes_total
 
     # ── Scénario tarif personnalisé ─────────────────────────────────────────────
@@ -6561,10 +6576,13 @@ def budget_simulation(request):
         'effectif_reel_hg': effectif_reel_hg,
         'nb_loges_lb': nb_loges_lb,
         'nb_loges_hg': nb_loges_hg,
-        'net_lb_display':        net_lb_display,
-        'net_hg_display':        net_hg_display,
-        'tarif_eq_lb_display':   tarif_eq_lb_display,
-        'tarif_eq_hg_display':   tarif_eq_hg_display,
+        'net_lb_display':             net_lb_display,
+        'net_hg_display':             net_hg_display,
+        'tarif_eq_lb_display':        tarif_eq_lb_display,
+        'tarif_eq_hg_display':        tarif_eq_hg_display,
+        'tarif_eq_hg_membre_display': tarif_eq_hg_membre_display,
+        'recettes_m1_total':          recettes_m1_total,
+        'solde_m1':                   solde_m1,
         'recette_lb_votee':      recette_lb_votee,
         'recette_hg_votee':      recette_hg_votee,
         'recette_totale_votee':  recette_totale_votee,
