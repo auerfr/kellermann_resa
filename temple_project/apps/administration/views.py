@@ -7512,6 +7512,7 @@ def finance_generer_brouillons(request):
     loges_actives = Loge.objects.filter(actif=True).order_by('nom')
 
     nb_crees = nb_maj = nb_ignores = 0
+    loges_sans_effectif = []
     date_effet = params.tarif_date_effet
 
     def _p(n):
@@ -7546,20 +7547,23 @@ def finance_generer_brouillons(request):
 
         # ── Ligne principale : cotisation annuelle ─────────────────────────────
         # LB : par membre · HG : par membre (tarif voté en AG — modèle par tenue à soumettre)
-        if loge_reguliere and effectif > 0 and loge.membre_association:
-            tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
-            if tarif > 0:
-                type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
-                cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
-                LigneFacture.objects.create(
-                    facture=facture, type_ligne=type_l,
-                    libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €)",
-                    quantite=D(str(effectif)), unite='membre',
-                    montant_unitaire=tarif,
-                    montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
-                    ordre=ordre,
-                )
-                ordre += 1
+        if loge_reguliere and loge.membre_association:
+            if effectif == 0:
+                loges_sans_effectif.append(loge.nom)
+            else:
+                tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
+                if tarif > 0:
+                    type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
+                    cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
+                    LigneFacture.objects.create(
+                        facture=facture, type_ligne=type_l,
+                        libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €)",
+                        quantite=D(str(effectif)), unite='membre',
+                        montant_unitaire=tarif,
+                        montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
+                        ordre=ordre,
+                    )
+                    ordre += 1
 
         # ── Tenues exceptionnelles (toutes loges, après date d'effet) ─────────
         t_exc_f    = _filtre_date(activite['tenues_exceptionnelles'])
@@ -7634,6 +7638,13 @@ def finance_generer_brouillons(request):
     if nb_ignores:
         parts.append(f"{nb_ignores} ignoré{'s' if nb_ignores > 1 else ''} (déjà émis/payé)")
     messages.success(request, f"Brouillons générés — {', '.join(parts)}.")
+    if loges_sans_effectif:
+        noms = ', '.join(loges_sans_effectif)
+        messages.warning(
+            request,
+            f"Effectif non renseigné → cotisation annuelle absente pour : {noms}. "
+            "Renseignez l'effectif dans chaque fiche loge puis régénérez."
+        )
     from django.urls import reverse
     return redirect(reverse('administration:finance_saison') + f'?saison={saison}')
 
@@ -7662,12 +7673,24 @@ def finance_facture_detail(request, pk):
         .order_by('date')
     )
 
+    avertissements = []
+    loge = facture.loge
+    if (activite['nb_regulieres'] > 0
+            and loge.membre_association
+            and (loge.effectif_total or 0) == 0):
+        avertissements.append(
+            "L'effectif de cette loge n'est pas renseigné : "
+            "la cotisation annuelle n'a pas pu être calculée. "
+            "Renseignez l'effectif dans la fiche loge puis régénérez le brouillon."
+        )
+
     return render(request, 'administration/finance_facture.html', {
-        'facture':      facture,
-        'params':       params,
-        'lignes':       facture.lignes.all(),
-        'activite':     activite,
-        'resas_saison': resas_saison,
+        'facture':        facture,
+        'params':         params,
+        'lignes':         facture.lignes.all(),
+        'activite':       activite,
+        'resas_saison':   resas_saison,
+        'avertissements': avertissements,
     })
 
 
@@ -7818,6 +7841,15 @@ def finance_resa_reclasser(request, pk, resa_pk):
 
     facture.recalculer_total()
     messages.success(request, f"Tenue du {resa.date.strftime('%d/%m/%Y')} reclassée : {ancien_type} → {nouveau_type}. Facture recalculée.")
+    if (activite['nb_regulieres'] > 0
+            and facture.loge.membre_association
+            and (facture.loge.effectif_total or 0) == 0):
+        messages.warning(
+            request,
+            f"Attention : l'effectif de {facture.loge.nom} n'est pas renseigné — "
+            "la cotisation annuelle n'a pas été incluse. "
+            "Renseignez l'effectif dans la fiche loge puis régénérez le brouillon."
+        )
     return redirect('administration:finance_facture_detail', pk=pk)
 
 

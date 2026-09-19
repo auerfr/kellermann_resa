@@ -68,6 +68,13 @@
 <div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
 {% endfor %}{% endif %}
 
+{% for avert in avertissements %}
+<div class="alert alert-warning d-flex align-items-start gap-2 py-2" role="alert">
+  <span style="font-size:1.1em;">⚠️</span>
+  <div>{{ avert }}</div>
+</div>
+{% endfor %}
+
 {% if facture.statut == 'brouillon' and facture.total_ht == 0 %}
 <div class="alert alert-warning py-2">
   <strong>⚠ Facture à 0,00 €</strong> —
