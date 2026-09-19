@@ -75,6 +75,7 @@ urlpatterns = [
     path("finance/generer/", views.finance_generer_brouillons, name="finance_generer"),
     path("finance/facture/<int:pk>/", views.finance_facture_detail, name="finance_facture_detail"),
     path("finance/facture/<int:pk>/ligne/<int:ligne_pk>/toggle/", views.finance_ligne_toggle, name="finance_ligne_toggle"),
+    path("finance/facture/<int:pk>/ligne/<int:ligne_pk>/edit/", views.finance_ligne_edit, name="finance_ligne_edit"),
     path("finance/facture/<int:pk>/notes/", views.finance_facture_notes, name="finance_facture_notes"),
     path("finance/facture/<int:pk>/emettre/", views.finance_facture_emettre, name="finance_facture_emettre"),
     path("finance/facture/<int:pk>/annuler/", views.finance_facture_annuler, name="finance_facture_annuler"),

@@ -461,6 +461,9 @@ class LigneFacture(models.Model):
         'reservations.ReservationSalle', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='lignes_facture')
     ordre             = models.PositiveIntegerField(default=0)
+    # Correction manuelle : motif enregistré pour l'audit
+    note_override     = models.CharField(max_length=300, blank=True,
+                                         help_text="Motif de la correction manuelle du tarif (ex: cuisine partagée)")
 
     class Meta:
         verbose_name        = "Ligne de facture"

@@ -224,10 +224,21 @@
                   {% elif ligne.type_ligne == 'salle' %}(salle)
                   {% endif %}
                 </span>
+                {% if ligne.note_override %}
+                <span class="ms-1 badge rounded-pill text-bg-info" style="font-size:10px;" title="{{ ligne.note_override }}">✎ corrigé</span>
+                {% endif %}
               </td>
               <td class="text-end text-muted small">{{ ligne.quantite|floatformat:0 }}</td>
               <td class="text-muted small">{{ ligne.unite }}</td>
-              <td class="text-end text-muted small">{{ ligne.montant_unitaire|floatformat:2 }} €</td>
+              <td class="text-end text-muted small">
+                {{ ligne.montant_unitaire|floatformat:2 }} €
+                {% if facture.statut == 'brouillon' %}
+                <button type="button" class="btn btn-link btn-sm p-0 ms-1 lh-1"
+                        style="font-size:12px;color:#888;vertical-align:middle;"
+                        title="Modifier le prix unitaire"
+                        onclick="var r=document.getElementById('edit-ligne-{{ ligne.pk }}');r.style.display=r.style.display==='none'?'table-row':'none';">✏</button>
+                {% endif %}
+              </td>
               <td class="text-end fw-semibold">{{ ligne.montant_total|floatformat:2 }} €</td>
               {% if facture.statut == 'brouillon' %}
               <td class="text-center">
@@ -242,6 +253,29 @@
               </td>
               {% endif %}
             </tr>
+            {% if facture.statut == 'brouillon' %}
+            <tr id="edit-ligne-{{ ligne.pk }}" style="display:none;background:#f0f6ff;">
+              <td colspan="6" class="px-3 py-2">
+                <form method="post" action="{% url 'administration:finance_ligne_edit' facture.pk ligne.pk %}"
+                      class="d-flex flex-wrap gap-2 align-items-center">
+                  {% csrf_token %}
+                  <label class="small text-muted mb-0 me-1">Nouveau P.U. (€) :</label>
+                  <input type="number" name="montant_unitaire" step="0.01" min="0"
+                         value="{{ ligne.montant_unitaire }}"
+                         class="form-control form-control-sm" style="width:110px;">
+                  <label class="small text-muted mb-0 ms-2 me-1">Motif :</label>
+                  <input type="text" name="note_override"
+                         value="{{ ligne.note_override }}"
+                         class="form-control form-control-sm"
+                         placeholder="Ex : cuisine partagée ce soir-là"
+                         style="min-width:220px;max-width:340px;">
+                  <button class="btn btn-sm btn-primary">Enregistrer</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          onclick="document.getElementById('edit-ligne-{{ ligne.pk }}').style.display='none';">Annuler</button>
+                </form>
+              </td>
+            </tr>
+            {% endif %}
             {% empty %}
             <tr><td colspan="6" class="text-center text-muted py-3">
               Aucune ligne. Régénérez les brouillons depuis le tableau de bord finance.

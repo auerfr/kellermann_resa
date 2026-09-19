@@ -7734,6 +7734,45 @@ def finance_facture_detail(request, pk):
 
 
 @staff_required
+def finance_ligne_edit(request, pk, ligne_pk):
+    """Modifie le prix unitaire d'une ligne de brouillon (correction manuelle avec motif)."""
+    from .models import Facture, LigneFacture
+    from decimal import Decimal, InvalidOperation
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    ligne   = get_object_or_404(LigneFacture, pk=ligne_pk, facture=facture)
+
+    if facture.statut != 'brouillon':
+        messages.error(request, "Seul un brouillon peut être modifié.")
+    else:
+        raw = request.POST.get('montant_unitaire', '').strip().replace(',', '.')
+        motif = request.POST.get('note_override', '').strip()
+        try:
+            nouveau_pu = Decimal(raw)
+            if nouveau_pu < 0:
+                raise ValueError
+        except (InvalidOperation, ValueError):
+            messages.error(request, "Montant invalide.")
+        else:
+            ligne.montant_unitaire = nouveau_pu
+            ligne.montant_total    = (ligne.quantite * nouveau_pu).quantize(Decimal('0.01'))
+            ligne.note_override    = motif
+            ligne.save(update_fields=['montant_unitaire', 'montant_total', 'note_override'])
+            facture.recalculer_total()
+            messages.success(request, f"Ligne mise à jour : {nouveau_pu} € / unité.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
 def finance_ligne_toggle(request, pk, ligne_pk):
     """Bascule facturable/non-facturable sur une ligne, recalcule le total."""
     from .models import Facture, LigneFacture
