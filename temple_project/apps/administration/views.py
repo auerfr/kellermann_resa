@@ -6323,18 +6323,22 @@ def budget_simulation(request):
             tarif_eq_hg_display = net_hg_display / Decimal(str(sim['eff_eq_hg']))
 
     # Calcul des recettes au tarif voté (multiplication décimale impossible en template)
+    # charges_nettes_total = ce que les cotisations annuelles doivent couvrir
+    # (total charges − recettes occasionnels − recettes exceptionnelles adhérents)
+    # Calculé indépendamment des effectifs pour que le scénario personnalisé fonctionne
+    # même quand les effectifs ne sont pas tous renseignés.
+    charges_nettes_total = None
+    if sim:
+        charges_nettes_total = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
+
     recette_lb_votee = recette_hg_votee = recette_totale_votee = deficit_votee = None
     if sim and sim.get('eff_eq_lb') and params.tarif_membre_loge:
         recette_lb_votee = Decimal(str(params.tarif_membre_loge)) * sim['eff_eq_lb']
-    if sim and sim.get('eff_eq_hg') and params.tarif_membre_hg:
-        recette_hg_votee = Decimal(str(params.tarif_membre_hg)) * sim['eff_eq_hg']
+    if sim and sim.get('nb_resas_hg_adherents') and params.tarif_membre_hg:
+        recette_hg_votee = Decimal(str(params.tarif_membre_hg)) * sim['nb_resas_hg_adherents']
     if recette_lb_votee is not None and recette_hg_votee is not None:
         recette_totale_votee = recette_lb_votee + recette_hg_votee
-        charges_nettes = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
-        deficit_votee = charges_nettes - recette_totale_votee
-        charges_nettes_total = charges_nettes
-    else:
-        charges_nettes_total = None
+        deficit_votee = charges_nettes_total - recette_totale_votee
 
     # ── Comparaison des modèles économiques par loge ────────────────────────
     # Modèle hybride :
