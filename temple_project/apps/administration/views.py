@@ -6278,6 +6278,12 @@ def budget_simulation(request):
     pct_lb_raw    = request.GET.get('pct_lb', '').strip()
     pct_lb_custom = _parse_dec_param(pct_lb_raw)
 
+    # Tarifs personnalisés à tester (saisie libre)
+    tarif_lb_p_raw = request.GET.get('tarif_lb_p', '').strip()
+    tarif_hg_p_raw = request.GET.get('tarif_hg_p', '').strip()
+    tarif_lb_propose_input = _parse_dec_param(tarif_lb_p_raw)
+    tarif_hg_propose_input = _parse_dec_param(tarif_hg_p_raw)
+
     params = Parametres.get_instance()
     postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
     sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
@@ -6407,6 +6413,45 @@ def budget_simulation(request):
             deficit_hybride = charges_nettes_total - recettes_hybride_total
             solde_hybride   = recettes_hybride_total - charges_nettes_total
 
+    # ── Scénario tarif personnalisé ─────────────────────────────────────────────
+    scenario_propose = None
+    if sim and charges_nettes_total is not None:
+        # Utiliser le tarif saisi, sinon tarif d'équilibre comme point de départ
+        tlb = Decimal(str(tarif_lb_propose_input)) if tarif_lb_propose_input is not None else tarif_eq_lb_display
+        thg = Decimal(str(tarif_hg_propose_input)) if tarif_hg_propose_input is not None else tarif_eq_hg_display
+        if tlb is not None and thg is not None:
+            eff_lb_s  = sim.get('eff_eq_lb') or 0
+            nb_t_hg_s = sim.get('nb_resas_hg_adherents') or 0
+            rec_lb_s  = tlb * Decimal(str(eff_lb_s))
+            rec_hg_s  = thg * Decimal(str(nb_t_hg_s))
+            rec_tot_s = rec_lb_s + rec_hg_s
+            solde_s   = rec_tot_s - charges_nettes_total
+            scenario_propose = {
+                'tarif_lb':      tlb,
+                'tarif_hg':      thg,
+                'recettes_lb':   rec_lb_s,
+                'recettes_hg':   rec_hg_s,
+                'recettes_total': rec_tot_s,
+                'solde':         solde_s,
+                'is_custom': tarif_lb_propose_input is not None or tarif_hg_propose_input is not None,
+            }
+            for l in sim['par_loge']:
+                if not l.get('membre_association'):
+                    l['cout_propose'] = None
+                    continue
+                eff   = l.get('effectif') or 0
+                nb_tl = l.get('nb_tenues') or 0
+                if l['type_loge'] == 'loge' and eff:
+                    l['cout_propose'] = tlb * eff
+                elif l['type_loge'] == 'haut_grade' and nb_tl:
+                    l['cout_propose'] = thg * nb_tl
+                else:
+                    l['cout_propose'] = None
+                if l['cout_propose'] is not None and l.get('cotisation_actuelle'):
+                    l['ecart_propose'] = l['cout_propose'] - l['cotisation_actuelle']
+                else:
+                    l['ecart_propose'] = None
+
     # ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ─────────────
     # Les charges fixes sont déjà couvertes par la cotisation des adhérents.
     # Une tenue externe ne supporte que : énergie (mutualisée) + nettoyage (marginal).
@@ -6445,6 +6490,9 @@ def budget_simulation(request):
         'nb_membres_hg': nb_membres_hg or '',
         'recettes_exc': recettes_exc_raw,
         'pct_lb': pct_lb_raw,
+        'tarif_lb_p': tarif_lb_p_raw,
+        'tarif_hg_p': tarif_hg_p_raw,
+        'scenario_propose': scenario_propose,
         'pct_lb_defaut': pct_lb_defaut,
         'pct_hg_defaut': pct_hg_defaut,
         'sim': sim,

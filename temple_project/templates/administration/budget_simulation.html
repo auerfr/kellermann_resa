@@ -144,6 +144,37 @@
         </div>
       </div>
 
+      <div class="col-12"><hr class="my-1" style="border-color:#E2E8F0;"></div>
+      <div class="col-12" style="font-size:11px;font-weight:600;color:#5B21B6;letter-spacing:.06em;text-transform:uppercase;">
+        🎯 Tester des tarifs personnalisés
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Tarif LB proposé
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="tarif_lb_p" class="form-control"
+                 min="0" max="9999" step="0.5"
+                 placeholder="{{ tarif_eq_lb_display|floatformat:0|default:'auto' }}"
+                 value="{{ tarif_lb_p }}">
+          <span class="input-group-text text-muted">€/mbr</span>
+        </div>
+        <div class="form-text">Laissez vide = tarif d'équilibre</div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Tarif HG proposé
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="tarif_hg_p" class="form-control"
+                 min="0" max="9999" step="0.5"
+                 placeholder="{{ tarif_eq_hg_display|floatformat:0|default:'auto' }}"
+                 value="{{ tarif_hg_p }}">
+          <span class="input-group-text text-muted">€/tenue</span>
+        </div>
+        <div class="form-text">Laissez vide = tarif d'équilibre</div>
+      </div>
+
       <div class="col-md-1 d-flex gap-2 align-items-end">
         <button type="submit" class="btn btn-primary btn-sm">Simuler</button>
         <a href="?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">✕</a>
@@ -545,6 +576,122 @@
       HG — Tarif d'équilibre = tarif_eq × nb_tenues · Hybride = variable/tenue uniquement (fixe couvert par cotisation LB).
       Écart = différence vs cotisation actuelle. Rouge = paierait plus · Vert = paierait moins.
       Calculs hors loges occasionnelles (couvertes par leur tarif à la tenue).
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Scénario tarif personnalisé ── #}
+{% if scenario_propose %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #F59E0B!important;">
+  <div class="card-body py-3 px-4">
+    <div class="fw-bold mb-3" style="color:#0F2137;font-size:15px;">
+      🎯 Résultat — tarif testé{% if scenario_propose.is_custom %} (personnalisé){% else %} (= tarif d'équilibre){% endif %}
+    </div>
+
+    {# Résumé en 3 tuiles #}
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#F5F3FF;border:1px solid #C4B5FD;">
+          <div style="font-size:11px;color:#5B21B6;text-transform:uppercase;letter-spacing:.06em;">LB — tarif testé</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#5B21B6;">{{ scenario_propose.tarif_lb|floatformat:2 }} €<span style="font-size:12px;font-weight:400;">/mbr</span></div>
+          <div style="font-size:11px;color:#6B7280;">→ {{ scenario_propose.recettes_lb|floatformat:0 }} € de recettes LB</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#F5F3FF;border:1px solid #C4B5FD;">
+          <div style="font-size:11px;color:#5B21B6;text-transform:uppercase;letter-spacing:.06em;">HG — tarif testé</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#5B21B6;">{{ scenario_propose.tarif_hg|floatformat:2 }} €<span style="font-size:12px;font-weight:400;">/tenue</span></div>
+          <div style="font-size:11px;color:#6B7280;">→ {{ scenario_propose.recettes_hg|floatformat:0 }} € de recettes HG</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#F8FAFC;border:1px solid #CBD5E1;">
+          <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recettes totales cotisations</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ scenario_propose.recettes_total|floatformat:0 }} €</div>
+          <div style="font-size:11px;color:#6B7280;">hors tenues excep. et ext.</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        {% if scenario_propose.solde >= 0 %}
+        <div class="p-3 rounded text-center" style="background:#D1FAE5;border:1px solid #6EE7B7;">
+          <div style="font-size:11px;color:#065F46;text-transform:uppercase;letter-spacing:.06em;">✓ Budget couvert</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#059669;">+{{ scenario_propose.solde|floatformat:0 }} €</div>
+          <div style="font-size:11px;color:#065F46;">excédent annuel estimé</div>
+        </div>
+        {% else %}
+        <div class="p-3 rounded text-center" style="background:#FEE2E2;border:1px solid #FCA5A5;">
+          <div style="font-size:11px;color:#991B1B;text-transform:uppercase;letter-spacing:.06em;">⚠ Déficit</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#B91C1C;">{{ scenario_propose.solde|floatformat:0 }} €</div>
+          <div style="font-size:11px;color:#991B1B;">charges non couvertes</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Note sur les charges HG fixes #}
+    {% if sim.hg_fixe_absorbe %}
+    <div class="alert alert-light border py-2 mb-3" style="font-size:12px;">
+      <strong>ℹ Note :</strong>
+      Les <strong>{{ sim.hg_fixe_absorbe|floatformat:0 }} € de charges fixes HG</strong> (loyers, assurances…) ne sont pas inclus dans la cotisation HG —
+      la logique retenue est que les membres HG cotisent aussi en LB et couvrent déjà ces charges via leur cotisation LB.
+      Si une partie des membres HG vient d'autres temples, augmentez le tarif LB pour absorber cette différence.
+    </div>
+    {% endif %}
+
+    {# Impact par loge #}
+    <div class="fw-semibold mb-2" style="font-size:13px;color:#0F2137;">Impact par loge avec ce tarif</div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:12px;">
+        <thead>
+          <tr style="background:#F8FAFC;">
+            <th class="ps-3">Loge</th>
+            <th class="text-center">Type</th>
+            <th class="text-center">Base de calcul</th>
+            <th class="text-end">Montant testé</th>
+            <th class="text-end">Cotisation actuelle</th>
+            <th class="text-end pe-2">Écart</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in sim.par_loge %}
+          {% if l.membre_association and l.cout_propose %}
+          <tr>
+            <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
+            <td class="text-center">
+              {% if l.type_loge == 'haut_grade' %}
+              <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
+              {% else %}
+              <span class="badge bg-secondary">LB</span>
+              {% endif %}
+            </td>
+            <td class="text-center text-muted">
+              {% if l.type_loge == 'haut_grade' %}
+                {{ l.nb_tenues }} tenue{{ l.nb_tenues|pluralize }}
+              {% else %}
+                {{ l.effectif }} membre{{ l.effectif|pluralize }}
+              {% endif %}
+            </td>
+            <td class="text-end fw-bold" style="color:#5B21B6;">{{ l.cout_propose|floatformat:0 }} €</td>
+            <td class="text-end text-muted">
+              {% if l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end pe-2">
+              {% if l.ecart_propose is not None %}
+                {% if l.ecart_propose > 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">+{{ l.ecart_propose|floatformat:0 }} €</span>
+                {% elif l.ecart_propose < 0 %}
+                  <span style="color:#059669;font-weight:600;">{{ l.ecart_propose|floatformat:0 }} €</span>
+                {% else %}
+                  <span class="text-muted">= 0</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
