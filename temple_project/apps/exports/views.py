@@ -137,8 +137,35 @@ def _compute_stats(annee_saison):
         "total_cabinets": total_cabinets,
     }
 
-    resa_par_obedience = list(reservations.values('loge__obedience__nom')
+    # Tenues par obédience
+    resa_par_obedience_raw = list(reservations.values('loge__obedience__nom')
         .annotate(nb_reservations=Count('id')).order_by('-nb_reservations')[:15])
+    # Salles/cabinets par obédience (loges membres uniquement)
+    _s_obe = {
+        r['loge__obedience__nom']: r['n']
+        for r in resa_salles.filter(loge__isnull=False)
+                            .exclude(salle__type_salle='cabinet_reflexion')
+                            .values('loge__obedience__nom')
+                            .annotate(n=Count('id'))
+    }
+    _c_obe = {
+        r['loge__obedience__nom']: r['n']
+        for r in resa_salles.filter(loge__isnull=False)
+                            .filter(salle__type_salle='cabinet_reflexion')
+                            .values('loge__obedience__nom')
+                            .annotate(n=Count('id'))
+    }
+    resa_par_obedience = []
+    for row in resa_par_obedience_raw:
+        nom = row['loge__obedience__nom']
+        nb_s = _s_obe.get(nom, 0)
+        nb_c = _c_obe.get(nom, 0)
+        resa_par_obedience.append({
+            **row,
+            'nb_salles': nb_s,
+            'nb_cabinets': nb_c,
+            'nb_total': row['nb_reservations'] + nb_s + nb_c,
+        })
 
     resa_par_mois = []
     for m in [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]:
