@@ -292,13 +292,22 @@
   </div>
   <div class="table-responsive">
     <table class="stx-tbl">
-      <thead><tr><th>Loge</th><th>Date</th><th>Temple</th><th>Statut</th></tr></thead>
+      <thead><tr><th>Loge</th><th>Date</th><th>Type</th><th>Lieu</th><th>Statut</th></tr></thead>
       <tbody>
         {% for r in recentes %}
         <tr>
-          <td data-label="Loge" style="font-weight:600;color:#0F2137;">{{ r.loge.abreviation }}</td>
+          <td data-label="Loge" style="font-weight:600;color:#0F2137;">{{ r.loge_nom }}</td>
           <td data-label="Date" style="color:#64748B;">{{ r.date|date:"d/m/Y" }}</td>
-          <td data-label="Temple" style="color:#64748B;">{{ r.temple }}</td>
+          <td data-label="Type">
+            {% if r.kind == 'Tenue' %}
+              <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:#EBF1FA;color:#0F2137;font-weight:600;">Tenue</span>
+            {% elif r.kind == 'Cabinet' %}
+              <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:#EDE9FE;color:#5B21B6;font-weight:600;">Cabinet</span>
+            {% else %}
+              <span style="font-size:11px;padding:2px 6px;border-radius:4px;background:#FEF3C7;color:#92400E;font-weight:600;">Salle</span>
+            {% endif %}
+          </td>
+          <td data-label="Lieu" style="color:#64748B;">{{ r.lieu }}</td>
           <td data-label="Statut">
             {% if r.statut == 'validee' %}<span class="stx-badge-ok">Validée</span>
             {% elif r.statut == 'attente' %}<span class="stx-badge-wait">En attente</span>
@@ -306,7 +315,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="4" class="text-center text-muted py-4" style="font-size:13px;">Aucune réservation récente.</td></tr>
+        <tr><td colspan="5" class="text-center text-muted py-4" style="font-size:13px;">Aucune réservation récente.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -48,7 +48,34 @@ def staff_required(view_func):
 @staff_required
 def tableau_de_bord(request):
     reservations_attente  = Reservation.objects.filter(statut='attente').select_related('loge', 'temple').order_by('date')
-    reservations_recentes = Reservation.objects.order_by('-created_at')[:10]
+    # Fusionner Reservation (tenues) + ReservationSalle (salles/cabinets) pour l'affichage récent
+    _recentes_tenues = Reservation.objects.order_by('-created_at').select_related('loge', 'temple')[:20]
+    _recentes_salles = ReservationSalle.objects.order_by('-created_at').select_related('loge', 'salle')[:20]
+    _items_recents = []
+    for r in _recentes_tenues:
+        _items_recents.append({
+            'kind': 'Tenue',
+            'loge_nom': r.loge.abreviation if r.loge else '—',
+            'date': r.date,
+            'lieu': str(r.temple) if r.temple else '—',
+            'statut': r.statut,
+            'created_at': r.created_at,
+        })
+    for r in _recentes_salles:
+        if r.type_reunion == 'cabinet_reflexion':
+            kind = 'Cabinet'
+        else:
+            kind = 'Salle'
+        _items_recents.append({
+            'kind': kind,
+            'loge_nom': r.loge.abreviation if r.loge else (r.organisation[:20] or r.nom_demandeur[:20]),
+            'date': r.date,
+            'lieu': str(r.salle) if r.salle else '—',
+            'statut': r.statut,
+            'created_at': r.created_at,
+        })
+    _items_recents.sort(key=lambda x: x['created_at'], reverse=True)
+    reservations_recentes = _items_recents[:15]
     reservations_salle_attente = ReservationSalle.objects.filter(
         statut='attente'
     ).select_related('salle').order_by('date')
