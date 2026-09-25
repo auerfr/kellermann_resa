@@ -119,6 +119,7 @@ def _compute_stats(annee_saison):
 
     d1, d2 = date(annee_saison, 9, 1), date(annee_saison + 1, 6, 30)
     reservations = Reservation.objects.filter(date__gte=d1, date__lte=d2)
+    resa_salles = ReservationSalle.objects.filter(date__gte=d1, date__lte=d2).select_related('salle')
 
     total    = reservations.count()
     validees = reservations.filter(statut="validee").count()
@@ -126,10 +127,14 @@ def _compute_stats(annee_saison):
     refusees = reservations.filter(statut="refusee").count()
     total_repas = reservations.filter(besoin_agapes=True, statut="validee").aggregate(
         s=Sum("nombre_repas"))["s"] or 0
+    total_salles   = resa_salles.exclude(salle__type_salle='cabinet_reflexion').count()
+    total_cabinets = resa_salles.filter(salle__type_salle='cabinet_reflexion').count()
     stats = {
         "total": total, "validees": validees, "attente": attente, "refusees": refusees,
         "total_repas": total_repas,
         "taux_validation": round(validees / total * 100, 1) if total else 0,
+        "total_salles": total_salles,
+        "total_cabinets": total_cabinets,
     }
 
     resa_par_obedience = list(reservations.values('loge__obedience__nom')
@@ -138,8 +143,13 @@ def _compute_stats(annee_saison):
     resa_par_mois = []
     for m in [9, 10, 11, 12, 1, 2, 3, 4, 5, 6]:
         ya = annee_saison if m >= 9 else annee_saison + 1
-        resa_par_mois.append({'mois': f'{ya}-{m:02d}',
-                              'count': reservations.filter(date__year=ya, date__month=m).count()})
+        rs_mois = resa_salles.filter(date__year=ya, date__month=m)
+        resa_par_mois.append({
+            'mois': f'{ya}-{m:02d}',
+            'count': reservations.filter(date__year=ya, date__month=m).count(),
+            'count_salles': rs_mois.exclude(salle__type_salle='cabinet_reflexion').count(),
+            'count_cabinets': rs_mois.filter(salle__type_salle='cabinet_reflexion').count(),
+        })
 
     resa_par_temple = list(reservations.values('temple__nom')
         .annotate(nb_reservations=Count('id')).order_by('-nb_reservations'))
