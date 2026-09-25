@@ -16,12 +16,15 @@
       <h1 class="mb-1" style="font-size:22px;font-weight:600;letter-spacing:-.01em;color:#0F2137;">Occupation &amp; capacité</h1>
       <div style="font-size:13px;color:#64748B;">Saison {{ annee }}–{{ annee|add:1 }} · {{ nb_jours }} jours × 3 créneaux (matin / après-midi / soir)</div>
     </div>
-    <form method="get" class="d-flex gap-2 align-items-center">
-      <select name="annee" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
-        {% for a in annees %}<option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}–{{ a|add:1 }}</option>{% endfor %}
-      </select>
-      <a href="{% url 'administration:occupation_export_pdf' %}?annee={{ annee }}{% if weekend_sel == '1' %}&weekend=1{% endif %}" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;border:none;padding:7px 14px;border-radius:9px;">⤓ Présentation (bureau / AG)</a>
-    </form>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <form method="get" class="d-flex gap-2 align-items-center">
+        <select name="annee" class="stx-pill" style="cursor:pointer;" onchange="this.form.submit()">
+          {% for a in annees %}<option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}–{{ a|add:1 }}</option>{% endfor %}
+        </select>
+        <a href="{% url 'administration:occupation_export_pdf' %}?annee={{ annee }}{% if weekend_sel == '1' %}&weekend=1{% endif %}" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;border:none;padding:7px 14px;border-radius:9px;">⤓ Présentation (bureau / AG)</a>
+      </form>
+      <a href="{% url 'administration:finance_saison' %}" class="btn btn-sm btn-outline-secondary" style="border-radius:9px;">← Finance</a>
+    </div>
   </div>
 
   {# ── KPI hero ── #}
@@ -133,24 +136,54 @@
   </div>
 
   {# ── Potentiel financier ── #}
-  <div class="stx-sect">Potentiel financier annuel</div>
+  <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">
+    <div class="stx-sect" style="margin-bottom:0;">Potentiel financier annuel</div>
+    <form method="get" class="d-flex align-items-end gap-2 flex-wrap" style="font-size:12px;">
+      <input type="hidden" name="annee" value="{{ annee }}">
+      {% if weekend_sel %}<input type="hidden" name="weekend" value="{{ weekend_sel }}">{% endif %}
+      {% if temple_sel %}<input type="hidden" name="temple" value="{{ temple_sel }}">{% endif %}
+      {% if moment_sel %}<input type="hidden" name="moment" value="{{ moment_sel }}">{% endif %}
+      <div>
+        <label class="d-block text-muted" style="font-size:11px;margin-bottom:2px;">Tarif / membre LB (€)</label>
+        <input type="number" name="t_loge" step="0.01" min="1" class="stx-pill" style="width:90px;padding:4px 8px;"
+               value="{{ sim_t_loge }}" placeholder="{{ params.tarif_membre_loge }}">
+      </div>
+      <div>
+        <label class="d-block text-muted" style="font-size:11px;margin-bottom:2px;">Tarif / membre HG (€)</label>
+        <input type="number" name="t_hg" step="0.01" min="1" class="stx-pill" style="width:90px;padding:4px 8px;"
+               value="{{ sim_t_hg }}" placeholder="{{ params.tarif_membre_hg }}">
+      </div>
+      <div>
+        <label class="d-block text-muted" style="font-size:11px;margin-bottom:2px;">Effectif min</label>
+        <input type="number" name="mb_min" step="1" min="1" class="stx-pill" style="width:70px;padding:4px 8px;"
+               value="{{ sim_mb_min }}">
+      </div>
+      <div>
+        <label class="d-block text-muted" style="font-size:11px;margin-bottom:2px;">Effectif max</label>
+        <input type="number" name="mb_max" step="1" min="1" class="stx-pill" style="width:70px;padding:4px 8px;"
+               value="{{ sim_mb_max }}">
+      </div>
+      <button type="submit" class="stx-pill" style="background:#0F2137;color:#C8A84B;border:none;padding:5px 12px;cursor:pointer;">Simuler</button>
+      <a href="?annee={{ annee }}" class="stx-pill" style="padding:5px 10px;color:#64748B;text-decoration:none;">✕</a>
+    </form>
+  </div>
   <div class="row g-3 mb-2">
     <div class="col-md-6">
       <div class="stx-card h-100" style="padding:16px 18px;border-left:4px solid #C8A84B;">
         <div class="stx-kpi-lbl">Si on remplit en loges bleues</div>
         <div class="stx-kpi-num">{{ fin.pot_loges_min }} – {{ fin.pot_loges_max }} <span style="font-size:15px;color:#94A3B8;">€/an</span></div>
-        <div class="stx-kpi-sub">~{{ fin.cap_loges }} loges × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_loge }} €)</div>
+        <div class="stx-kpi-sub">~{{ fin.cap_loges }} loges × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_loge }} €/mbr)</div>
       </div>
     </div>
     <div class="col-md-6">
       <div class="stx-card h-100" style="padding:16px 18px;border-left:4px solid #0E7C7B;">
         <div class="stx-kpi-lbl">Si on remplit en hauts grades</div>
         <div class="stx-kpi-num">{{ fin.pot_hg_min }} – {{ fin.pot_hg_max }} <span style="font-size:15px;color:#94A3B8;">€/an</span></div>
-        <div class="stx-kpi-sub">~{{ fin.cap_hg }} hauts grades × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_hg }} €)</div>
+        <div class="stx-kpi-sub">~{{ fin.cap_hg }} ateliers × ({{ fin.mb_min }}–{{ fin.mb_max }} membres × {{ fin.t_hg }} €/mbr)</div>
       </div>
     </div>
   </div>
-  <div class="stx-kpi-sub mb-4">Une loge bleue rapporte ~2× plus par créneau qu'un haut grade — à privilégier là où il y a de la place le soir. Les hauts grades peuvent en plus occuper les journées/week-ends (capacité quasi illimitée en sus). Tarifs paramétrables dans Facturation.</div>
+  <div class="stx-kpi-sub mb-4">Une loge bleue rapporte ~2× plus par créneau qu'un haut grade. Les tarifs par défaut viennent de <a href="{% url 'administration:facturation' %}" style="color:#0F2137;">Facturation</a> — modifiez-les ici pour simuler différents scénarios.</div>
 
   {# ── Créneaux disponibles à proposer ── #}
   <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-2">

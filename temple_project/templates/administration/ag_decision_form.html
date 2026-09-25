@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}{% if decision %}Modifier la décision{% else %}Nouvelle décision d'AG{% endif %}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">
+      {% if decision %}Modifier la décision d'AG{% else %}Nouvelle décision d'AG{% endif %}
+    </h1>
+    <p class="text-muted small mb-0">Budget voté par poste + schéma de tarification</p>
+  </div>
+  <a href="{% url 'administration:ag_decisions_liste' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
+</div>
+
+{% if messages %}{% for msg in messages %}
+<div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
+{% endfor %}{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+{% csrf_token %}
+{% if schema.pk %}<input type="hidden" name="schema_pk" value="{{ schema.pk }}">{% endif %}
+
+<div class="row g-4">
+
+  {# ── Col gauche : décision ── #}
+  <div class="col-md-5">
+
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header" style="background:#0F2137;color:#fff;font-size:13px;font-weight:600;">Décision d'AG</div>
+      <div class="card-body p-3">
+        <div class="row g-2">
+          <div class="col-6">
+            <label class="form-label small fw-semibold">Saison</label>
+            <input type="number" name="saison" value="{{ decision.saison|default:saison_courante }}"
+                   class="form-control form-control-sm" min="2020" max="2040" required>
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-semibold">Date de l'AG</label>
+            <input type="date" name="date_ag"
+                   value="{{ decision.date_ag|date:'Y-m-d'|default:'' }}"
+                   class="form-control form-control-sm" required>
+          </div>
+        </div>
+        <div class="mt-2">
+          <label class="form-label small fw-semibold">Titre / résolution</label>
+          <input type="text" name="libelle_resolution"
+                 value="{{ decision.libelle_resolution|default:'' }}"
+                 class="form-control form-control-sm"
+                 placeholder="Ex: Résolution n°3 — approbation du budget 2026-2027" required>
+        </div>
+        <div class="mt-2">
+          <label class="form-label small fw-semibold">PV de l'AG (PDF, optionnel)</label>
+          <input type="file" name="pv" accept=".pdf" class="form-control form-control-sm">
+          {% if decision.pv %}
+          <div class="text-muted small mt-1">Fichier actuel : {{ decision.pv.name|default:"—" }}</div>
+          {% endif %}
+        </div>
+        <div class="mt-2">
+          <label class="form-label small fw-semibold">Notes libres</label>
+          <textarea name="notes" class="form-control form-control-sm" rows="3"
+                    placeholder="Contexte, remarques du trésorier…">{{ decision.notes|default:'' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-header" style="background:#0F2137;color:#fff;font-size:13px;font-weight:600;">Budget voté par poste</div>
+      <div class="card-body p-3">
+        <p class="text-muted small mb-3">
+          Saisir le budget voté en AG pour chaque poste de dépense (exercice {{ saison_courante }}-{{ saison_courante|add:1 }}).
+        </p>
+        {% with d=decision %}
+        {% for row in budget_rows %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <label class="small mb-0" style="min-width:0;flex:1;">{{ row.label }}</label>
+          <div class="input-group input-group-sm" style="max-width:140px;">
+            <input type="number" name="{{ row.champ }}" step="0.01" min="0"
+                   value="{{ row.valeur }}"
+                   class="form-control text-end ag-budget-input"
+                   id="id_{{ row.champ }}"
+                   placeholder="0">
+            <span class="input-group-text" style="font-size:11px;">€</span>
+          </div>
+        </div>
+        {% endfor %}
+        {% endwith %}
+        <hr class="my-2">
+        <div class="d-flex justify-content-between fw-bold">
+          <span>Total budget</span>
+          <span id="total-budget-display" style="color:#0F2137;font-variant-numeric:tabular-nums;">0,00 €</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {# ── Col droite : schéma de tarification ── #}
+  <div class="col-md-7">
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-header" style="background:#C8A84B;color:#fff;font-size:13px;font-weight:600;">Schéma de tarification voté</div>
+      <div class="card-body p-3">
+        <div class="row g-2 mb-3">
+          <div class="col-8">
+            <label class="form-label small fw-semibold">Nom du schéma</label>
+            <input type="text" name="schema_nom" value="{{ schema.nom|default:'' }}"
+                   class="form-control form-control-sm"
+                   placeholder="Ex : Tarifs 2026-2027 votés AG juin 2026">
+          </div>
+          <div class="col-4">
+            <label class="form-label small fw-semibold">Mode</label>
+            <select name="schema_mode" class="form-select form-select-sm" id="schema-mode">
+              <option value="membre" {% if schema.mode == 'membre' %}selected{% endif %}>Par membre</option>
+              <option value="hybride" {% if schema.mode == 'hybride' %}selected{% endif %}>Hybride</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="fw-semibold small mb-2" style="color:#0F2137;">Cotisations annuelles</div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small">Tarif membre — Loge bleue (€/mbr)</label>
+            <input type="number" name="tarif_membre_loge" step="0.01" min="0"
+                   value="{{ schema.tarif_membre_loge }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Tarif membre — Haut grade (€/mbr)</label>
+            <input type="number" name="tarif_membre_hg" step="0.01" min="0"
+                   value="{{ schema.tarif_membre_hg }}" class="form-control form-control-sm">
+          </div>
+        </div>
+
+        <div id="bloc-hybride" {% if schema.mode != 'hybride' %}style="display:none;"{% endif %}>
+          <div class="fw-semibold small mb-2" style="color:#0F2137;">Part par tenue (mode hybride)</div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label small">Tenue LB (€/tenue)</label>
+              <input type="number" name="tarif_tenue_lb" step="0.01" min="0"
+                     value="{{ schema.tarif_tenue_lb }}" class="form-control form-control-sm">
+            </div>
+            <div class="col-6">
+              <label class="form-label small">Tenue HG (€/tenue)</label>
+              <input type="number" name="tarif_tenue_hg" step="0.01" min="0"
+                     value="{{ schema.tarif_tenue_hg }}" class="form-control form-control-sm">
+            </div>
+          </div>
+        </div>
+
+        <div class="fw-semibold small mb-2" style="color:#0F2137;">Tenues exceptionnelles</div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small">Exceptionnelle sans agapes (€)</label>
+            <input type="number" name="tarif_exc_sans_agapes" step="0.01" min="0"
+                   value="{{ schema.tarif_exc_sans_agapes }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Exceptionnelle avec agapes (€)</label>
+            <input type="number" name="tarif_exc_avec_agapes" step="0.01" min="0"
+                   value="{{ schema.tarif_exc_avec_agapes }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Congrès / session (€/jour)</label>
+            <input type="number" name="tarif_congres_jour" step="0.01" min="0"
+                   value="{{ schema.tarif_congres_jour }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Tenue funèbre (€)</label>
+            <input type="number" name="tarif_funebre" step="0.01" min="0"
+                   value="{{ schema.tarif_funebre }}" class="form-control form-control-sm">
+          </div>
+        </div>
+
+        <div class="fw-semibold small mb-2" style="color:#0F2137;">Contraintes (optionnel)</div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small">Minimum de cotisation (€)</label>
+            <input type="number" name="tarif_minimum" step="0.01" min="0"
+                   value="{{ schema.tarif_minimum|default:'' }}" class="form-control form-control-sm"
+                   placeholder="Pas de minimum">
+          </div>
+          <div class="col-6">
+            <label class="form-label small">Plafond de hausse (%)</label>
+            <input type="number" name="plafond_hausse_pct" step="0.1" min="0"
+                   value="{{ schema.plafond_hausse_pct|default:'' }}" class="form-control form-control-sm"
+                   placeholder="Pas de plafond">
+          </div>
+        </div>
+
+        <div>
+          <label class="form-label small fw-semibold">Notes schéma</label>
+          <textarea name="schema_notes" class="form-control form-control-sm" rows="2"
+                    placeholder="Contexte, hypothèses, lien simulation…">{{ schema.notes|default:'' }}</textarea>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="d-flex gap-2 mt-4">
+  <button type="submit" class="btn px-4" style="background:#0F2137;color:#fff;">
+    {% if decision %}Enregistrer les modifications{% else %}Créer la décision{% endif %}
+  </button>
+  <a href="{% url 'administration:ag_decisions_liste' %}" class="btn btn-outline-secondary">Annuler</a>
+</div>
+
+</form>
+
+<script>
+// ── Total budget en temps réel ──────────────────────────────────────────────
+function updateTotal() {
+  var inputs = document.querySelectorAll('.ag-budget-input');
+  var total = 0;
+  inputs.forEach(function(inp) { total += parseFloat(inp.value) || 0; });
+  document.getElementById('total-budget-display').textContent =
+    total.toLocaleString('fr-FR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' €';
+}
+document.querySelectorAll('.ag-budget-input').forEach(function(inp) {
+  inp.addEventListener('input', updateTotal);
+});
+updateTotal();
+
+// ── Toggle bloc hybride ─────────────────────────────────────────────────────
+document.getElementById('schema-mode').addEventListener('change', function() {
+  document.getElementById('bloc-hybride').style.display = this.value === 'hybride' ? '' : 'none';
+});
+</script>
+{% endblock %}

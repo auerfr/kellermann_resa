@@ -60,6 +60,11 @@ class Loge(models.Model):
         help_text="Nombre de couverts habituels renseigné par le traiteur (prioritaire sur effectif_moyen_agapes)"
     )
     actif                 = models.BooleanField(default=True)
+    membre_association    = models.BooleanField(
+        default=True,
+        help_text="Loge adhérente à l'association (cotisation annuelle). "
+                  "Décocher pour les occupants occasionnels / externes qui ne paient qu'à la tenue.",
+    )
     statut                = models.CharField(
         max_length=15, choices=STATUT_CHOICES, default="active",
         help_text="Active = confirmée ; À reconfirmer = pas de retour pour la nouvelle saison ; Inactive = dissoute/partie",

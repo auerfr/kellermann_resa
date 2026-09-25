@@ -37,18 +37,27 @@ def login_visiteur(request):
         if mdp_saisi == mdp_annuel:
             next_url = request.GET.get("next", "/calendrier/")
             response = redirect(next_url)
-            # Cookie valable 7 jours
             response.set_cookie(
                 "kellermann_membre", "1",
                 max_age=86400 * 7,
                 httponly=True,
                 samesite="Lax"
             )
+            try:
+                from temple_project.apps.reservations.models import AccessLog
+                AccessLog.objects.create(type='calendrier')
+            except Exception:
+                pass
             return response
 
         messages.error(request, "Code d'accès incorrect.")
 
-    return render(request, "auth/login_visiteur.html")
+    try:
+        from temple_project.apps.administration.models import FAQ
+        mini_faq = list(FAQ.objects.filter(categorie='connexion', actif=True).order_by('ordre')[:4])
+    except Exception:
+        mini_faq = []
+    return render(request, "auth/login_visiteur.html", {"mini_faq": mini_faq})
 
 
 def lien_portail(request):

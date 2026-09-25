@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}Activité des loges{% endblock %}
+{% block content %}
+
+{# ── Bandeau résumé ── #}
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📊 Activité des loges</h1>
+    <p class="text-muted small mb-0">Saison {{ annee_saison }}-{{ annee_saison|add:1 }} &middot; {{ nb_loges }} loge{{ nb_loges|pluralize }} affichée{{ nb_loges|pluralize }}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <div class="text-center px-3 py-2 rounded-3" style="background:#F0F9FF;min-width:90px;">
+      <div style="font-size:20px;font-weight:700;color:#0369A1;">{{ nb_calendrier_30j }}</div>
+      <div style="font-size:10px;color:#0284C7;text-transform:uppercase;letter-spacing:.04em;">Connexions calendrier<br><span style="font-weight:400;">30 derniers jours</span></div>
+    </div>
+    <div class="text-center px-3 py-2 rounded-3" style="background:#F0FDF4;min-width:90px;">
+      <div style="font-size:20px;font-weight:700;color:#16A34A;">{{ nb_portail_actif }}</div>
+      <div style="font-size:10px;color:#15803D;text-transform:uppercase;letter-spacing:.04em;">Portails actifs</div>
+    </div>
+    <div class="text-center px-3 py-2 rounded-3" style="background:#F5F3FF;min-width:90px;">
+      <div style="font-size:20px;font-weight:700;color:#7C3AED;">{{ nb_visites_portail_30j }}</div>
+      <div style="font-size:10px;color:#6D28D9;text-transform:uppercase;letter-spacing:.04em;">Visites portails<br><span style="font-weight:400;">30 derniers jours</span></div>
+    </div>
+    {% if nb_attente_total > 0 %}
+    <div class="text-center px-3 py-2 rounded-3" style="background:#FFFBEB;min-width:90px;">
+      <div style="font-size:20px;font-weight:700;color:#D97706;">{{ nb_attente_total }}</div>
+      <div style="font-size:10px;color:#B45309;text-transform:uppercase;letter-spacing:.04em;">Demandes<br>en attente</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Filtres + tri ── #}
+<div class="card border-0 shadow-sm mb-3 px-3 py-2">
+  <div class="d-flex flex-wrap gap-3 align-items-center">
+
+    <div class="d-flex gap-1 align-items-center flex-wrap">
+      <span class="text-muted small me-1">Trier :</span>
+      <a href="?tri=saison&portail={{ filtre_portail }}&attente={{ filtre_attente }}"
+         class="btn btn-sm {% if tri == 'saison' %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Tenues saison</a>
+      <a href="?tri=salle&portail={{ filtre_portail }}&attente={{ filtre_attente }}"
+         class="btn btn-sm {% if tri == 'salle' %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Salles saison</a>
+      <a href="?tri=attente&portail={{ filtre_portail }}&attente={{ filtre_attente }}"
+         class="btn btn-sm {% if tri == 'attente' %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">En attente</a>
+      <a href="?tri=messages&portail={{ filtre_portail }}&attente={{ filtre_attente }}"
+         class="btn btn-sm {% if tri == 'messages' %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Messages</a>
+      <a href="?tri=visites&portail={{ filtre_portail }}&attente={{ filtre_attente }}"
+         class="btn btn-sm {% if tri == 'visites' %}btn-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Visites portail</a>
+    </div>
+
+    <div class="vr d-none d-md-block" style="height:24px;"></div>
+
+    <div class="d-flex gap-1 align-items-center flex-wrap">
+      <span class="text-muted small me-1">Filtrer :</span>
+      <a href="?tri={{ tri }}&portail=&attente={{ filtre_attente }}"
+         class="btn btn-sm {% if not filtre_portail %}btn-secondary{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Tous</a>
+      <a href="?tri={{ tri }}&portail=actif&attente={{ filtre_attente }}"
+         class="btn btn-sm {% if filtre_portail == 'actif' %}btn-success{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Portail actif</a>
+      <a href="?tri={{ tri }}&portail=non&attente={{ filtre_attente }}"
+         class="btn btn-sm {% if filtre_portail == 'non' %}btn-warning text-dark{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">Sans portail</a>
+      <a href="?tri={{ tri }}&portail={{ filtre_portail }}&attente={% if filtre_attente %}{% else %}1{% endif %}"
+         class="btn btn-sm {% if filtre_attente %}btn-danger{% else %}btn-outline-secondary{% endif %}" style="font-size:12px;">
+        {% if filtre_attente %}✕ {% endif %}En attente seulement
+      </a>
+    </div>
+
+  </div>
+</div>
+
+{# ── Tableau ── #}
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+      <thead style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.05em;text-transform:uppercase;">
+        <tr>
+          <th class="ps-3 py-2">Loge</th>
+          {% with base="?portail="|add:filtre_portail|add:"&attente="|add:filtre_attente %}
+          <th class="text-center py-2" style="cursor:pointer;" title="Trier par tenues saison">
+            <a href="{{ base }}&tri=saison" style="color:{% if tri == 'saison' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">
+              Tenues {% if tri == 'saison' %}▼{% endif %}<br><span style="font-weight:400;font-size:10px;opacity:.7;">{{ annee_saison }}-{{ annee_saison|add:1 }}</span>
+            </a>
+          </th>
+          <th class="text-center py-2" style="cursor:pointer;" title="Trier par salles saison">
+            <a href="{{ base }}&tri=salle" style="color:{% if tri == 'salle' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">
+              Salles {% if tri == 'salle' %}▼{% endif %}<br><span style="font-weight:400;font-size:10px;opacity:.7;">{{ annee_saison }}-{{ annee_saison|add:1 }}</span>
+            </a>
+          </th>
+          <th class="text-center py-2" style="cursor:pointer;">
+            <a href="{{ base }}&tri=attente" style="color:{% if tri == 'attente' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">
+              En attente {% if tri == 'attente' %}▼{% endif %}
+            </a>
+          </th>
+          <th class="text-center py-2" style="cursor:pointer;">
+            <a href="{{ base }}&tri=messages" style="color:{% if tri == 'messages' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">
+              Messages {% if tri == 'messages' %}▼{% endif %}
+            </a>
+          </th>
+          <th class="text-center py-2" style="cursor:pointer;">
+            <a href="{{ base }}&tri=visites" style="color:{% if tri == 'visites' %}#FFD700{% else %}#C8A84B{% endif %};text-decoration:none;">
+              Visites portail {% if tri == 'visites' %}▼{% endif %}
+            </a>
+          </th>
+          {% endwith %}
+          <th class="text-center py-2">Portail</th>
+          <th class="text-end pe-3 py-2">Accès rapide</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for loge in loges %}
+        <tr {% if loge.nb_attente > 0 %}style="background:#FFFDF0;"{% endif %}>
+
+          <td class="ps-3 py-2">
+            <div class="fw-semibold" style="color:#0F2137;">{{ loge.nom }}</div>
+            {% if loge.nom_contact %}
+            <div style="font-size:11px;color:#94A3B8;">{{ loge.nom_contact }}</div>
+            {% endif %}
+            {% if loge.email %}
+            <div style="font-size:10px;color:#CBD5E1;">{{ loge.email }}</div>
+            {% endif %}
+          </td>
+
+          <td class="text-center py-2">
+            {% if loge.nb_saison > 0 %}
+            <span class="badge rounded-pill" style="background:#0F2137;color:#C8A84B;font-size:12px;min-width:28px;">{{ loge.nb_saison }}</span>
+            {% else %}<span style="color:#CBD5E1;">—</span>{% endif %}
+          </td>
+
+          <td class="text-center py-2">
+            {% if loge.nb_salle_saison > 0 %}
+            <span style="color:#475569;font-weight:600;">{{ loge.nb_salle_saison }}</span>
+            {% else %}<span style="color:#CBD5E1;">—</span>{% endif %}
+          </td>
+
+          <td class="text-center py-2">
+            {% if loge.nb_attente > 0 %}
+            <span class="badge rounded-pill bg-warning text-dark" style="font-size:12px;min-width:28px;">{{ loge.nb_attente }}</span>
+            {% if loge.nb_attente_t > 0 and loge.nb_salle_attente > 0 %}
+            <div style="font-size:10px;color:#92400E;">{{ loge.nb_attente_t }}T + {{ loge.nb_salle_attente }}S</div>
+            {% endif %}
+            {% else %}<span style="color:#CBD5E1;">—</span>{% endif %}
+          </td>
+
+          <td class="text-center py-2">
+            {% if loge.nb_messages > 0 %}
+            <a href="{% url 'administration:messagerie' %}"
+               style="color:#2563EB;font-weight:600;text-decoration:none;">{{ loge.nb_messages }}</a>
+            {% else %}<span style="color:#CBD5E1;">—</span>{% endif %}
+          </td>
+
+          <td class="text-center py-2">
+            {% if loge.nb_visites > 0 %}
+            <span style="font-weight:600;color:#334155;">{{ loge.nb_visites }}</span>
+            {% if loge.nb_visites_30j > 0 %}
+            <div style="font-size:10px;color:#7C3AED;">+{{ loge.nb_visites_30j }} ce mois</div>
+            {% endif %}
+            {% else %}<span style="color:#CBD5E1;">—</span>{% endif %}
+          </td>
+
+          <td class="text-center py-2">
+            {% if loge.portail_token %}
+            <span class="badge rounded-pill" style="background:#DCFCE7;color:#16A34A;font-size:11px;">Actif</span>
+            {% if loge.portail_since %}
+            <div style="font-size:10px;color:#94A3B8;">{{ loge.portail_since|date:"m/Y" }}</div>
+            {% endif %}
+            {% else %}
+            <span style="color:#CBD5E1;font-size:11px;">—</span>
+            {% endif %}
+          </td>
+
+          <td class="text-end pe-3 py-2">
+            <div class="d-flex gap-2 justify-content-end flex-wrap">
+              {% if loge.portail_token %}
+              <a href="{% url 'reservations:portail_loge' token=loge.portail_token %}" target="_blank"
+                 class="btn btn-sm fw-semibold"
+                 style="background:#0F2137;color:#C8A84B;border:none;font-size:11px;padding:3px 10px;border-radius:7px;">
+                Portail ↗
+              </a>
+              {% endif %}
+              <a href="{% url 'administration:annuaire' %}?q={{ loge.nom|urlencode }}"
+                 class="btn btn-sm btn-outline-secondary" style="font-size:11px;padding:3px 8px;border-radius:7px;">
+                Fiche
+              </a>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center text-muted py-4">Aucune loge à afficher avec ces filtres.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="text-muted mt-2" style="font-size:11px;">
+  💡 Tenues et salles = saison {{ annee_saison }}-{{ annee_saison|add:1 }}, validées uniquement.
+  Visites portail et connexions calendrier enregistrées depuis la mise en place du tracking.
+  Messages = formulaires reçus liés à la loge (par association directe ou email).
+</div>
+
+{% endblock %}
