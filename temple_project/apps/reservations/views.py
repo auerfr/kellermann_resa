@@ -104,10 +104,10 @@ def soumettre_demande_salle(request):
     import uuid as uuid_module
     from datetime import date as date_cls, time as time_cls
 
-    # Salles proposées : réunion uniquement (pas les agapes, cabinets, ni temples)
+    # Salles proposées : réunion + agapes (pas les cabinets, ni temples)
     salles_qs = SalleReunion.objects.filter(
-        type_salle='reunion', actif=True
-    ).order_by('nom')
+        type_salle__in=['reunion', 'agapes'], actif=True
+    ).order_by('type_salle', 'nom')
     salles_par_type = {}
     for s in salles_qs:
         salles_par_type.setdefault(s.get_type_salle_display(), []).append(s)
