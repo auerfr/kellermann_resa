@@ -1,0 +1,1048 @@
+{% extends "base.html" %}
+{% block title %}Simulation budgétaire{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">📊 Simulation budgétaire</h1>
+    <p class="text-muted small mb-0">Répartition des charges d'infrastructure par loge · Saison {{ saison }}-{{ saison|add:1 }}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if sim %}
+    <a href="{% url 'administration:budget_simulation_pdf' %}?saison={{ saison }}{% if nb_membres_lb %}&nb_membres_lb={{ nb_membres_lb }}{% endif %}{% if nb_membres_hg %}&nb_membres_hg={{ nb_membres_hg }}{% endif %}{% if recettes_exc %}&recettes_exc={{ recettes_exc }}{% endif %}{% if pct_lb %}&pct_lb={{ pct_lb }}{% endif %}"
+       class="btn btn-danger btn-sm">🧾 PDF synthèse</a>
+    {% endif %}
+    <a href="{% url 'administration:budget_config' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">
+      ⚙️ Configurer les postes
+    </a>
+    <a href="{% url 'administration:finance_saison' %}" class="btn btn-outline-secondary btn-sm">← Facturation</a>
+  </div>
+</div>
+
+{% if messages %}{% for msg in messages %}
+<div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
+{% endfor %}{% endif %}
+
+{# ── Méthodologie (pliable) ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;cursor:pointer;"
+       data-bs-toggle="collapse" data-bs-target="#bloc-methodo">
+    <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">📖 Comment sont calculés les coûts ?</span>
+    <span class="small" style="color:#C8A84B;">Voir ▾</span>
+  </div>
+  <div class="collapse" id="bloc-methodo">
+    <div class="card-body" style="font-size:13.5px;">
+      <div class="row g-3 mb-3">
+        <div class="col-md-4">
+          <div class="p-3 rounded" style="background:#F1F5F9;border-left:4px solid #64748B;">
+            <div class="fw-bold mb-1">🏛 Charges fixes</div>
+            <div class="text-muted small">Loyer, assurances, maintenance. Montant annuel divisé <strong>par le nombre de tenues</strong> de la saison. Chaque tenue supporte une quote-part égale.</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="p-3 rounded" style="background:#FFFBEB;border-left:4px solid #D97706;">
+            <div class="fw-bold mb-1">⚡ Charges mutualisées</div>
+            <div class="text-muted small">Chauffage, électricité. <strong>Si plusieurs loges partagent le temple le même jour</strong>, le coût est divisé entre elles — économie d'échelle réelle.</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="p-3 rounded" style="background:#F5F3FF;border-left:4px solid #7C3AED;">
+            <div class="fw-bold mb-1">🧹 Charges marginales</div>
+            <div class="text-muted small">Nettoyage, consommables. Coût fixe <strong>par tenue</strong>, quel que soit le nombre de loges présentes ce jour-là.</div>
+          </div>
+        </div>
+      </div>
+      <div class="alert alert-info py-2 mb-2" style="font-size:12.5px;">
+        <strong>Tarif d'équilibre LB</strong> = charges LB ÷ effectif → <em>€/membre/an</em>.
+        <strong>Tarif d'équilibre HG</strong> = coûts variables HG ÷ nb tenues → <em>€/tenue/an</em>
+        (les membres HG viennent de divers orients, l'effectif local n'est pas un indicateur fiable).
+        Vérifiez les effectifs LB dans les fiches loges avant de communiquer ces chiffres.
+      </div>
+      <div class="text-muted small">
+        <strong>Cohabitation :</strong> deux loges au même temple le même jour → la charge mutualisée est partagée à parts égales.
+        Le détail de chaque tenue (en bas de page) indique en jaune les jours de cooccupation.
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Paramètres de simulation ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header" style="background:#0F2137;">
+    <span style="color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">⚙️ Paramètres de simulation</span>
+  </div>
+  <div class="card-body py-3">
+    <form method="get" class="row g-3 align-items-end">
+      <input type="hidden" name="saison" value="{{ saison }}">
+
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">Saison</label>
+        <select name="saison" class="form-select form-select-sm no-select2">
+          {% for s in saisons_dispo %}
+          <option value="{{ s }}" {% if s == saison %}selected{% endif %}>{{ s }}-{{ s|add:1 }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Effectif total LB
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="nb_membres_lb" class="form-control"
+                 min="1" max="9999" step="1"
+                 value="{{ nb_membres_lb }}">
+          <span class="input-group-text text-muted">F/S</span>
+        </div>
+        <div class="form-text">
+          {% if nb_loges_lb %}{{ nb_loges_lb }} loges · fiches : {{ effectif_reel_lb|default:"—" }}{% endif %}
+        </div>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Effectif total HG
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="nb_membres_hg" class="form-control"
+                 min="1" max="9999" step="1"
+                 value="{{ nb_membres_hg }}">
+          <span class="input-group-text text-muted">F/S</span>
+        </div>
+        <div class="form-text">
+          {% if nb_loges_hg %}{{ nb_loges_hg }} ateliers · fiches : {{ effectif_reel_hg|default:"—" }}{% endif %}
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Recettes exceptionnelles estimées
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="recettes_exc" class="form-control"
+                 min="0" step="100"
+                 value="{{ recettes_exc }}"
+                 placeholder="0">
+          <span class="input-group-text text-muted">€</span>
+        </div>
+        <div class="form-text">Tenues facturées, salle, congrès… à déduire des charges</div>
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">
+          Répartition charges LB
+        </label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="pct_lb" class="form-control"
+                 min="0" max="100" step="0.5"
+                 value="{{ pct_lb }}"
+                 placeholder="{{ pct_lb_defaut|default:'' }}">
+          <span class="input-group-text text-muted">% LB</span>
+        </div>
+        <div class="form-text">
+          Usage actuel : {{ pct_lb_defaut|floatformat:1|default:"—" }}% LB · {{ pct_hg_defaut|floatformat:1|default:"—" }}% HG
+        </div>
+      </div>
+
+      <div class="col-12"><hr class="my-1" style="border-color:#E2E8F0;"></div>
+
+      {# ── Modèle par membre (scénarios 1 & 2) ── #}
+      <div class="col-12" style="font-size:11px;font-weight:600;color:#5B21B6;letter-spacing:.06em;text-transform:uppercase;">
+        🎯 Tester — Modèle par membre (scénarios 1 &amp; 2)
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">Tarif LB</label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="tarif_lb_p" class="form-control"
+                 min="0" max="9999" step="0.5"
+                 placeholder="{{ tarif_eq_lb_display|floatformat:0|default:'auto' }}"
+                 value="{{ tarif_lb_p }}">
+          <span class="input-group-text text-muted">€/mbr</span>
+        </div>
+        <div class="form-text">Vide = tarif d'équilibre</div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">Tarif HG</label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="tarif_hg_p" class="form-control"
+                 min="0" max="9999" step="0.5"
+                 placeholder="{{ tarif_eq_hg_display|floatformat:0|default:'auto' }}"
+                 value="{{ tarif_hg_p }}">
+          <span class="input-group-text text-muted">€/tenue</span>
+        </div>
+        <div class="form-text">Vide = tarif d'équilibre</div>
+      </div>
+
+      {# ── Modèle hybride (scénario 3) ── #}
+      <div class="col-12 mt-1" style="font-size:11px;font-weight:600;color:#059669;letter-spacing:.06em;text-transform:uppercase;">
+        🔀 Tester — Modèle hybride (scénario 3)
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">Part fixe LB</label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="tarif_h_membre_p" class="form-control"
+                 min="0" max="9999" step="0.5"
+                 placeholder="{{ tarif_hybride_membre|floatformat:0|default:'auto' }}"
+                 value="{{ tarif_h_membre_p }}">
+          <span class="input-group-text text-muted">€/mbr</span>
+        </div>
+        <div class="form-text">Vide = valeur calculée</div>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-semibold" style="font-size:12px;">Part tenue (LB &amp; HG)</label>
+        <div class="input-group input-group-sm">
+          <input type="number" name="tarif_h_tenue_p" class="form-control"
+                 min="0" max="9999" step="0.5"
+                 placeholder="{{ tarif_hybride_tenue|floatformat:0|default:'auto' }}"
+                 value="{{ tarif_h_tenue_p }}">
+          <span class="input-group-text text-muted">€/tenue</span>
+        </div>
+        <div class="form-text">Vide = valeur calculée</div>
+      </div>
+
+      <div class="col-md-1 d-flex gap-2 align-items-end">
+        <button type="submit" class="btn btn-primary btn-sm">Simuler</button>
+        <a href="?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">✕</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% if not postes_actifs %}
+<div class="alert alert-warning">
+  Aucun poste de charge actif pour la saison {{ saison }}-{{ saison|add:1 }}.
+  <a href="{% url 'administration:budget_config' %}?saison={{ saison }}">Configurer les postes →</a>
+</div>
+{% elif not sim %}
+<div class="alert alert-info">
+  Aucune tenue validée sur cette saison — impossible de simuler.
+</div>
+{% else %}
+
+{# ── KPI globaux ── #}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center py-3">
+      <div style="font-size:1.6rem;font-weight:700;color:#0F2137;">{{ sim.total_pour_equilibre|floatformat:0 }} €</div>
+      <div class="text-muted small">Charges à couvrir par cotisations</div>
+      {% if sim.total_auto_finance %}
+      <div class="text-muted" style="font-size:11px;">total {{ sim.total_global|floatformat:0 }} € dont {{ sim.total_auto_finance|floatformat:0 }} € auto-financés (cuisine, salles{% if sim.recettes_occasionnels %}, occasionnelles{% endif %})</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center py-3">
+      <div style="font-size:1.6rem;font-weight:700;color:#0F2137;">{{ sim.nb_resas }}</div>
+      <div class="text-muted small">Tenues validées</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center py-3">
+      <div style="font-size:1.6rem;font-weight:700;color:#D97706;">{{ sim.cout_moyen_tenue|floatformat:0 }} €</div>
+      <div class="text-muted small">Coût moyen / tenue</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 shadow-sm text-center py-3">
+      <div style="font-size:1.6rem;font-weight:700;color:#7C3AED;">{{ total_fixe_annuel|floatformat:0 }} €</div>
+      <div class="text-muted small">Charges fixes / an</div>
+    </div>
+  </div>
+</div>
+
+{# ── Équilibre budgétaire ── #}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #C8A84B!important;">
+  <div class="card-body py-3 px-4">
+    <div class="fw-bold mb-3" style="color:#0F2137;font-size:15px;">⚖️ Tarif d'équilibre</div>
+
+    {% if not sim.tarif_eq_lb and not sim.tarif_eq_hg %}
+    <div class="alert alert-warning py-2 mb-0">
+      Aucun effectif renseigné. Saisissez les effectifs totaux LB et HG ci-dessus.
+    </div>
+    {% else %}
+
+    {# Tableau comparatif tarif voté vs équilibre #}
+    <div class="table-responsive mb-3">
+      <table class="table table-sm mb-0" style="font-size:13px;">
+        <thead>
+          <tr style="background:#F8FAFC;">
+            <th style="color:#64748B;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;"></th>
+            <th class="text-end" style="color:#64748B;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Loges bleues</th>
+            <th class="text-end" style="color:#64748B;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Hauts grades</th>
+            <th class="text-end" style="color:#64748B;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-muted">Charges totales simulées</td>
+            <td class="text-end text-muted">—</td>
+            <td class="text-end text-muted">—</td>
+            <td class="text-end fw-semibold">{{ sim.total_global|floatformat:0 }} €</td>
+          </tr>
+
+          {# ── Bloc 1 : postes facturés séparément, jamais dans la cotisation ── #}
+          <tr>
+            <td colspan="4" class="pt-2 pb-0" style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#94A3B8;">
+              Postes facturés séparément — exclus de la cotisation
+            </td>
+          </tr>
+          {% if sim.recettes_occasionnels %}
+          <tr style="color:#059669;">
+            <td class="ps-3">
+              − Loges extérieures (sans cotisation)
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">
+                Socrate, CAALA… paient à la tenue au tarif voté (congrès {{ params.tarif_congres_jour|floatformat:0 }} €/j, exceptionnel…) — pas de cotisation annuelle
+              </div>
+            </td>
+            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
+            <td class="text-end" style="color:#059669;">−{{ sim.recettes_occasionnels|floatformat:0 }} €</td>
+          </tr>
+          {% endif %}
+
+          {# ── Sous-total : charges qui tombent dans la cotisation ── #}
+          <tr style="border-top:1px solid #E2E8F0;background:#F8FAFC;">
+            <td class="fw-semibold text-muted" style="font-size:13px;">Charges à répartir par cotisation</td>
+            <td class="text-end text-muted small">LB : {{ sim.charges_lb|floatformat:0 }} €</td>
+            <td class="text-end text-muted small">
+              HG : {{ sim.charges_hg|floatformat:0 }} €
+              {% if sim.hg_fixe_absorbe %}
+              <div style="font-size:10px;color:#94A3B8;" title="Les membres HG paient déjà leur cotisation LB qui couvre les charges fixes. La cotisation HG ne porte que sur les coûts variables de leurs tenues HG.">
+                (+ {{ sim.hg_fixe_absorbe|floatformat:0 }} € fixe → via LB)
+              </div>
+              {% endif %}
+            </td>
+            <td class="text-end fw-semibold">{{ sim.total_pour_equilibre|floatformat:0 }} €</td>
+          </tr>
+
+          {# ── Bloc 2 : recettes qui réduisent la cotisation ── #}
+          {% if sim.recettes_exc_adherents or sim.recettes_autres %}
+          <tr>
+            <td colspan="4" class="pt-2 pb-0" style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#94A3B8;">
+              Recettes qui réduisent la cotisation
+            </td>
+          </tr>
+          {% if sim.recettes_exc_adherents %}
+          <tr style="color:#059669;">
+            <td class="ps-3">
+              − Tenues excep. des loges membres (calculé)
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">
+                Tenues excep. / congrès facturées aux loges adhérentes — calculé automatiquement depuis les réservations
+              </div>
+            </td>
+            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
+            <td class="text-end" style="color:#059669;">−{{ sim.recettes_exc_adherents|floatformat:0 }} €</td>
+          </tr>
+          {% endif %}
+          {% if sim.recettes_autres %}
+          <tr style="color:#059669;">
+            <td class="ps-3">
+              − Autres recettes (subventions, dons…)
+              <div class="fw-normal" style="font-size:11px;color:#6B7280;">Montant saisi manuellement</div>
+            </td>
+            <td class="text-end text-muted">—</td><td class="text-end text-muted">—</td>
+            <td class="text-end" style="color:#059669;">−{{ sim.recettes_autres|floatformat:0 }} €</td>
+          </tr>
+          {% endif %}
+          {% endif %}
+          <tr style="border-top:1px solid #E2E8F0;">
+            <td class="fw-semibold">Charges nettes à couvrir</td>
+            <td class="text-end fw-semibold">{{ net_lb_display|floatformat:0 }} €</td>
+            <td class="text-end fw-semibold">{{ net_hg_display|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">
+              {% if charges_nettes_total %}{{ charges_nettes_total|floatformat:0 }}{% else %}{{ sim.total_global|floatformat:0 }}{% endif %} €
+            </td>
+          </tr>
+          <tr style="border-top:2px solid #0F2137;background:#F8FAFC;">
+            <td class="fw-semibold" style="color:#0F2137;">
+              Tarif d'équilibre
+              <div class="text-muted fw-normal" style="font-size:11px;">
+                LB : {{ sim.eff_eq_lb }} membres
+                · HG : {{ sim.nb_resas_hg_adherents }} tenues
+                <span title="Les HG sont facturés par tenue (pas par membre) — les membres viennent de divers orients, l'effectif local n'est pas fiable.">ⓘ</span>
+              </div>
+            </td>
+            <td class="text-end fw-bold" style="color:#0F2137;font-size:1.05rem;">
+              {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }} €/mbr{% else %}—{% endif %}
+            </td>
+            <td class="text-end fw-bold" style="color:#0F2137;font-size:1.05rem;">
+              {% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }} €/tenue{% else %}—{% endif %}
+            </td>
+            <td class="text-end text-muted small">↑ couvre exactement les charges</td>
+          </tr>
+          <tr style="background:#F0FDF4;">
+            <td class="text-muted small" colspan="3">Résultat si ces tarifs d'équilibre sont appliqués</td>
+            <td class="text-end fw-bold" style="color:#059669;">≈ 0 €</td>
+          </tr>
+          {% if recette_totale_votee is not None %}
+          <tr>
+            <td colspan="4" class="py-1">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#92400E;padding-top:6px;border-top:2px dashed #FDE68A;">
+                Simulation avec les tarifs actuellement votés ({{ params.tarif_membre_loge|floatformat:2 }} € LB · {{ params.tarif_membre_hg|floatformat:2 }} € HG)
+              </div>
+            </td>
+          </tr>
+          <tr style="background:#FFFBEB;">
+            <td style="color:#92400E;">Recettes au <strong>tarif voté</strong></td>
+            <td class="text-end" style="color:#92400E;">{{ recette_lb_votee|floatformat:0 }} €</td>
+            <td class="text-end" style="color:#92400E;">{{ recette_hg_votee|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#92400E;">{{ recette_totale_votee|floatformat:0 }} €</td>
+          </tr>
+          <tr style="border-top:1px solid #FDE68A;">
+            <td class="fw-semibold">
+              {% if deficit_votee > 0 %}
+              <span style="color:#B91C1C;">Déficit (tarif voté insuffisant)</span>
+              {% elif deficit_votee < 0 %}
+              <span style="color:#059669;">Excédent (tarif voté supérieur)</span>
+              {% else %}
+              <span style="color:#059669;">Équilibre exact</span>
+              {% endif %}
+            </td>
+            <td class="text-end"></td>
+            <td class="text-end"></td>
+            <td class="text-end fw-bold" style="font-size:1.1rem;{% if deficit_votee > 0 %}color:#B91C1C;{% else %}color:#059669;{% endif %}">
+              {% if deficit_votee > 0 %}−{{ deficit_votee|floatformat:0 }}{% else %}+{{ deficit_votee|floatformat:0|slice:"1:" }}{% endif %} €
+            </td>
+          </tr>
+          {% if recettes_hybride_total %}
+          <tr>
+            <td colspan="4" class="py-1">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#5B21B6;padding-top:6px;border-top:2px dashed #DDD6FE;">
+                Simulation — modèle hybride ({{ tarif_hybride_membre|floatformat:0 }} €/mbr + {{ tarif_hybride_tenue|floatformat:0 }} €/tenue)
+              </div>
+            </td>
+          </tr>
+          <tr style="background:#F5F3FF;">
+            <td style="color:#5B21B6;">Recettes totales si <strong>modèle hybride</strong> appliqué</td>
+            <td class="text-end" colspan="2" style="color:#5B21B6;"></td>
+            <td class="text-end fw-bold" style="color:#5B21B6;">{{ recettes_hybride_total|floatformat:0 }} €</td>
+          </tr>
+          {% if solde_hybride is not None %}
+          <tr style="border-top:1px solid #DDD6FE;">
+            <td class="fw-semibold">
+              {% if solde_hybride >= 0 %}
+              <span style="color:#059669;">Excédent modèle hybride</span>
+              {% else %}
+              <span style="color:#B91C1C;">Déficit modèle hybride</span>
+              {% endif %}
+            </td>
+            <td></td><td></td>
+            <td class="text-end fw-bold" style="font-size:1.1rem;{% if solde_hybride >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}">
+              {% if solde_hybride >= 0 %}+{% endif %}{{ solde_hybride|floatformat:0 }} €
+            </td>
+          </tr>
+          {% endif %}
+          {% endif %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    {% endif %}
+  </div>
+</div>
+
+{# ── Décomposition ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body py-3">
+    <div class="row text-center g-2">
+      <div class="col-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748B;">Fixe</div>
+        <div class="fw-bold">{{ sim.total_fixe|floatformat:0 }} €</div>
+      </div>
+      <div class="col-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#B45309;">Mutualisé</div>
+        <div class="fw-bold">{{ sim.total_mutualise|floatformat:0 }} €</div>
+      </div>
+      <div class="col-4">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#5B21B6;">Marginal</div>
+        <div class="fw-bold">{{ sim.total_marginal|floatformat:0 }} €</div>
+      </div>
+    </div>
+    <div class="progress mt-2" style="height:8px;">
+      {% if sim.total_global %}
+      {% widthratio sim.total_fixe sim.total_global 100 as pct_fixe %}
+      {% widthratio sim.total_mutualise sim.total_global 100 as pct_mut %}
+      <div class="progress-bar" style="width:{{ pct_fixe }}%;background:#0F2137;"></div>
+      <div class="progress-bar" style="width:{{ pct_mut }}%;background:#D97706;"></div>
+      <div class="progress-bar" style="width:{% widthratio sim.total_marginal sim.total_global 100 %}%;background:#7C3AED;"></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{# ── Comparaison des modèles économiques ── #}
+{% if sim.par_loge and tarif_hybride_tenue %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #7C3AED!important;">
+  <div class="card-body py-3 px-4">
+    <div class="fw-bold mb-1" style="color:#0F2137;font-size:15px;">🔬 Comparaison des modèles de facturation</div>
+    <p class="text-muted small mb-3">
+      Quel modèle est juste <em>et</em> soutenable pour chaque loge ?
+    </p>
+
+    {# 3 modèles en cards #}
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="p-3 rounded h-100" style="background:#EFF6FF;border:1px solid #93C5FD;">
+          <div class="fw-bold mb-2" style="color:#1D4ED8;font-size:13px;">Modèle A — Par membre <span class="badge" style="background:#DBEAFE;color:#1D4ED8;font-weight:500;font-size:10px;">LB + HG</span></div>
+          <div style="font-size:13px;line-height:1.8;">
+            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>
+            {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an<br>
+            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>
+            {% if tarif_eq_hg_membre_display %}{{ tarif_eq_hg_membre_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an
+          </div>
+          <div class="text-muted mt-2" style="font-size:11px;">LB et HG tous deux facturés au prorata de leurs membres. Simple et cohérent — mais effectif HG variable d'une saison à l'autre.</div>
+          {% if solde_m1 is not None %}
+          <div class="mt-2 fw-semibold" style="font-size:11px;{% if solde_m1 >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}">
+            {% if solde_m1 >= 0 %}✓ Équilibre{% else %}⚠ Déficit : −{{ solde_m1|floatformat:0 }} €{% endif %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="p-3 rounded h-100" style="background:#F0FDF4;border:1px solid #86EFAC;">
+          <div class="fw-bold mb-2" style="color:#166534;font-size:13px;">Modèle B — LB/membre + HG/tenue <span class="badge" style="background:#DCFCE7;color:#166534;font-weight:500;font-size:10px;">Split</span></div>
+          <div style="font-size:13px;line-height:1.8;">
+            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>
+            {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an<br>
+            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>
+            {% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }}{% else %}—{% endif %} €/tenue
+          </div>
+          <div class="text-muted mt-2" style="font-size:11px;">LB cotise par membre (prévisible). HG à la tenue (usage réel). Évite le problème de l'effectif HG incertain.</div>
+          <div class="mt-2 fw-semibold" style="color:#059669;font-size:11px;">✓ Équilibre exact</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="p-3 rounded h-100" style="background:#F5F3FF;border:2px solid #7C3AED;">
+          <div class="fw-bold mb-2" style="color:#5B21B6;font-size:13px;">Modèle C — Hybride <span class="badge" style="background:#EDE9FE;color:#5B21B6;font-weight:500;font-size:10px;">★ Recommandé</span></div>
+          <div style="font-size:13px;line-height:1.8;">
+            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>
+            {{ tarif_hybride_membre|floatformat:0 }} €/membre/an + {{ tarif_hybride_tenue|floatformat:0 }} €/tenue<br>
+            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>
+            {{ tarif_hybride_tenue|floatformat:0 }} €/tenue <span style="font-size:11px;color:#9CA3AF;">(charges fixes couvertes par LB)</span>
+          </div>
+          <div class="text-muted mt-2" style="font-size:11px;">Fixes réparties sur les membres LB. Variables (énergie, nettoyage) à la tenue pour tous. Contribution équitable au bâtiment.</div>
+          <div class="mt-2 fw-semibold" style="color:#059669;font-size:11px;">✓ Équilibre exact · Transition douce</div>
+        </div>
+      </div>
+    </div>
+
+    {# Note sur la transition douce #}
+    <div class="alert alert-light border py-2 mb-3" style="font-size:12.5px;">
+      <strong>💡 Transition progressive :</strong>
+      Commencer par le modèle A ou B (cohérents et lisibles en AG), puis migrer vers le modèle C hybride
+      une fois les loges habituées à la notion de tenue facturée.
+      Le tarif tenue de {{ tarif_hybride_tenue|floatformat:0 }} €/tenue (modèle C) est proche du tarif exceptionnel voté
+      ({{ params.tarif_exc_sans_agapes|floatformat:0 }} € sans agapes) — le passage sera naturel.
+    </div>
+
+    {# Table comparaison par loge #}
+    <div class="fw-semibold mb-2" style="font-size:13px;color:#0F2137;">Impact par loge — qui gagne, qui perd ?</div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:12px;">
+        <thead>
+          <tr style="background:#F8FAFC;font-size:11px;">
+            <th class="ps-3">Loge</th>
+            <th class="text-center">Type</th>
+            <th class="text-center">Mbr</th>
+            <th class="text-center">Tenues</th>
+            <th class="text-end">Actuelle</th>
+            <th class="text-end" style="color:#1D4ED8;">Mod. A<br><span style="font-weight:400;color:#64748B;">/mbr</span></th>
+            <th class="text-end" style="color:#166534;">Mod. B<br><span style="font-weight:400;color:#64748B;">split</span></th>
+            <th class="text-end" style="color:#5B21B6;">Mod. C ★<br><span style="font-weight:400;color:#64748B;">hybride</span></th>
+            <th class="text-end pe-2" style="color:#5B21B6;">Écart C</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in sim.par_loge %}
+          {% if l.membre_association and l.type_loge == 'loge' or l.membre_association and l.type_loge == 'haut_grade' %}
+          <tr>
+            <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
+            <td class="text-center">
+              {% if l.type_loge == 'haut_grade' %}
+              <span class="badge" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>
+              {% else %}
+              <span class="badge bg-secondary" style="font-size:10px;">LB</span>
+              {% endif %}
+            </td>
+            <td class="text-center text-muted">{{ l.effectif|default:"—" }}</td>
+            <td class="text-center text-muted">{{ l.nb_tenues }}</td>
+            <td class="text-end text-muted" style="font-size:12px;">
+              {% if l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end fw-semibold" style="color:#1D4ED8;font-size:12px;">
+              {% if l.cout_equilibre_m1 %}{{ l.cout_equilibre_m1|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end fw-semibold" style="color:#166534;font-size:12px;">
+              {% if l.cout_equilibre %}{{ l.cout_equilibre|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end fw-semibold" style="color:#5B21B6;font-size:12px;">
+              {% if l.cout_hybride %}{{ l.cout_hybride|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end pe-2" style="font-size:12px;">
+              {% if l.ecart_hybride is not None %}
+                {% if l.ecart_hybride > 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">+{{ l.ecart_hybride|floatformat:0 }} €</span>
+                {% elif l.ecart_hybride < 0 %}
+                  <span style="color:#059669;font-weight:600;">{{ l.ecart_hybride|floatformat:0 }} €</span>
+                {% else %}<span class="text-muted">= 0</span>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="text-muted mt-2" style="font-size:11px;">
+      Mod. A = LB et HG au tarif par membre · Mod. B = LB par membre + HG par tenue · Mod. C = LB (fixe/membre + variable/tenue) + HG par tenue.
+      Écart C = différence vs cotisation actuelle pour le modèle hybride. Rouge = paierait plus · Vert = paierait moins.
+      Calculs hors loges occasionnelles (couvertes par leur tarif à la tenue).
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Scénario tarif personnalisé ── #}
+{% if scenario_propose %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #F59E0B!important;">
+  <div class="card-body py-3 px-4">
+    <div class="fw-bold mb-3" style="color:#0F2137;font-size:15px;">
+      🎯 Résultat — tarif testé{% if scenario_propose.is_custom %} (personnalisé){% else %} (= tarif d'équilibre){% endif %}
+    </div>
+
+    {# Résumé en 3 tuiles #}
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#F5F3FF;border:1px solid #C4B5FD;">
+          <div style="font-size:11px;color:#5B21B6;text-transform:uppercase;letter-spacing:.06em;">LB — tarif testé</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#5B21B6;">{{ scenario_propose.tarif_lb|floatformat:2 }} €<span style="font-size:12px;font-weight:400;">/mbr</span></div>
+          <div style="font-size:11px;color:#6B7280;">→ {{ scenario_propose.recettes_lb|floatformat:0 }} € de recettes LB</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#F5F3FF;border:1px solid #C4B5FD;">
+          <div style="font-size:11px;color:#5B21B6;text-transform:uppercase;letter-spacing:.06em;">HG — tarif testé</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#5B21B6;">{{ scenario_propose.tarif_hg|floatformat:2 }} €<span style="font-size:12px;font-weight:400;">/tenue</span></div>
+          <div style="font-size:11px;color:#6B7280;">→ {{ scenario_propose.recettes_hg|floatformat:0 }} € de recettes HG</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#F8FAFC;border:1px solid #CBD5E1;">
+          <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recettes totales cotisations</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ scenario_propose.recettes_total|floatformat:0 }} €</div>
+          <div style="font-size:11px;color:#6B7280;">hors tenues excep. et ext.</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        {% if scenario_propose.solde >= 0 %}
+        <div class="p-3 rounded text-center" style="background:#D1FAE5;border:1px solid #6EE7B7;">
+          <div style="font-size:11px;color:#065F46;text-transform:uppercase;letter-spacing:.06em;">✓ Budget couvert</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#059669;">+{{ scenario_propose.solde|floatformat:0 }} €</div>
+          <div style="font-size:11px;color:#065F46;">excédent annuel estimé</div>
+        </div>
+        {% else %}
+        <div class="p-3 rounded text-center" style="background:#FEE2E2;border:1px solid #FCA5A5;">
+          <div style="font-size:11px;color:#991B1B;text-transform:uppercase;letter-spacing:.06em;">⚠ Déficit</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#B91C1C;">{{ scenario_propose.solde|floatformat:0 }} €</div>
+          <div style="font-size:11px;color:#991B1B;">charges non couvertes</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Note sur les charges HG fixes #}
+    {% if sim.hg_fixe_absorbe %}
+    <div class="alert alert-light border py-2 mb-3" style="font-size:12px;">
+      <strong>ℹ Note :</strong>
+      Les <strong>{{ sim.hg_fixe_absorbe|floatformat:0 }} € de charges fixes HG</strong> (loyers, assurances…) ne sont pas inclus dans la cotisation HG —
+      la logique retenue est que les membres HG cotisent aussi en LB et couvrent déjà ces charges via leur cotisation LB.
+      Si une partie des membres HG vient d'autres temples, augmentez le tarif LB pour absorber cette différence.
+    </div>
+    {% endif %}
+
+    {# Impact par loge #}
+    <div class="fw-semibold mb-2" style="font-size:13px;color:#0F2137;">Impact par loge avec ce tarif</div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:12px;">
+        <thead>
+          <tr style="background:#F8FAFC;">
+            <th class="ps-3">Loge</th>
+            <th class="text-center">Type</th>
+            <th class="text-center">Base de calcul</th>
+            <th class="text-end">Montant testé</th>
+            <th class="text-end">Cotisation actuelle</th>
+            <th class="text-end pe-2">Écart</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in sim.par_loge %}
+          {% if l.membre_association and l.cout_propose %}
+          <tr>
+            <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
+            <td class="text-center">
+              {% if l.type_loge == 'haut_grade' %}
+              <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
+              {% else %}
+              <span class="badge bg-secondary">LB</span>
+              {% endif %}
+            </td>
+            <td class="text-center text-muted">
+              {% if l.type_loge == 'haut_grade' %}
+                {{ l.nb_tenues }} tenue{{ l.nb_tenues|pluralize }}
+              {% else %}
+                {{ l.effectif }} membre{{ l.effectif|pluralize }}
+              {% endif %}
+            </td>
+            <td class="text-end fw-bold" style="color:#5B21B6;">{{ l.cout_propose|floatformat:0 }} €</td>
+            <td class="text-end text-muted">
+              {% if l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end pe-2">
+              {% if l.ecart_propose is not None %}
+                {% if l.ecart_propose > 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">+{{ l.ecart_propose|floatformat:0 }} €</span>
+                {% elif l.ecart_propose < 0 %}
+                  <span style="color:#059669;font-weight:600;">{{ l.ecart_propose|floatformat:0 }} €</span>
+                {% else %}
+                  <span class="text-muted">= 0</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Scénario hybride personnalisé ───────────────────────────────────────── #}
+{% if scenario_hybride_propose %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <div class="fw-bold mb-3" style="font-size:14px;color:#065F46;">
+      🔀 Résultat — modèle hybride testé{% if scenario_hybride_propose.is_custom %} (personnalisé){% else %} (= valeur calculée){% endif %}
+    </div>
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#ECFDF5;border:1px solid #6EE7B7;">
+          <div style="font-size:11px;color:#065F46;text-transform:uppercase;letter-spacing:.06em;">Part fixe LB</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#059669;">{{ scenario_hybride_propose.tarif_membre|floatformat:2 }} €<span style="font-size:12px;font-weight:400;">/mbr</span></div>
+          <div style="font-size:11px;color:#6B7280;">→ {{ scenario_hybride_propose.recettes_lb|floatformat:0 }} € recettes LB</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#ECFDF5;border:1px solid #6EE7B7;">
+          <div style="font-size:11px;color:#065F46;text-transform:uppercase;letter-spacing:.06em;">Part tenue (LB &amp; HG)</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#059669;">{{ scenario_hybride_propose.tarif_tenue|floatformat:2 }} €<span style="font-size:12px;font-weight:400;">/tenue</span></div>
+          <div style="font-size:11px;color:#6B7280;">→ {{ scenario_hybride_propose.recettes_hg|floatformat:0 }} € recettes HG</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="p-3 rounded text-center" style="background:#F8FAFC;border:1px solid #CBD5E1;">
+          <div style="font-size:11px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recettes totales</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#0F2137;">{{ scenario_hybride_propose.recettes_total|floatformat:0 }} €</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        {% if scenario_hybride_propose.solde >= 0 %}
+        <div class="p-3 rounded text-center" style="background:#D1FAE5;border:1px solid #6EE7B7;">
+          <div style="font-size:11px;color:#065F46;text-transform:uppercase;letter-spacing:.06em;">✓ Budget couvert</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#059669;">+{{ scenario_hybride_propose.solde|floatformat:0 }} €</div>
+        </div>
+        {% else %}
+        <div class="p-3 rounded text-center" style="background:#FEE2E2;border:1px solid #FCA5A5;">
+          <div style="font-size:11px;color:#991B1B;text-transform:uppercase;letter-spacing:.06em;">⚠ Déficit</div>
+          <div style="font-size:1.4rem;font-weight:700;color:#B91C1C;">{{ scenario_hybride_propose.solde|floatformat:0 }} €</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="fw-semibold mb-2" style="font-size:13px;color:#0F2137;">Impact par loge — modèle hybride</div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:12px;">
+        <thead>
+          <tr style="background:#F8FAFC;">
+            <th class="ps-3">Loge</th>
+            <th class="text-center">Type</th>
+            <th class="text-center">Effectif × Tenues</th>
+            <th class="text-end">Montant hybride</th>
+            <th class="text-end">Cotisation actuelle</th>
+            <th class="text-end pe-2">Écart</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for l in sim.par_loge %}
+          {% if l.membre_association and l.cout_hybride_p %}
+          <tr>
+            <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
+            <td class="text-center">
+              {% if l.type_loge == 'haut_grade' %}
+              <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
+              {% else %}
+              <span class="badge bg-secondary">LB</span>
+              {% endif %}
+            </td>
+            <td class="text-center text-muted">
+              {% if l.type_loge == 'haut_grade' %}
+                {{ l.nb_tenues }} tenue{{ l.nb_tenues|pluralize }}
+              {% else %}
+                {{ l.effectif|default:"?" }} mbr × {{ l.nb_tenues }} tenues
+              {% endif %}
+            </td>
+            <td class="text-end fw-bold" style="color:#059669;">{{ l.cout_hybride_p|floatformat:0 }} €</td>
+            <td class="text-end text-muted">
+              {% if l.cotisation_actuelle %}{{ l.cotisation_actuelle|floatformat:0 }} €{% else %}—{% endif %}
+            </td>
+            <td class="text-end pe-2">
+              {% if l.ecart_hybride_p is not None %}
+                {% if l.ecart_hybride_p > 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">+{{ l.ecart_hybride_p|floatformat:0 }} €</span>
+                {% elif l.ecart_hybride_p < 0 %}
+                  <span style="color:#059669;font-weight:600;">{{ l.ecart_hybride_p|floatformat:0 }} €</span>
+                {% else %}
+                  <span class="text-muted">= 0</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ── #}
+{% if guide_tarif %}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header temple-header">
+    💡 Guide tarifaire — tenues exceptionnelles
+    <span class="ms-2 fw-normal" style="font-size:11px;color:#C8A84B;">Coût marginal basé sur le budget simulé (énergie + nettoyage)</span>
+  </div>
+  <div class="card-body">
+
+    <p class="text-muted small mb-3">
+      Les charges <strong>fixes de structure</strong> (loyers, assurances, salaires…) sont déjà couvertes par la cotisation annuelle des adhérents.
+      Une loge externe qui vient en exceptionnel ne supporte que les charges <strong>variables</strong> : énergie mutualisée du jour et nettoyage.
+      Le coût dépend du nombre de loges présentes le même jour.
+    </p>
+
+    <div class="table-responsive mb-3">
+      <table class="table table-sm align-middle mb-0" style="font-size:13px;">
+        <thead>
+          <tr style="background:#F8FAFC;">
+            <th class="ps-3">Scénario d'occupation</th>
+            <th class="text-end">Énergie</th>
+            <th class="text-end">Nettoyage</th>
+            <th class="text-end fw-bold">Coût réel</th>
+            <th class="text-end">Tarif voté</th>
+            <th class="text-end pe-3">Écart</th>
+          </tr>
+        </thead>
+        <tbody>
+          {# Seule #}
+          <tr>
+            <td class="ps-3 fw-semibold">Seule dans le bâtiment</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} €</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.seul|floatformat:0 }} €</td>
+            <td class="text-end">{% if guide_tarif.tarif_vote_sans %}{{ guide_tarif.tarif_vote_sans|floatformat:0 }} €{% else %}—{% endif %}</td>
+            <td class="text-end pe-3">
+              {% if guide_tarif.tarif_vote_sans %}
+                {% if guide_tarif.ecart_sans < 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">{{ guide_tarif.ecart_sans|floatformat:0 }} €</span>
+                  <span class="text-muted" style="font-size:10px;">sous le coût</span>
+                {% elif guide_tarif.ecart_sans > 0 %}
+                  <span style="color:#059669;font-weight:600;">+{{ guide_tarif.ecart_sans|floatformat:0 }} €</span>
+                {% else %}
+                  <span class="text-muted">= 0</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {# Seule avec agapes #}
+          <tr style="background:#FAFAFA;">
+            <td class="ps-3">↳ avec agapes (cuisine)</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} €</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} € + {{ guide_tarif.agapes_detail|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.seul_agapes|floatformat:0 }} €</td>
+            <td class="text-end">{% if guide_tarif.tarif_vote_avec %}{{ guide_tarif.tarif_vote_avec|floatformat:0 }} €{% else %}—{% endif %}</td>
+            <td class="text-end pe-3">
+              {% if guide_tarif.tarif_vote_avec %}
+                {% if guide_tarif.ecart_avec < 0 %}
+                  <span style="color:#B91C1C;font-weight:600;">{{ guide_tarif.ecart_avec|floatformat:0 }} €</span>
+                  <span class="text-muted" style="font-size:10px;">sous le coût</span>
+                {% elif guide_tarif.ecart_avec > 0 %}
+                  <span style="color:#059669;font-weight:600;">+{{ guide_tarif.ecart_avec|floatformat:0 }} €</span>
+                {% else %}
+                  <span class="text-muted">= 0</span>
+                {% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {# 2 loges #}
+          <tr>
+            <td class="ps-3 fw-semibold">2 loges le même jour</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} € ÷ 2</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.deux|floatformat:0 }} €</td>
+            <td class="text-end text-muted small">—</td>
+            <td class="text-end pe-3 text-muted small">—</td>
+          </tr>
+          {# 2 loges avec agapes #}
+          <tr style="background:#FAFAFA;">
+            <td class="ps-3">↳ avec agapes</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} € ÷ 2</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} € + {{ guide_tarif.agapes_detail|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.deux_agapes|floatformat:0 }} €</td>
+            <td class="text-end text-muted small">—</td>
+            <td class="text-end pe-3 text-muted small">—</td>
+          </tr>
+          {# 3 loges #}
+          <tr>
+            <td class="ps-3 fw-semibold">3 loges le même jour</td>
+            <td class="text-end text-muted">{{ guide_tarif.energie_seul|floatformat:0 }} € ÷ 3</td>
+            <td class="text-end text-muted">{{ guide_tarif.nettoyage|floatformat:0 }} €</td>
+            <td class="text-end fw-bold" style="color:#0F2137;">{{ guide_tarif.trois|floatformat:0 }} €</td>
+            <td class="text-end text-muted small">—</td>
+            <td class="text-end pe-3 text-muted small">—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="row g-2 mt-1">
+      <div class="col-12">
+        <div class="alert alert-light border py-2 mb-0" style="font-size:12px;">
+          <strong>Lecture :</strong>
+          énergie = {{ guide_tarif.energie_seul|floatformat:0 }} €/tenue (mutualisée sur {{ sim.nb_resas }} tenues/an) ·
+          nettoyage = {{ guide_tarif.nettoyage|floatformat:0 }} €/tenue ·
+          agapes = {{ guide_tarif.agapes_detail|floatformat:0 }} €/tenue avec cuisine.
+          <br>
+          Ces montants ne comprennent <strong>pas</strong> les charges fixes (déjà payées par les cotisants).
+          Si la loge externe est la seule à venir ce jour-là, elle supporte seule la totalité de l'énergie du bâtiment.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endif %}
+
+{# ── Par loge ── #}
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header temple-header d-flex justify-content-between align-items-center">
+    <span>Répartition par loge</span>
+    {% if nb_membres_lb or nb_membres_hg %}
+    <span style="font-size:11px;font-weight:400;">
+      {% if nb_membres_lb %}LB simulé : {{ nb_membres_lb }} mbr{% endif %}
+      {% if nb_membres_hg %}{% if nb_membres_lb %} · {% endif %}HG simulé : {{ nb_membres_hg }} mbr{% endif %}
+    </span>
+    {% endif %}
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th class="ps-3">Loge</th>
+          <th class="text-center">Type</th>
+          <th class="text-center">Tenues</th>
+          <th class="text-center">Effectif</th>
+          <th class="text-end">Charge totale</th>
+          <th class="text-end">Coût / tenue</th>
+          <th class="text-end pe-3" title="Charge réelle simulée ÷ effectif — ce que la loge coûte au bâtiment par membre, indépendamment du tarif voté">Charge réelle / mbr ⓘ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in sim.par_loge %}
+        <tr>
+          <td class="ps-3 fw-semibold" style="color:#0F2137;">{{ l.loge_nom }}</td>
+          <td class="text-center">
+            {% if l.type_loge == 'haut_grade' %}
+            <span class="badge" style="background:#EDE9FE;color:#5B21B6;">HG</span>
+            {% else %}
+            <span class="badge bg-secondary">LB</span>
+            {% endif %}
+            {% if not l.membre_association %}<span class="badge ms-1" style="background:#FEF3C7;color:#B45309;font-size:9px;">Occas.</span>{% endif %}
+          </td>
+          <td class="text-center">{{ l.nb_tenues }}</td>
+          <td class="text-center text-muted small">
+            {% if l.membre_association %}{{ l.effectif }}{% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td class="text-end fw-semibold">{{ l.total_cout|floatformat:0 }} €</td>
+          <td class="text-end text-muted">{{ l.cout_par_tenue|floatformat:0 }} €</td>
+          <td class="text-end pe-3">
+            {% if l.membre_association %}
+            <span class="badge rounded-pill" style="background:#F0F9FF;color:#0369A1;">
+              {{ l.cout_par_membre|floatformat:2 }} €
+            </span>
+            {% else %}<span class="text-muted small">excl. cotis.</span>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-muted py-4">Aucune donnée.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Détail par tenue ── #}
+<details class="mb-4">
+  <summary class="btn btn-outline-secondary btn-sm mb-2">Voir le détail par tenue ({{ sim.nb_resas }})</summary>
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size:12.5px;">
+        <thead>
+          <tr>
+            <th class="ps-3">Date</th>
+            <th>Loge</th>
+            <th>Temple</th>
+            <th class="text-center">Durée</th>
+            <th class="text-center">Cohabit.</th>
+            <th class="text-end">Fixe</th>
+            <th class="text-end">Mutualisé</th>
+            <th class="text-end">Marginal</th>
+            <th class="text-end pe-3">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in sim.detail %}
+          <tr {% if not d.seul %}style="background:#FFFDF0;"{% endif %}>
+            <td class="ps-3 text-muted">{{ d.date|date:"d/m/Y" }}</td>
+            <td class="fw-semibold" style="color:#0F2137;">{{ d.loge_nom }}</td>
+            <td class="text-muted">{{ d.temple }}</td>
+            <td class="text-center text-muted">{{ d.duree_h }}h</td>
+            <td class="text-center">
+              {% if d.seul %}
+              <span class="text-muted small">Seule</span>
+              {% else %}
+              <span class="badge" style="background:#FEF9C3;color:#92400E;">+{{ d.nb_occupants_jour|add:-1 }}</span>
+              {% endif %}
+            </td>
+            <td class="text-end text-muted">{{ d.part_fixe|floatformat:0 }} €</td>
+            <td class="text-end text-muted">{{ d.part_mutualise|floatformat:0 }} €</td>
+            <td class="text-end text-muted">{{ d.part_marginal|floatformat:0 }} €</td>
+            <td class="text-end pe-3 fw-semibold">{{ d.cout_total|floatformat:0 }} €</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</details>
+
+<div class="text-muted mt-2" style="font-size:11px;">
+  💡 Charges fixes réparties sur l'ensemble des tenues du temple concerné.
+  Cohabitants (fond jaune) = le mutualisé est partagé entre toutes les loges présentes ce jour.
+  Effectif par loge = <code>effectif_total</code> de la fiche loge (ou 20 si non renseigné){% if nb_membres_lb %}, LB simulé à {{ nb_membres_lb }}{% endif %}{% if nb_membres_hg %}, HG simulé à {{ nb_membres_hg }}{% endif %}.
+</div>
+
+{% endif %}
+
+{% endblock %}

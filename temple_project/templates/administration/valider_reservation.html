@@ -9,6 +9,8 @@
       <p class="text-muted small">Demande reçue le {{ reservation.created_at|date:"d/m/Y à H:i" }}</p>
     </div>
 
+    {% include "administration/_loge_panel.html" %}
+
     {# Fiche de la demande #}
     <div class="card shadow-sm border-0 mb-4">
       <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:12px;letter-spacing:.08em;text-transform:uppercase;">

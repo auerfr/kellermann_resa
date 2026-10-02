@@ -6,6 +6,8 @@ from django.db.models import Count, Q
 from datetime import date
 from .models import Loge, Obedience
 from temple_project.apps.reservations.models import Reservation, ReservationSalle, Temple, DemandeAccesPortail
+from temple_project.apps.administration.email_utils import send_mail_kellermann
+from temple_project.apps.administration.journal import log_evenement
 
 
 @membre_required
@@ -60,6 +62,44 @@ def liste_loges(request):
 
 @membre_required
 def detail_loge(request, pk):
+    if request.method == 'POST':
+        loge = get_object_or_404(Loge, pk=pk)
+        action = request.POST.get('action')
+
+        if action in ('renvoyer_lien_portail', 'envoyer_lien_portail'):
+            # renvoyer_lien_portail = staff uniquement ; envoyer_lien_portail = tous membres
+            if action == 'renvoyer_lien_portail' and not request.user.is_staff:
+                messages.error(request, "Action réservée à l'administration.")
+                return redirect('loges:detail', pk=pk)
+
+            demande = DemandeAccesPortail.objects.filter(loge=loge, statut='validee').order_by('-created_at').first()
+            if not demande:
+                messages.error(request, "Aucun accès portail actif pour cette loge — contactez l'administration.")
+            elif not loge.email:
+                messages.error(request, "Aucun email de contact renseigné pour cette loge.")
+            else:
+                lien = request.build_absolute_uri(f'/reservations/portail/{demande.token}/')
+                send_mail_kellermann(
+                    subject="[Kellermann] Votre lien d'accès au portail loge",
+                    message=(
+                        f"Bonjour,\n\n"
+                        f"Vous trouverez ci-dessous le lien personnel d'accès au portail loge "
+                        f"des Temples Kellermann pour la loge {loge.nom}.\n\n"
+                        f"Lien d'accès :\n{lien}\n\n"
+                        f"Ce lien est personnel et unique à votre loge. "
+                        f"Il vous permet de consulter vos réservations, votre calendrier de saison "
+                        f"et de valider vos tenues.\n\n"
+                        f"En cas de problème, contactez l'administration.\n\n"
+                        f"Fraternellement,\nL'administration des Temples Kellermann"
+                    ),
+                    recipient_list=[loge.email],
+                )
+                messages.success(request, f"Lien portail envoyé à {loge.email}.")
+                log_evenement('envoi_lien_portail',
+                    f"Lien portail envoyé à {loge.email} pour : {loge.nom}",
+                    request=request, objet=loge)
+        return redirect('loges:detail', pk=pk)
+
     # L'admin peut consulter une loge désactivée ; les autres non
     if request.user.is_staff:
         loge = get_object_or_404(Loge, pk=pk)
@@ -67,11 +107,11 @@ def detail_loge(request, pk):
         loge = get_object_or_404(Loge, pk=pk, actif=True)
 
     annee = date.today().year
-    # Juillet→décembre : saison à venir par défaut ; janvier→juin : saison en cours
-    saison_defaut = annee if date.today().month >= 7 else annee - 1
+    # Sept→déc : nouvelle saison ; janv→août : saison en cours (été inclus)
+    saison_defaut = annee - 1 if date.today().month <= 8 else annee
     annee_param = int(request.GET.get('annee', saison_defaut))
     debut_saison = date(annee_param, 9, 1)
-    fin_saison   = date(annee_param + 1, 6, 30)
+    fin_saison   = date(annee_param + 1, 8, 31)
 
     # Tenues temple de la saison demandée
     tenues = Reservation.objects.filter(
@@ -113,6 +153,8 @@ def detail_loge(request, pk):
             'date': r.date, 'heure_debut': r.heure_debut, 'heure_fin': r.heure_fin,
             'statut': r.statut, 'get_statut_display': r.get_statut_display(),
             'type_code': ts, 'type_label': TYPE_SALLE_LABELS.get(ts, ts),
+            'type_reunion': getattr(r, 'type_reunion', ''),
+            'type_reunion_display': r.get_type_reunion_display() if hasattr(r, 'get_type_reunion_display') else '',
             'lieu': str(r.salle) if r.salle else '—',
             'detail': r.objet or '',
         }
@@ -143,10 +185,12 @@ def detail_loge(request, pk):
         statut='validee'
     ).order_by('date').first()
 
-    # Token portail loge (dernière demande validée)
-    portail_token = DemandeAccesPortail.objects.filter(
-        loge=loge, statut='validee'
-    ).order_by('-created_at').values_list('token', flat=True).first()
+    # Token portail loge — réservé à l'admin (staff)
+    portail_token = None
+    if request.user.is_staff:
+        portail_token = DemandeAccesPortail.objects.filter(
+            loge=loge, statut='validee'
+        ).order_by('-created_at').values_list('token', flat=True).first()
 
     context = {
         'loge':            loge,
@@ -182,6 +226,7 @@ def modifier_loge(request, pk):
         loge.telephone              = request.POST.get('telephone', loge.telephone).strip()
         loge.effectif_total         = int(request.POST.get('effectif_total', 0) or 0)
         loge.effectif_moyen_agapes  = int(request.POST.get('effectif_moyen_agapes', 0) or 0)
+        loge.membre_association     = 'membre_association' in request.POST
         obd_nom = request.POST.get('obedience')
         if obd_nom:
             obd, _ = Obedience.objects.get_or_create(nom=obd_nom)

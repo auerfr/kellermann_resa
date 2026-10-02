@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% block title %}{{ facture }}{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">
+      🧾 {{ facture.numero|default:"Brouillon" }}
+      &nbsp;
+      {% if facture.statut == 'brouillon' %}<span class="badge bg-secondary" style="font-size:.65em;">Brouillon</span>
+      {% elif facture.statut == 'emise' %}<span class="badge" style="background:#FEF3C7;color:#B45309;font-size:.65em;">Émise</span>
+      {% elif facture.statut == 'payee' %}<span class="badge" style="background:#D1FAE5;color:#065F46;font-size:.65em;">Payée ✓</span>
+      {% elif facture.statut == 'annulee' %}<span class="badge bg-danger" style="font-size:.65em;">Annulée</span>
+      {% endif %}
+    </h1>
+    <p class="text-muted small mb-0">
+      {{ facture.loge.nom }} · Saison {{ facture.saison }}-{{ facture.saison|add:1 }}
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    {% if facture.statut == 'brouillon' %}
+    <form method="post" action="{% url 'administration:finance_facture_emettre' facture.pk %}">
+      {% csrf_token %}
+      <button class="btn btn-warning btn-sm"
+              onclick="return confirm('Émettre la facture ? Un numéro définitif sera attribué.')">
+        📤 Émettre
+      </button>
+    </form>
+    {% endif %}
+    {% if facture.statut == 'emise' %}
+    <form method="post" action="{% url 'administration:finance_facture_paiement' facture.pk %}">
+      {% csrf_token %}
+      <button class="btn btn-success btn-sm"
+              onclick="return confirm('Marquer cette facture comme payée ?')">
+        ✓ Marquer payée
+      </button>
+    </form>
+    <form method="post" action="{% url 'administration:finance_facture_envoyer' facture.pk %}">
+      {% csrf_token %}
+      <button class="btn btn-primary btn-sm"
+              onclick="return confirm('Envoyer la facture PDF par email au contact de la loge ?')">
+        ✉️ Envoyer par email
+      </button>
+    </form>
+    {% endif %}
+    {% if facture.statut in 'brouillon,emise' %}
+    <form method="post" action="{% url 'administration:finance_facture_annuler' facture.pk %}"
+          onsubmit="return confirm('Annuler cette facture ?')">
+      {% csrf_token %}
+      <button class="btn btn-outline-danger btn-sm">Annuler</button>
+    </form>
+    {% endif %}
+    {% if facture.statut == 'annulee' %}
+    <form method="post" action="{% url 'administration:finance_facture_reactiver' facture.pk %}"
+          onsubmit="return confirm('Remettre cette facture en brouillon ?')">
+      {% csrf_token %}
+      <button class="btn btn-outline-warning btn-sm">↩ Réactiver en brouillon</button>
+    </form>
+    {% endif %}
+    <a href="{% url 'administration:finance_facture_pdf' facture.pk %}"
+       target="_blank" class="btn btn-outline-secondary btn-sm">🖨️ PDF</a>
+    <a href="{% url 'administration:finance_saison' %}?saison={{ facture.saison }}"
+       class="btn btn-outline-secondary btn-sm">← Retour</a>
+  </div>
+</div>
+
+{% if messages %}{% for msg in messages %}
+<div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
+{% endfor %}{% endif %}
+
+{% if facture.statut == 'brouillon' and facture.total_ht == 0 %}
+<div class="alert alert-warning py-2">
+  <strong>⚠ Facture à 0,00 €</strong> —
+  {% if not facture.loge.effectif_total %}
+    L'effectif de <strong>{{ facture.loge.nom }}</strong> n'est pas renseigné dans la fiche loge.
+    La cotisation annuelle ({{ facture.loge.get_type_loge_display }}) ne peut pas être calculée.
+    <a href="{% url 'administration:annuaire' %}" class="alert-link">Compléter la fiche loge →</a>
+  {% else %}
+    Cette loge n'a pas de tenues exceptionnelles facturables sur la période (après la date d'effet des tarifs),
+    et l'effectif est renseigné. Vérifiez la date d'effet dans les <a href="{% url 'administration:facturation' %}" class="alert-link">Paramètres de facturation</a>.
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="row g-4">
+
+  {# ── Colonne gauche : infos loge ── #}
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header temple-header">Loge</div>
+      <div class="card-body">
+        <div class="fw-bold mb-1" style="color:#0F2137;">{{ facture.loge.nom }}</div>
+        {% if facture.loge.obedience %}<div class="text-muted small mb-1">{{ facture.loge.obedience }}</div>{% endif %}
+        <div class="text-muted small">{{ facture.loge.get_type_loge_display }}</div>
+        {% if facture.loge.email %}
+        <div class="text-muted small mt-2">📧 {{ facture.loge.email }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header temple-header">Dates</div>
+      <div class="card-body" style="font-size:13px;">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Émission</span>
+          <span>{{ facture.date_emission|date:"d/m/Y"|default:"—" }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Échéance</span>
+          <span>{{ facture.date_echeance|date:"d/m/Y"|default:"—" }}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Mise à jour</span>
+          <span>{{ facture.updated_at|date:"d/m/Y" }}</span>
+        </div>
+      </div>
+    </div>
+
+    {# ── Activité de la saison ── #}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header temple-header">Activité {{ facture.saison }}-{{ facture.saison|add:1 }}</div>
+      <div class="card-body" style="font-size:13px;">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Tenues régulières</span>
+          <span class="fw-semibold">{{ activite.nb_regulieres }}</span>
+        </div>
+        {% if activite.nb_exceptionnelles %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Tenues exceptionnelles</span>
+          <span class="fw-semibold text-warning">{{ activite.nb_exceptionnelles }}</span>
+        </div>
+        {% endif %}
+        {% if activite.nb_congres %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Congrès / sessions</span>
+          <span class="fw-semibold">{{ activite.nb_congres }}</span>
+        </div>
+        {% endif %}
+        {% if activite.nb_agapes %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">dont agapes</span>
+          <span class="fw-semibold" style="color:#DC2626;">{{ activite.nb_agapes }}</span>
+        </div>
+        {% endif %}
+        {% if activite.nb_salles %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Réunions (salle)</span>
+          <span class="fw-semibold" style="color:#0891B2;">{{ activite.nb_salles }}</span>
+        </div>
+        {% endif %}
+        {% if activite.nb_cabinets %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted">Cabinets de réflexion</span>
+          <span class="fw-semibold text-muted">{{ activite.nb_cabinets }}</span>
+        </div>
+        {% endif %}
+        <hr class="my-2">
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Total occupations</span>
+          <span class="fw-bold" style="color:#0F2137;">{{ activite.nb_total }}</span>
+        </div>
+        {% if facture.loge.effectif_total %}
+        <hr class="my-2">
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">Effectif (état J)</span>
+          <span class="fw-bold" style="color:#0F2137;">{{ facture.loge.effectif_total }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Notes #}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header temple-header">Notes libres</div>
+      <div class="card-body">
+        {% if facture.statut == 'brouillon' %}
+        <form method="post" action="{% url 'administration:finance_facture_notes' facture.pk %}">
+          {% csrf_token %}
+          <textarea name="notes" class="form-control form-control-sm mb-2"
+                    rows="4" placeholder="Accord trésorier, exonération partielle…">{{ facture.notes }}</textarea>
+          <button class="btn btn-sm btn-outline-primary w-100">Enregistrer</button>
+        </form>
+        {% else %}
+        <div class="text-muted small" style="white-space:pre-line;">{{ facture.notes|default:"—" }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Colonne droite : lignes ── #}
+  <div class="col-md-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header temple-header d-flex justify-content-between align-items-center">
+        <span>Lignes de facturation</span>
+        <span class="fw-bold" style="color:#fff;">Total : {{ facture.total_ht|floatformat:2 }} €</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th class="ps-3">Libellé</th>
+              <th class="text-end">Qté</th>
+              <th>Unité</th>
+              <th class="text-end">P.U.</th>
+              <th class="text-end">Total</th>
+              {% if facture.statut == 'brouillon' %}
+              <th class="text-center">Incluse</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for ligne in lignes %}
+            <tr {% if not ligne.facturable %}style="opacity:.45;"{% endif %}>
+              <td class="ps-3" style="font-size:13px;">
+                {{ ligne.libelle }}
+                <span class="text-muted ms-1" style="font-size:11px;">
+                  {% if ligne.type_ligne == 'cotisation_lb' %}(cotisation LB)
+                  {% elif ligne.type_ligne == 'cotisation_hg' %}(cotisation HG)
+                  {% elif ligne.type_ligne == 'infrastructure_fixe' %}(fixe)
+                  {% elif ligne.type_ligne == 'infrastructure_mut' %}(mutualisé)
+                  {% elif ligne.type_ligne == 'infrastructure_marg' %}(marginal)
+                  {% elif ligne.type_ligne == 'tenue_exc' %}(exceptionnel)
+                  {% elif ligne.type_ligne == 'agapes' %}(cuisine)
+                  {% elif ligne.type_ligne == 'salle' %}(salle)
+                  {% endif %}
+                </span>
+                {% if ligne.note_override %}
+                <span class="ms-1 badge rounded-pill text-bg-info" style="font-size:10px;" title="{{ ligne.note_override }}">✎ corrigé</span>
+                {% endif %}
+              </td>
+              <td class="text-end text-muted small">{{ ligne.quantite|floatformat:0 }}</td>
+              <td class="text-muted small">{{ ligne.unite }}</td>
+              <td class="text-end text-muted small">
+                {{ ligne.montant_unitaire|floatformat:2 }} €
+                {% if facture.statut == 'brouillon' %}
+                <button type="button" class="btn btn-link btn-sm p-0 ms-1 lh-1"
+                        style="font-size:12px;color:#888;vertical-align:middle;"
+                        title="Modifier le prix unitaire"
+                        onclick="var r=document.getElementById('edit-ligne-{{ ligne.pk }}');r.style.display=r.style.display==='none'?'table-row':'none';">✏</button>
+                {% endif %}
+              </td>
+              <td class="text-end fw-semibold">{{ ligne.montant_total|floatformat:2 }} €</td>
+              {% if facture.statut == 'brouillon' %}
+              <td class="text-center" style="white-space:nowrap;">
+                <form method="post" class="d-inline"
+                      action="{% url 'administration:finance_ligne_toggle' facture.pk ligne.pk %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm {% if ligne.facturable %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                          style="padding:2px 8px;font-size:11px;">
+                    {% if ligne.facturable %}✓{% else %}✗{% endif %}
+                  </button>
+                </form>
+                {% if ligne.type_ligne == 'autre' %}
+                <form method="post" class="d-inline"
+                      action="{% url 'administration:finance_ligne_supprimer' facture.pk ligne.pk %}"
+                      onsubmit="return confirm('Supprimer cette ligne ?')">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-danger ms-1" style="padding:2px 6px;font-size:11px;" title="Supprimer">✕</button>
+                </form>
+                {% endif %}
+              </td>
+              {% endif %}
+            </tr>
+            {% if facture.statut == 'brouillon' %}
+            <tr id="edit-ligne-{{ ligne.pk }}" style="display:none;background:#f0f6ff;">
+              <td colspan="6" class="px-3 py-2">
+                <form method="post" action="{% url 'administration:finance_ligne_edit' facture.pk ligne.pk %}"
+                      class="d-flex flex-wrap gap-2 align-items-center">
+                  {% csrf_token %}
+                  <label class="small text-muted mb-0 me-1">Nouveau P.U. (€) :</label>
+                  <input type="number" name="montant_unitaire" step="0.01" min="0"
+                         value="{{ ligne.montant_unitaire }}"
+                         class="form-control form-control-sm" style="width:110px;">
+                  <label class="small text-muted mb-0 ms-2 me-1">Motif :</label>
+                  <input type="text" name="note_override"
+                         value="{{ ligne.note_override }}"
+                         class="form-control form-control-sm"
+                         placeholder="Ex : cuisine partagée ce soir-là"
+                         style="min-width:220px;max-width:340px;">
+                  <button class="btn btn-sm btn-primary">Enregistrer</button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary"
+                          onclick="document.getElementById('edit-ligne-{{ ligne.pk }}').style.display='none';">Annuler</button>
+                </form>
+              </td>
+            </tr>
+            {% endif %}
+            {% empty %}
+            <tr><td colspan="6" class="text-center text-muted py-3">
+              Aucune ligne. Régénérez les brouillons depuis le tableau de bord finance.
+            </td></tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr style="border-top:2px solid #0F2137;">
+              <td colspan="{% if facture.statut == 'brouillon' %}4{% else %}3{% endif %}" class="ps-3 fw-bold" style="color:#0F2137;">TOTAL</td>
+              <td class="text-end fw-bold" style="color:#0F2137;font-size:1.1rem;">{{ facture.total_ht|floatformat:2 }} €</td>
+              {% if facture.statut == 'brouillon' %}<td></td>{% endif %}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    {% if facture.statut != 'brouillon' and facture.notes %}
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header temple-header">Notes</div>
+      <div class="card-body text-muted small" style="white-space:pre-line;">{{ facture.notes }}</div>
+    </div>
+    {% endif %}
+
+    {% if facture.statut == 'brouillon' %}
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header temple-header d-flex justify-content-between align-items-center"
+           style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#bloc-ajouter-ligne">
+        <span>Ajouter une ligne</span>
+        <span class="small" style="color:#C8A84B;">▾</span>
+      </div>
+      <div class="collapse" id="bloc-ajouter-ligne">
+        <div class="card-body">
+          <p class="text-muted small mb-3">Ajoutez une remise, une ligne de régularisation ou un poste divers.</p>
+          <form method="post" action="{% url 'administration:finance_ligne_ajouter' facture.pk %}"
+                class="row g-2 align-items-end">
+            {% csrf_token %}
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold mb-1">Libellé <span class="text-danger">*</span></label>
+              <input type="text" name="libelle" class="form-control form-control-sm"
+                     placeholder="Ex : Remise trésorerie, Régularisation…" required>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold mb-1">P.U. (€)</label>
+              <input type="number" name="montant_unitaire" step="0.01" value="0"
+                     class="form-control form-control-sm">
+            </div>
+            <div class="col-md-1">
+              <label class="form-label small fw-semibold mb-1">Qté</label>
+              <input type="number" name="quantite" step="0.01" value="1"
+                     class="form-control form-control-sm">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold mb-1">Unité</label>
+              <input type="text" name="unite" class="form-control form-control-sm"
+                     placeholder="forfait, membre…">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold mb-1">Motif</label>
+              <input type="text" name="note_override" class="form-control form-control-sm"
+                     placeholder="Accord trésorier…">
+            </div>
+            <div class="col-md-1">
+              <button class="btn btn-sm btn-primary w-100">Ajouter</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if facture.statut == 'brouillon' and resas_saison %}
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header temple-header d-flex justify-content-between align-items-center"
+           style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#bloc-resas-reclasser">
+        <span>Reclasser les tenues de la saison</span>
+        <span class="small" style="color:#C8A84B;">▾</span>
+      </div>
+      <div class="collapse" id="bloc-resas-reclasser">
+        <div class="card-body pb-1 pt-2">
+          <p class="text-muted small mb-2">
+            Modifiez le type d'une tenue mal classée (ex. régulière facturée en exceptionnelle).
+            La facture sera recalculée immédiatement.
+          </p>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" style="font-size:13px;">
+            <thead>
+              <tr>
+                <th class="ps-3">Date</th>
+                <th>Temple</th>
+                <th>Type actuel</th>
+                <th class="text-end pe-3">Reclasser en</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in resas_saison %}
+              <tr>
+                <td class="ps-3">{{ r.date|date:"d/m/Y" }}</td>
+                <td class="text-muted">{{ r.temple.nom|default:"—" }}</td>
+                <td>
+                  {% if r.type_reservation == 'reguliere' %}
+                    <span class="badge bg-secondary">Régulière</span>
+                  {% elif r.type_reservation == 'exceptionnelle' %}
+                    <span class="badge" style="background:#FEF3C7;color:#B45309;">Exceptionnelle</span>
+                  {% elif r.type_reservation == 'congres' %}
+                    <span class="badge" style="background:#DBEAFE;color:#1E40AF;">Congrès</span>
+                  {% else %}
+                    <span class="badge bg-light text-muted">{{ r.type_reservation }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-end pe-3">
+                  <div class="d-flex gap-1 justify-content-end flex-wrap">
+                    {% if r.type_reservation != 'reguliere' %}
+                    <form method="post" action="{% url 'administration:finance_resa_reclasser' facture.pk r.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="nouveau_type" value="reguliere">
+                      <button class="btn btn-sm btn-outline-secondary" style="font-size:11px;padding:2px 8px;"
+                              onclick="return confirm('Reclasser cette tenue en Régulière ?')">
+                        → Régulière
+                      </button>
+                    </form>
+                    {% endif %}
+                    {% if r.type_reservation != 'exceptionnelle' %}
+                    <form method="post" action="{% url 'administration:finance_resa_reclasser' facture.pk r.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="nouveau_type" value="exceptionnelle">
+                      <button class="btn btn-sm btn-outline-warning" style="font-size:11px;padding:2px 8px;"
+                              onclick="return confirm('Reclasser cette tenue en Exceptionnelle ?')">
+                        → Exceptionnelle
+                      </button>
+                    </form>
+                    {% endif %}
+                    {% if r.type_reservation != 'congres' %}
+                    <form method="post" action="{% url 'administration:finance_resa_reclasser' facture.pk r.pk %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="nouveau_type" value="congres">
+                      <button class="btn btn-sm btn-outline-primary" style="font-size:11px;padding:2px 8px;"
+                              onclick="return confirm('Reclasser cette tenue en Congrès ?')">
+                        → Congrès
+                      </button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

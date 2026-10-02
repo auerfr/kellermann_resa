@@ -41,10 +41,37 @@ class Parametres(models.Model):
     tarif_funebre = models.DecimalField(
         max_digits=8, decimal_places=2, default=100,
         help_text="Tenue funèbre exceptionnelle (week-end / vacances) (€)")
+    # ── Tarifs occupants externes / occasionnels ──────────────────────────────
+    tarif_loge_occasionnelle = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal('150'),
+        help_text="Loge externe ou occasionnelle (invitée, de passage), par tenue (€)")
+    tarif_hg_externe = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal('100'),
+        help_text="Atelier haut grade externe / inter-obédientiel, par tenue (€)")
+    tarif_hg_interne_non_regulier = models.DecimalField(
+        max_digits=8, decimal_places=2, default=Decimal('50'),
+        help_text="Atelier HG interne non régulier (2-3 tenues/an, pas de règle récurrente), par tenue (€)")
     tarif_date_effet = models.DateField(
         null=True, blank=True, default=date(2026, 6, 12),
         help_text="Date d'entrée en vigueur des tarifs (vote AG). Les occupations "
                   "antérieures ne sont pas facturées.")
+    # ── Module finance (facturation annuelle par loge) ────────────────────────
+    module_finance_actif = models.BooleanField(
+        default=False,
+        help_text="Active le module de facturation annuelle par loge "
+                  "(factures cristallisées, PDF, envoi email). "
+                  "À activer après validation du modèle avec le trésorier.")
+    # Effectif par défaut quand la fiche loge n'est pas encore renseignée
+    effectif_par_defaut = models.PositiveSmallIntegerField(
+        default=25,
+        help_text="Effectif utilisé (en estimation) pour le calcul des cotisations "
+                  "quand la fiche loge n'a pas encore d'effectif saisi.")
+    # Lien vers le schéma de tarification actuellement actif (nullable, compatibilité)
+    schema_actif = models.ForeignKey(
+        'SchemaTarification', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+',
+        help_text="Schéma de tarification voté en AG et actuellement en vigueur."
+    )
 
     class Meta:
         verbose_name = "Paramètres"
@@ -174,3 +201,279 @@ class Annonce(models.Model):
     def version(self):
         """Identifiant de version pour le sessionStorage (change à chaque modification)."""
         return int(self.updated_at.timestamp()) if self.updated_at else 0
+
+class PosteCharge(models.Model):
+    """Poste de charge d'infrastructure pour simulation budgétaire."""
+    TYPE_CHOICES = [
+        ('fixe',      'Charge fixe (loyer, assurance, maintenance…)'),
+        ('mutualise', 'Variable mutualisée (chauffage, électricité de base…)'),
+        ('marginal',  'Variable marginale (nettoyage, consommables…)'),
+        ('agapes',    'Usage cuisine / agapes (uniquement si agapes demandées)'),
+        ('salle',     'Salle de réunion / cabinet (par occupation de salle)'),
+    ]
+    UNITE_CHOICES = [
+        ('annuel',        'Par an'),
+        ('mensuel',       'Par mois'),
+        ('par_heure',     'Par heure d\'occupation'),
+        ('par_evenement', 'Par événement'),
+    ]
+    temple = models.ForeignKey(
+        'reservations.Temple', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='postes_charges',
+        help_text="Laisser vide pour un poste commun à tous les temples",
+    )
+    saison    = models.PositiveIntegerField(help_text="Année de début de saison (ex : 2025 pour 2025-2026)")
+    libelle   = models.CharField(max_length=100)
+    type_charge = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    montant   = models.DecimalField(max_digits=10, decimal_places=2)
+    unite     = models.CharField(max_length=20, choices=UNITE_CHOICES)
+    actif     = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name        = "Poste de charge"
+        verbose_name_plural = "Postes de charges"
+        ordering            = ['saison', 'temple', 'type_charge', 'libelle']
+
+    def __str__(self):
+        return f"{self.libelle} ({self.get_type_charge_display()}, {self.montant} € / {self.get_unite_display()})"
+
+    @property
+    def montant_annuel_normalise(self):
+        """Pour les postes fixes : ramène à une valeur annuelle."""
+        from decimal import Decimal
+        if self.unite == 'annuel':
+            return self.montant
+        if self.unite == 'mensuel':
+            return self.montant * Decimal('12')
+        return Decimal('0')
+
+
+class FAQ(models.Model):
+    """Entrée de FAQ — gérable par l'admin sans toucher au code."""
+    CATEGORIE_CHOICES = [
+        ('connexion', 'Page de connexion (mini FAQ)'),
+        ('membres',   'FAQ membres connectés'),
+        ('traiteur',  'FAQ traiteur'),
+    ]
+    categorie = models.CharField(max_length=20, choices=CATEGORIE_CHOICES, db_index=True)
+    section   = models.CharField(max_length=100, blank=True,
+                                  help_text="Titre de section (ex: Réservations, Calendrier…)")
+    question  = models.CharField(max_length=400)
+    reponse   = models.TextField()
+    ordre     = models.PositiveIntegerField(default=0, help_text="Ordre d'affichage dans la catégorie")
+    actif     = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = "FAQ"
+        verbose_name_plural = "FAQ"
+        ordering = ['categorie', 'ordre', 'pk']
+
+    def __str__(self):
+        return f"[{self.get_categorie_display()}] {self.question[:60]}"
+
+
+# ── Module Finance — Schémas de tarification & Décisions d'AG ────────────────
+
+class SchemaTarification(models.Model):
+    """Schéma de tarification versionné, lié ou non à une décision d'AG."""
+    MODES = [
+        ('membre',  'Par membre'),
+        ('hybride', 'Hybride (membre + tenue)'),
+    ]
+    STATUTS = [
+        ('simule', 'Simulé'),
+        ('vote',   'Voté en AG'),
+    ]
+
+    nom          = models.CharField(max_length=200)
+    saison       = models.PositiveSmallIntegerField(help_text="Année de début de saison (ex : 2026 pour 2026-2027)")
+    date_effet   = models.DateField(null=True, blank=True)
+    statut       = models.CharField(max_length=10, choices=STATUTS, default='simule')
+    mode         = models.CharField(max_length=10, choices=MODES, default='membre')
+
+    # Tarifs cotisation annuelle
+    tarif_membre_loge = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_membre_hg   = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    # Tarifs part tenue (mode hybride)
+    tarif_tenue_lb    = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_tenue_hg    = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    # Tarifs tenues exceptionnelles
+    tarif_exc_sans_agapes = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_exc_avec_agapes = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_congres_jour    = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    tarif_funebre         = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('0'))
+    # Contraintes optionnelles
+    tarif_minimum      = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True,
+                                             help_text="Minimum de cotisation par structure (€, optionnel)")
+    plafond_hausse_pct = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True,
+                                             help_text="Plafond de hausse par rapport au tarif précédent (%)")
+    notes    = models.TextField(blank=True)
+    cree_par = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name='schemas_crees')
+    cree_le    = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = "Schéma de tarification"
+        verbose_name_plural = "Schémas de tarification"
+        ordering = ['-saison', '-cree_le']
+
+    def __str__(self):
+        return f"{self.nom} ({self.saison}-{self.saison + 1}) [{self.get_statut_display()}]"
+
+
+POSTES_BUDGET = [
+    ('budget_energie',       'Énergie (électricité, gaz)'),
+    ('budget_fluides',       'Eau et fluides'),
+    ('budget_consommables',  'Consommables et petits équipements'),
+    ('budget_entretien',     'Entretien et réparations'),
+    ('budget_maintenance',   'Maintenance et contrôles réglementaires'),
+    ('budget_assurances',    'Assurances'),
+    ('budget_services_ext',  'Autres services extérieurs (dont nettoyage)'),
+    ('budget_impots',        'Impôts et taxes'),
+    ('budget_personnel',     'Frais de personnel'),
+    ('budget_amortissements','Dotation aux amortissements'),
+]
+
+
+class DecisionAG(models.Model):
+    """Décision d'Assemblée Générale : budget voté + schéma de tarification voté."""
+    STATUTS = [
+        ('brouillon', 'Brouillon'),
+        ('votee',     'Votée'),
+    ]
+
+    saison              = models.PositiveSmallIntegerField(help_text="Saison concernée (ex : 2026 pour 2026-2027)")
+    date_ag             = models.DateField()
+    libelle_resolution  = models.CharField(max_length=500, help_text="Titre ou numéro de résolution")
+    pv                  = models.FileField(upload_to='pv_ag/', null=True, blank=True,
+                                           help_text="Procès-verbal de l'AG (PDF)")
+    statut              = models.CharField(max_length=10, choices=STATUTS, default='brouillon')
+    schema              = models.ForeignKey(SchemaTarification, null=True, blank=True,
+                                            on_delete=models.SET_NULL, related_name='decisions_ag')
+
+    # Budget voté par poste (nomenclature comptable)
+    budget_energie       = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_fluides       = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_consommables  = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_entretien     = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_maintenance   = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_assurances    = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_services_ext  = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_impots        = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_personnel     = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    budget_amortissements= models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+
+    notes    = models.TextField(blank=True)
+    cree_par = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name='decisions_ag_creees')
+    cree_le    = models.DateTimeField(auto_now_add=True)
+    modifie_le = models.DateTimeField(auto_now=True)
+
+    @property
+    def budget_total(self):
+        return sum(getattr(self, champ) for champ, _ in POSTES_BUDGET)
+
+    class Meta:
+        verbose_name        = "Décision d'AG"
+        verbose_name_plural = "Décisions d'AG"
+        ordering = ['-saison', '-date_ag']
+
+    def __str__(self):
+        return f"AG {self.date_ag.strftime('%d/%m/%Y')} — {self.libelle_resolution[:60]}"
+
+
+# ── Module Finance — Facturation annuelle par loge ────────────────────────────
+
+class Facture(models.Model):
+    """Facture annuelle cristallisée pour une loge, sur une saison."""
+    STATUT_CHOICES = [
+        ('brouillon', 'Brouillon'),
+        ('emise',     'Émise'),
+        ('payee',     'Payée'),
+        ('annulee',   'Annulée'),
+    ]
+    loge          = models.ForeignKey(
+        'loges.Loge', on_delete=models.PROTECT, related_name='factures')
+    saison        = models.PositiveIntegerField(
+        help_text="Année de début de saison (ex : 2025 pour 2025-2026)")
+    numero        = models.CharField(max_length=30, blank=True, db_index=True,
+                                     help_text="Numéro définitif généré à l'émission (ex: KELL-2026-001)")
+    date_emission = models.DateField(null=True, blank=True)
+    date_echeance = models.DateField(null=True, blank=True)
+    statut        = models.CharField(max_length=20, choices=STATUT_CHOICES, default='brouillon', db_index=True)
+    notes            = models.TextField(blank=True, help_text="Notes libres (exonération partielle, accord trésorier…)")
+    total_ht         = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    schema_applique  = models.ForeignKey(
+        'SchemaTarification', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='factures',
+        help_text="Schéma de tarification utilisé pour générer cette facture"
+    )
+    created_at    = models.DateTimeField(auto_now_add=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = "Facture"
+        verbose_name_plural = "Factures"
+        ordering            = ['-saison', 'loge__nom']
+        constraints = [
+            models.UniqueConstraint(fields=['loge', 'saison'], name='finance_facture_loge_saison_uniq'),
+        ]
+        indexes = [
+            models.Index(fields=['-saison', 'statut'], name='finance_facture_saison_idx'),
+        ]
+
+    def __str__(self):
+        num = self.numero or 'Brouillon'
+        return f"{num} — {self.loge} ({self.saison}-{self.saison + 1})"
+
+    def recalculer_total(self):
+        from decimal import Decimal as D
+        self.total_ht = sum(
+            (l.montant_total for l in self.lignes.filter(facturable=True)),
+            D('0')
+        )
+        self.save(update_fields=['total_ht', 'updated_at'])
+
+
+class LigneFacture(models.Model):
+    """Ligne d'une facture annuelle (cotisations, tenues, agapes, salle…)."""
+    TYPE_CHOICES = [
+        ('cotisation_lb',        'Cotisation membre — loge bleue'),
+        ('cotisation_hg',        'Cotisation membre — haut grade'),
+        ('infrastructure_fixe',  'Part infrastructure fixe'),
+        ('infrastructure_mut',   'Part infrastructure mutualisée'),
+        ('infrastructure_marg',  'Part infrastructure marginale'),
+        ('agapes',               'Usage cuisine / agapes'),
+        ('salle',                'Usage salle de réunion'),
+        ('tenue_exc',            'Tenue exceptionnelle'),
+        ('autre',                'Autre'),
+    ]
+    facture           = models.ForeignKey(Facture, on_delete=models.CASCADE, related_name='lignes')
+    type_ligne        = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    libelle           = models.CharField(max_length=200)
+    quantite          = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal('1'))
+    unite             = models.CharField(max_length=50, blank=True)
+    montant_unitaire  = models.DecimalField(max_digits=10, decimal_places=2)
+    montant_total     = models.DecimalField(max_digits=10, decimal_places=2)
+    facturable        = models.BooleanField(default=True,
+                                            help_text="Décocher pour exclure cette ligne sans la supprimer")
+    reservation       = models.ForeignKey(
+        'reservations.Reservation', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='lignes_facture')
+    reservation_salle = models.ForeignKey(
+        'reservations.ReservationSalle', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='lignes_facture')
+    ordre             = models.PositiveIntegerField(default=0)
+    # Correction manuelle : motif enregistré pour l'audit
+    note_override     = models.CharField(max_length=300, blank=True,
+                                         help_text="Motif de la correction manuelle du tarif (ex: cuisine partagée)")
+
+    class Meta:
+        verbose_name        = "Ligne de facture"
+        verbose_name_plural = "Lignes de facture"
+        ordering            = ['ordre', 'type_ligne']
+
+    def __str__(self):
+        return f"{self.libelle} ({self.montant_total} €)"
