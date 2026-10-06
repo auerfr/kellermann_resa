@@ -6389,6 +6389,16 @@ def budget_simulation(request):
     #   • LB : cotisation fixe (charges fixes ÷ membres LB) + tarif tenue (variables ÷ tenues)
     #   • HG : tarif tenue SEULEMENT (les membres HG sont déjà LB → le composant
     #          "charges fixes par membre" est déjà couvert par leur cotisation LB)
+    # Modèle SOGOFIM (référence nationale) :
+    #   • LB : tarif annuel par membre (138 € GODF / 180 € autres)
+    #   • HG : tarif par tenue × par membre (7,50 € GODF / 10 € autres)
+    SOGOFIM_LB_GODF  = Decimal('138')
+    SOGOFIM_LB_AUTRE = Decimal('180')
+    SOGOFIM_HG_GODF  = Decimal('7.50')   # €/tenue/membre
+    SOGOFIM_HG_AUTRE = Decimal('10.00')  # €/tenue/membre
+    recettes_sogofim_total = Decimal('0')
+    solde_sogofim = None
+
     tarif_hybride_membre = tarif_hybride_tenue = None
     if sim and sim.get('nb_resas'):
         eff_lb_eq = sim.get('eff_eq_lb') or 0
@@ -6399,6 +6409,16 @@ def budget_simulation(request):
         if nb_t:
             tarif_hybride_tenue = (sim['total_mutualise'] + sim['total_marginal']) / Decimal(str(nb_t))
 
+        # Obédiences pour détection GODF (SOGOFIM)
+        _obe_ids = {
+            l['loge'].obedience_id for l in sim['par_loge']
+            if l.get('loge') and l['loge'].obedience_id
+        }
+        _obe_map = {
+            o.pk: o.nom.upper()
+            for o in Obedience.objects.filter(pk__in=_obe_ids)
+        } if _obe_ids else {}
+
         for l in sim['par_loge']:
             l['cout_usage_pur'] = l['total_cout']
             # Loges occasionnelles : pas de modèle cotisation/hybride
@@ -6407,9 +6427,11 @@ def budget_simulation(request):
                 l['cout_equilibre_m1']   = None
                 l['cout_equilibre']      = None
                 l['cout_hybride']        = None
+                l['cout_sogofim']        = None
                 l['ecart_m1']            = None
                 l['ecart_equilibre']     = None
                 l['ecart_hybride']       = None
+                l['ecart_sogofim']       = None
                 continue
             eff = l.get('effectif') or 0
             nb_t = l.get('nb_tenues') or 0
@@ -6456,6 +6478,27 @@ def budget_simulation(request):
                 l['ecart_hybride']   = l['cout_hybride']     - l['cotisation_actuelle'] if l['cout_hybride']      else None
             else:
                 l['ecart_m1'] = l['ecart_equilibre'] = l['ecart_hybride'] = None
+            # Modèle SOGOFIM
+            _obe_nom = _obe_map.get(l['loge'].obedience_id, '') if l.get('loge') and l['loge'].obedience_id else ''
+            _is_godf = 'GODF' in _obe_nom or 'GRAND ORIENT' in _obe_nom
+            _eff_s   = l.get('effectif') or 0
+            _nb_t_s  = l.get('nb_tenues') or 0
+            if l['type_loge'] == 'loge' and _eff_s:
+                l['cout_sogofim'] = (SOGOFIM_LB_GODF if _is_godf else SOGOFIM_LB_AUTRE) * _eff_s
+                l['sogofim_godf'] = _is_godf
+            elif l['type_loge'] == 'haut_grade' and _eff_s and _nb_t_s:
+                l['cout_sogofim'] = (SOGOFIM_HG_GODF if _is_godf else SOGOFIM_HG_AUTRE) * _nb_t_s * _eff_s
+                l['sogofim_godf'] = _is_godf
+            else:
+                l['cout_sogofim'] = None
+                l['sogofim_godf'] = _is_godf
+            if l['cout_sogofim'] is not None:
+                if l.get('cotisation_actuelle'):
+                    l['ecart_sogofim'] = l['cout_sogofim'] - l['cotisation_actuelle']
+                else:
+                    l['ecart_sogofim'] = None
+            else:
+                l['ecart_sogofim'] = None
 
     # ── Totaux modèles économiques (pour affichage dans le tableau d'équilibre) ──
     recettes_m1_total = recettes_hybride_total = recettes_eq_total = recettes_actuelles_total = None
@@ -6470,6 +6513,10 @@ def budget_simulation(request):
             solde_m1        = recettes_m1_total      - charges_nettes_total
             deficit_hybride = charges_nettes_total   - recettes_hybride_total
             solde_hybride   = recettes_hybride_total - charges_nettes_total
+        _rec_exc_adh_s = sim.get('recettes_exc_adherents') or Decimal('0')
+        recettes_sogofim_total = sum(l['cout_sogofim'] for l in sim['par_loge'] if l.get('cout_sogofim') is not None) + _rec_exc_adh_s
+        if charges_nettes_total is not None:
+            solde_sogofim = recettes_sogofim_total - charges_nettes_total
 
     # ── Scénario tarif personnalisé ─────────────────────────────────────────────
     scenario_propose = None
@@ -6623,6 +6670,12 @@ def budget_simulation(request):
         'recettes_actuelles_total':  recettes_actuelles_total,
         'deficit_hybride':           deficit_hybride,
         'solde_hybride':             solde_hybride,
+        'recettes_sogofim_total':    recettes_sogofim_total,
+        'solde_sogofim':             solde_sogofim,
+        'sogofim_lb_godf':           Decimal('138'),
+        'sogofim_lb_autre':          Decimal('180'),
+        'sogofim_hg_godf':           Decimal('7.50'),
+        'sogofim_hg_autre':          Decimal('10.00'),
     })
 
 
