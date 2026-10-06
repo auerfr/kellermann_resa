@@ -632,6 +632,58 @@
       Écart C / S = différence vs cotisation actuelle. Rouge = paierait plus · Vert = paierait moins.
       Calculs hors loges occasionnelles (couvertes par leur tarif à la tenue).
     </div>
+
+    {# ── Comparaison visuelle des recettes par modèle ── #}
+    {% if charges_nettes_total %}
+    <div class="mt-4 pt-3" style="border-top:1px solid #E5E7EB;">
+      <div class="fw-semibold mb-3" style="font-size:13px;color:#0F2137;">📊 Recettes générées par modèle vs charges à couvrir</div>
+      <div id="sim-cmp-bars"
+        data-charges="{{ charges_nettes_total|floatformat:0 }}"
+        data-actuelle="{% if recettes_actuelles_total %}{{ recettes_actuelles_total|floatformat:0 }}{% else %}0{% endif %}"
+        data-m1="{% if recettes_m1_total %}{{ recettes_m1_total|floatformat:0 }}{% else %}0{% endif %}"
+        data-eq="{% if recettes_eq_total %}{{ recettes_eq_total|floatformat:0 }}{% else %}0{% endif %}"
+        data-hybride="{% if recettes_hybride_total %}{{ recettes_hybride_total|floatformat:0 }}{% else %}0{% endif %}"
+        data-sogofim="{% if recettes_sogofim_total %}{{ recettes_sogofim_total|floatformat:0 }}{% else %}0{% endif %}"
+      ></div>
+      <script>
+      (function(){
+        var el = document.getElementById('sim-cmp-bars');
+        if (!el) return;
+        var charges = parseFloat(el.dataset.charges) || 0;
+        var models = [
+          { lbl:'Actuelle (tarifs AG votés)', val:parseFloat(el.dataset.actuelle)||0, color:'#64748B' },
+          { lbl:'Modèle A — par membre',      val:parseFloat(el.dataset.m1)||0,       color:'#1D4ED8' },
+          { lbl:'Modèle B — LB/mbr + HG/tenue', val:parseFloat(el.dataset.eq)||0,   color:'#15803D' },
+          { lbl:'Modèle C ★ hybride',          val:parseFloat(el.dataset.hybride)||0, color:'#6D28D9' },
+          { lbl:'SOGOFIM — référence nationale',val:parseFloat(el.dataset.sogofim)||0,color:'#C2410C' },
+        ].filter(function(m){ return m.val > 0; });
+        if (!models.length || !charges) return;
+        var max = Math.max(charges * 1.08, Math.max.apply(null, models.map(function(m){ return m.val; })));
+        var chPct = (charges / max * 100).toFixed(1);
+        var html = models.map(function(m){
+          var pct = (m.val / max * 100).toFixed(1);
+          var solde = Math.round(m.val - charges);
+          var sHtml = solde >= 0
+            ? '<span style="color:#059669;font-weight:700;font-size:11px;">+'+solde.toLocaleString('fr-FR')+' €</span>'
+            : '<span style="color:#B91C1C;font-weight:700;font-size:11px;">'+solde.toLocaleString('fr-FR')+' €</span>';
+          return '<div style="margin-bottom:10px;">'
+            +'<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;margin-bottom:3px;">'
+            +'<span style="font-weight:600;">'+m.lbl+'</span>'
+            +'<span style="font-variant-numeric:tabular-nums;">'+Math.round(m.val).toLocaleString('fr-FR')+' € &nbsp;'+sHtml+'</span>'
+            +'</div>'
+            +'<div style="background:#E5E7EB;border-radius:4px;height:20px;position:relative;overflow:hidden;">'
+            +'<div style="width:'+pct+'%;background:'+m.color+';height:100%;border-radius:4px;opacity:.82;"></div>'
+            +'<div style="position:absolute;top:0;left:'+chPct+'%;width:2px;height:100%;background:#B91C1C;z-index:2;"></div>'
+            +'</div>'
+            +'</div>';
+        }).join('');
+        html += '<div style="font-size:11px;color:#B91C1C;margin-top:6px;">&#9474; Ligne rouge = charges nettes à couvrir : <strong>'+Math.round(charges).toLocaleString('fr-FR')+' €</strong>. Vert = excédent · Rouge = déficit.</div>';
+        el.innerHTML = html;
+      })();
+      </script>
+    </div>
+    {% endif %}
+
   </div>
 </div>
 {% endif %}
