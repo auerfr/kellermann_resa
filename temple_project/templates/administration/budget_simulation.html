@@ -392,35 +392,117 @@
           </div>
           {% endif %}
 
-          {# ── Bouton "Fixer en AG" ── #}
-          {% if scenario_propose and scenario_propose.is_custom %}
-          <div class="mt-auto pt-3">
-            <div class="p-2 rounded mb-2" style="background:#EDE9FE;border:1px solid #C4B5FD;font-size:11px;color:#4C1D95;">
-              <strong>Tarif simulé :</strong> LB {{ scenario_propose.tarif_lb|floatformat:2 }} €/mbr · HG {{ scenario_propose.tarif_hg|floatformat:2 }} €/tenue
-              <br><span style="font-size:10px;">Solde simulé :
-                {% if scenario_propose.solde >= 0 %}<span style="color:#059669;font-weight:600;">+{{ scenario_propose.solde|floatformat:0 }} €</span>
-                {% else %}<span style="color:#B91C1C;font-weight:600;">{{ scenario_propose.solde|floatformat:0 }} €</span>{% endif %}
-              </span>
+          <div class="mt-auto pt-2" style="font-size:10px;color:#6B7280;">
+            ↓ Utilisez la section "Simuler & Fixer en AG" ci-dessous pour tester n'importe quel tarif.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# ══ SIMULER & FIXER EN AG ══════════════════════════════════════════════════ #}
+    <div class="rounded mb-4 p-3" style="background:#1E1B4B;border:2px solid #7C3AED;">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+        <div>
+          <span class="fw-bold" style="color:#C4B5FD;font-size:14px;">🎯 Simuler &amp; Fixer en AG</span>
+          <span class="ms-2" style="color:#A78BFA;font-size:12px;">Testez n'importe quel tarif · cible {{ charges_nettes_total|floatformat:0 }} €</span>
+        </div>
+        {% if scenario_propose and scenario_propose.is_custom %}
+        <span class="badge" style="background:#7C3AED;font-size:11px;">Simulation active</span>
+        {% endif %}
+      </div>
+
+      {# Formulaire de simulation libre (GET) #}
+      <form method="get" class="mb-3">
+        {# Préserver les autres paramètres #}
+        {% if nb_membres_lb %}<input type="hidden" name="nb_membres_lb" value="{{ nb_membres_lb }}">{% endif %}
+        {% if nb_membres_hg %}<input type="hidden" name="nb_membres_hg" value="{{ nb_membres_hg }}">{% endif %}
+        {% if recettes_exc %}<input type="hidden" name="recettes_exc" value="{{ recettes_exc }}">{% endif %}
+        {% if pct_lb %}<input type="hidden" name="pct_lb" value="{{ pct_lb }}">{% endif %}
+        {% if ratio_hg_cas_a %}<input type="hidden" name="ratio_hg_cas_a" value="{{ ratio_hg_cas_a }}">{% endif %}
+        <input type="hidden" name="saison" value="{{ saison }}">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-3 col-6">
+            <label class="form-label mb-1" style="color:#DDD6FE;font-size:11px;font-weight:600;">LB — €/membre/an</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="tarif_lb_p" class="form-control" min="0" step="0.5"
+                     placeholder="{{ tarif_eq_lb_display|floatformat:2|default:'?' }}"
+                     value="{{ tarif_lb_p }}">
+              <span class="input-group-text text-muted small">€/mbr</span>
             </div>
-            <form method="post" action="{% url 'administration:budget_simulation' %}" onsubmit="return confirm('Fixer LB {{ scenario_propose.tarif_lb|floatformat:2 }} € et HG {{ scenario_propose.tarif_hg|floatformat:2 }} € comme tarifs AG ?\n\nCela mettra à jour les tarifs utilisés pour la facturation.');">
+            <div style="font-size:10px;color:#A78BFA;">Équil. Cas B : {{ tarif_eq_lb_display|floatformat:2|default:"—" }} €</div>
+          </div>
+          <div class="col-md-3 col-6">
+            <label class="form-label mb-1" style="color:#DDD6FE;font-size:11px;font-weight:600;">HG — €/tenue</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="tarif_hg_p" class="form-control" min="0" step="0.5"
+                     placeholder="{{ tarif_eq_hg_display|floatformat:2|default:'?' }}"
+                     value="{{ tarif_hg_p }}">
+              <span class="input-group-text text-muted small">€/tenue</span>
+            </div>
+            <div style="font-size:10px;color:#A78BFA;">Équil. Cas B : {{ tarif_eq_hg_display|floatformat:2|default:"—" }} €</div>
+          </div>
+          <div class="col-md-2 col-12">
+            <button type="submit" class="btn btn-sm w-100" style="background:#7C3AED;color:#fff;font-weight:600;">Simuler →</button>
+          </div>
+          {% if tarif_lb_p or tarif_hg_p %}
+          <div class="col-md-2 col-12">
+            <a href="?saison={{ saison }}{% if nb_membres_lb %}&nb_membres_lb={{ nb_membres_lb }}{% endif %}{% if nb_membres_hg %}&nb_membres_hg={{ nb_membres_hg }}{% endif %}{% if ratio_hg_cas_a %}&ratio_hg_cas_a={{ ratio_hg_cas_a }}{% endif %}"
+               class="btn btn-sm btn-outline-secondary w-100">✕ Effacer</a>
+          </div>
+          {% endif %}
+        </div>
+      </form>
+
+      {# Résultat de la simulation #}
+      {% if scenario_propose %}
+      <div class="rounded p-3" style="background:#312E81;">
+        <div class="row g-3 align-items-center">
+          <div class="col-md-7">
+            <div class="mb-2" style="font-size:12px;color:#C4B5FD;">
+              <strong style="color:#fff;">LB : {{ scenario_propose.tarif_lb|floatformat:2 }} €/mbr</strong>
+              <span style="color:#A78BFA;margin:0 8px;">·</span>
+              <strong style="color:#fff;">HG : {{ scenario_propose.tarif_hg|floatformat:2 }} €/tenue</strong>
+            </div>
+            {# Barre de progression vers la cible #}
+            {% if charges_nettes_total %}
+            <div class="mb-1" style="font-size:11px;color:#A78BFA;">
+              Recettes simulées : <strong style="color:#fff;">{{ scenario_propose.recettes_total|floatformat:0 }} €</strong>
+              sur <strong style="color:#C8A84B;">{{ charges_nettes_total|floatformat:0 }} €</strong> à couvrir
+            </div>
+            <div style="background:#1E1B4B;border-radius:4px;height:10px;overflow:hidden;position:relative;">
+              <div style="height:100%;width:{% widthratio scenario_propose.recettes_total charges_nettes_total 100 %}%;max-width:100%;background:{% if scenario_propose.solde >= 0 %}#22C55E{% else %}#F97316{% endif %};border-radius:4px;transition:width .4s;"></div>
+            </div>
+            {% endif %}
+            <div class="mt-1" style="font-size:12px;font-weight:700;{% if scenario_propose.solde >= 0 %}color:#4ADE80;{% else %}color:#FCA5A5;{% endif %}">
+              Solde : {% if scenario_propose.solde >= 0 %}+{% endif %}{{ scenario_propose.solde|floatformat:0 }} €
+              {% if scenario_propose.solde >= 0 %}✓ dépasse la cible{% else %}— manque {{ scenario_propose.solde|floatformat:0|slice:"1:" }} €{% endif %}
+            </div>
+          </div>
+          <div class="col-md-5 text-md-end">
+            {% if scenario_propose.is_custom %}
+            <form method="post" action="{% url 'administration:budget_simulation' %}"
+                  onsubmit="return confirm('Fixer en AG ?\n\nLB : {{ scenario_propose.tarif_lb|floatformat:2 }} €/mbr\nHG : {{ scenario_propose.tarif_hg|floatformat:2 }} €/tenue\n\nCes montants seront utilisés pour la facturation.');">
               {% csrf_token %}
               <input type="hidden" name="action" value="fixer_tarif_ag">
               <input type="hidden" name="tarif_lb_ag" value="{{ scenario_propose.tarif_lb }}">
               <input type="hidden" name="tarif_hg_ag" value="{{ scenario_propose.tarif_hg }}">
               <input type="hidden" name="redirect_qs" value="{{ request.GET.urlencode }}">
-              <button type="submit" class="btn btn-sm w-100" style="background:#7C3AED;color:#fff;font-weight:600;">
+              <div style="font-size:10px;color:#A78BFA;margin-bottom:6px;">
+                Actuel AG : LB {{ params.tarif_membre_loge|floatformat:2 }} € · HG {{ params.tarif_membre_hg|floatformat:2 }} €
+              </div>
+              <button type="submit" class="btn btn-sm px-4" style="background:#C8A84B;color:#1E1B4B;font-weight:700;border:0;">
                 ✓ Fixer en AG — appliquer aux factures
               </button>
             </form>
+            {% endif %}
           </div>
-          {% else %}
-          <div class="mt-auto pt-2" style="font-size:10px;color:#6B7280;">
-            Testez un tarif Cas B dans les paramètres pour activer "Fixer en AG".
-          </div>
-          {% endif %}
-
         </div>
       </div>
+      {% else %}
+      <div class="text-center py-2" style="color:#6D6A8A;font-size:12px;">
+        Saisissez un tarif ci-dessus et cliquez <em>Simuler</em> pour voir le résultat avant de valider.
+      </div>
+      {% endif %}
     </div>
 
     {# ── Tableau impact par loge ── #}
