@@ -262,41 +262,133 @@
 
     {# 4 model cards #}
     <div class="row g-3 mb-4">
+      {# ── Modèle A ── #}
       <div class="col-md-3 col-sm-6">
-        <div class="p-3 rounded h-100" style="background:#EFF6FF;border:1px solid #93C5FD;">
+        <div class="p-3 rounded h-100 d-flex flex-column" style="background:#EFF6FF;border:1px solid #93C5FD;">
           <div class="fw-bold mb-2" style="color:#1D4ED8;font-size:13px;">Modèle A — Par membre <span class="badge ms-1" style="background:#DBEAFE;color:#1D4ED8;font-size:10px;">LB + HG</span></div>
-          <div style="font-size:13px;line-height:2.1;">
-            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>{% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an<br>
-            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>{% if tarif_eq_hg_membre_display %}{{ tarif_eq_hg_membre_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an
+          {# Tarif d'équilibre (proéminent) #}
+          <div class="rounded mb-2 px-2 py-2" style="background:#DBEAFE;">
+            <div style="font-size:9px;font-weight:700;color:#1E40AF;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">Tarifs pour couvrir les charges</div>
+            <div style="font-variant-numeric:tabular-nums;">
+              <span class="d-block" style="font-size:16px;font-weight:800;color:#1D4ED8;line-height:1.3;">LB : {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:0 }}{% else %}—{% endif %} €/mbr</span>
+              <span class="d-block" style="font-size:14px;font-weight:700;color:#2563EB;line-height:1.3;">HG : {% if tarif_eq_hg_membre_display %}{{ tarif_eq_hg_membre_display|floatformat:0 }}{% else %}—{% endif %} €/mbr</span>
+            </div>
           </div>
-          <div class="text-muted mt-2" style="font-size:11px;">LB et HG facturés au prorata de leurs membres. Simple et lisible en AG — mais l'effectif HG fluctue.</div>
-          {% if solde_m1 is not None %}
-          <div class="mt-2 fw-semibold" style="font-size:11px;{% if solde_m1 >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}">
-            {% if solde_m1 >= 0 %}✓ Excédent +{{ solde_m1|floatformat:0 }} €{% else %}⚠ Déficit {{ solde_m1|floatformat:0 }} €{% endif %}
-          </div>
-          {% endif %}
+          {# Comparaison actuel vs équilibre #}
+          <table style="width:100%;font-size:11px;border-collapse:collapse;">
+            <thead><tr>
+              <th style="color:#94A3B8;font-weight:500;padding:2px 0;"></th>
+              <th style="color:#94A3B8;font-weight:500;padding:2px 4px;text-align:right;">Actuel AG</th>
+              <th style="color:#1D4ED8;font-weight:600;padding:2px 4px;text-align:right;">Équilibre</th>
+              <th style="font-weight:600;padding:2px 0;text-align:right;">Écart</th>
+            </tr></thead>
+            <tbody>
+              {% if params.tarif_membre_loge and tarif_eq_lb_display %}
+              <tr>
+                <td style="color:#64748B;padding:2px 0;">LB/mbr</td>
+                <td style="text-align:right;padding:2px 4px;color:#64748B;font-variant-numeric:tabular-nums;">{{ params.tarif_membre_loge|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 4px;font-weight:700;color:#1D4ED8;font-variant-numeric:tabular-nums;">{{ tarif_eq_lb_display|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 0;font-weight:700;font-variant-numeric:tabular-nums;{% if delta_tarif_lb > 0 %}color:#B91C1C;{% elif delta_tarif_lb < 0 %}color:#059669;{% else %}color:#94A3B8;{% endif %}">{% if delta_tarif_lb is not None %}{% if delta_tarif_lb > 0 %}+{% endif %}{{ delta_tarif_lb|floatformat:0 }} €{% else %}—{% endif %}</td>
+              </tr>
+              {% endif %}
+              {% if tarif_eq_hg_membre_display %}
+              <tr>
+                <td style="color:#64748B;padding:2px 0;">HG/mbr</td>
+                <td style="text-align:right;padding:2px 4px;color:#94A3B8;font-size:10px;">actuellt/tenue</td>
+                <td style="text-align:right;padding:2px 4px;font-weight:700;color:#2563EB;font-variant-numeric:tabular-nums;">{{ tarif_eq_hg_membre_display|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 0;color:#94A3B8;font-size:10px;">unité chgée</td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+          <div class="mt-auto pt-2" style="font-size:10px;color:#64748B;">LB et HG par membre. Simple pour l'AG — l'effectif HG fluctue.</div>
         </div>
       </div>
+
+      {# ── Modèle B ── #}
       <div class="col-md-3 col-sm-6">
-        <div class="p-3 rounded h-100" style="background:#F0FDF4;border:1px solid #86EFAC;">
-          <div class="fw-bold mb-2" style="color:#166534;font-size:13px;">Modèle B — LB/membre + HG/tenue <span class="badge ms-1" style="background:#DCFCE7;color:#166534;font-size:10px;">Split</span></div>
-          <div style="font-size:13px;line-height:2.1;">
-            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>{% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }}{% else %}—{% endif %} €/membre/an<br>
-            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>{% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }}{% else %}—{% endif %} €/tenue
+        <div class="p-3 rounded h-100 d-flex flex-column" style="background:#F0FDF4;border:1px solid #86EFAC;">
+          <div class="fw-bold mb-2" style="color:#166534;font-size:13px;">Modèle B — LB/mbr + HG/tenue <span class="badge ms-1" style="background:#DCFCE7;color:#166534;font-size:10px;">Split</span></div>
+          {# Tarif d'équilibre #}
+          <div class="rounded mb-2 px-2 py-2" style="background:#DCFCE7;">
+            <div style="font-size:9px;font-weight:700;color:#14532D;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">Tarifs pour couvrir les charges</div>
+            <div style="font-variant-numeric:tabular-nums;">
+              <span class="d-block" style="font-size:16px;font-weight:800;color:#166534;line-height:1.3;">LB : {% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:0 }}{% else %}—{% endif %} €/mbr</span>
+              <span class="d-block" style="font-size:14px;font-weight:700;color:#15803D;line-height:1.3;">HG : {% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:0 }}{% else %}—{% endif %} €/tenue</span>
+            </div>
           </div>
-          <div class="text-muted mt-2" style="font-size:11px;">LB cotise par membre (prévisible). HG à la tenue (usage réel). Élimine le problème d'effectif HG variable.</div>
-          <div class="mt-2 fw-semibold" style="color:#059669;font-size:11px;">✓ Équilibre exact</div>
+          {# Comparaison #}
+          <table style="width:100%;font-size:11px;border-collapse:collapse;">
+            <thead><tr>
+              <th style="color:#94A3B8;font-weight:500;padding:2px 0;"></th>
+              <th style="color:#94A3B8;font-weight:500;padding:2px 4px;text-align:right;">Actuel AG</th>
+              <th style="color:#166534;font-weight:600;padding:2px 4px;text-align:right;">Équilibre</th>
+              <th style="font-weight:600;padding:2px 0;text-align:right;">Écart</th>
+            </tr></thead>
+            <tbody>
+              {% if params.tarif_membre_loge and tarif_eq_lb_display %}
+              <tr>
+                <td style="color:#64748B;padding:2px 0;">LB/mbr</td>
+                <td style="text-align:right;padding:2px 4px;color:#64748B;font-variant-numeric:tabular-nums;">{{ params.tarif_membre_loge|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 4px;font-weight:700;color:#166534;font-variant-numeric:tabular-nums;">{{ tarif_eq_lb_display|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 0;font-weight:700;font-variant-numeric:tabular-nums;{% if delta_tarif_lb > 0 %}color:#B91C1C;{% elif delta_tarif_lb < 0 %}color:#059669;{% else %}color:#94A3B8;{% endif %}">{% if delta_tarif_lb is not None %}{% if delta_tarif_lb > 0 %}+{% endif %}{{ delta_tarif_lb|floatformat:0 }} €{% else %}—{% endif %}</td>
+              </tr>
+              {% endif %}
+              {% if params.tarif_membre_hg and tarif_eq_hg_display %}
+              <tr>
+                <td style="color:#64748B;padding:2px 0;">HG/tenue</td>
+                <td style="text-align:right;padding:2px 4px;color:#64748B;font-variant-numeric:tabular-nums;">{{ params.tarif_membre_hg|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 4px;font-weight:700;color:#166534;font-variant-numeric:tabular-nums;">{{ tarif_eq_hg_display|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 0;font-weight:700;font-variant-numeric:tabular-nums;{% if delta_tarif_hg_b > 0 %}color:#B91C1C;{% elif delta_tarif_hg_b < 0 %}color:#059669;{% else %}color:#94A3B8;{% endif %}">{% if delta_tarif_hg_b is not None %}{% if delta_tarif_hg_b > 0 %}+{% endif %}{{ delta_tarif_hg_b|floatformat:0 }} €{% else %}—{% endif %}</td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+          <div class="mt-auto pt-2" style="font-size:10px;color:#64748B;">LB prévisible par membre, HG à l'usage. Élimine le problème d'effectif HG variable.</div>
         </div>
       </div>
+
+      {# ── Modèle C ── #}
       <div class="col-md-3 col-sm-6">
-        <div class="p-3 rounded h-100" style="background:#F5F3FF;border:2px solid #7C3AED;">
+        <div class="p-3 rounded h-100 d-flex flex-column" style="background:#F5F3FF;border:2px solid #7C3AED;">
           <div class="fw-bold mb-2" style="color:#5B21B6;font-size:13px;">Modèle C — Hybride <span class="badge ms-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">★ Recommandé</span></div>
-          <div style="font-size:13px;line-height:2.1;">
-            <span class="badge bg-secondary me-1" style="font-size:10px;">LB</span>{{ tarif_hybride_membre|floatformat:0 }} €/mbr + {{ tarif_hybride_tenue|floatformat:0 }} €/tenue<br>
-            <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG</span>{{ tarif_hybride_tenue|floatformat:0 }} €/tenue <span style="font-size:10px;color:#9CA3AF;">(fixe via LB)</span>
+          {# Tarif d'équilibre #}
+          <div class="rounded mb-2 px-2 py-2" style="background:#EDE9FE;">
+            <div style="font-size:9px;font-weight:700;color:#4C1D95;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">Tarifs pour couvrir les charges</div>
+            <div style="font-variant-numeric:tabular-nums;">
+              <span class="d-block" style="font-size:13px;font-weight:800;color:#5B21B6;line-height:1.4;">LB : {{ tarif_hybride_membre|floatformat:0 }} €/mbr <span style="font-weight:400;font-size:10px;color:#7C3AED;">(fixe)</span></span>
+              <span class="d-block" style="font-size:14px;font-weight:800;color:#5B21B6;line-height:1.4;">+ {{ tarif_hybride_tenue|floatformat:0 }} €/tenue <span style="font-weight:400;font-size:10px;color:#7C3AED;">(variable)</span></span>
+              <span class="d-block" style="font-size:10px;color:#7C3AED;margin-top:1px;">HG : {{ tarif_hybride_tenue|floatformat:0 }} €/tenue seulement</span>
+            </div>
           </div>
-          <div class="text-muted mt-2" style="font-size:11px;">Charges fixes sur membres LB. Variables (énergie, nettoyage) à la tenue pour tous. Contribution équitable au bâtiment.</div>
-          <div class="mt-2 fw-semibold" style="color:#059669;font-size:11px;">✓ Équilibre exact · Transition naturelle</div>
+          {# Comparaison #}
+          <table style="width:100%;font-size:11px;border-collapse:collapse;">
+            <thead><tr>
+              <th style="color:#94A3B8;font-weight:500;padding:2px 0;"></th>
+              <th style="color:#94A3B8;font-weight:500;padding:2px 4px;text-align:right;">Actuel AG</th>
+              <th style="color:#5B21B6;font-weight:600;padding:2px 4px;text-align:right;">Équilibre</th>
+              <th style="font-weight:600;padding:2px 0;text-align:right;">Écart</th>
+            </tr></thead>
+            <tbody>
+              {% if params.tarif_membre_loge and tarif_hybride_membre %}
+              <tr>
+                <td style="color:#64748B;padding:2px 0;">LB/mbr</td>
+                <td style="text-align:right;padding:2px 4px;color:#64748B;font-variant-numeric:tabular-nums;">{{ params.tarif_membre_loge|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 4px;font-weight:700;color:#5B21B6;font-variant-numeric:tabular-nums;">{{ tarif_hybride_membre|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 0;font-weight:700;font-variant-numeric:tabular-nums;{% if delta_hybride_membre > 0 %}color:#B91C1C;{% elif delta_hybride_membre < 0 %}color:#059669;{% else %}color:#94A3B8;{% endif %}">{% if delta_hybride_membre is not None %}{% if delta_hybride_membre > 0 %}+{% endif %}{{ delta_hybride_membre|floatformat:0 }} €{% else %}—{% endif %}</td>
+              </tr>
+              {% endif %}
+              {% if tarif_hybride_tenue %}
+              <tr>
+                <td style="color:#64748B;padding:2px 0;">/tenue</td>
+                <td style="text-align:right;padding:2px 4px;color:#64748B;font-variant-numeric:tabular-nums;">{% if params.tarif_exc_sans_agapes %}{{ params.tarif_exc_sans_agapes|floatformat:0 }} €{% else %}—{% endif %}</td>
+                <td style="text-align:right;padding:2px 4px;font-weight:700;color:#5B21B6;font-variant-numeric:tabular-nums;">{{ tarif_hybride_tenue|floatformat:0 }} €</td>
+                <td style="text-align:right;padding:2px 0;font-weight:700;font-variant-numeric:tabular-nums;{% if delta_hybride_tenue > 0 %}color:#B91C1C;{% elif delta_hybride_tenue < 0 %}color:#059669;{% else %}color:#94A3B8;{% endif %}">{% if delta_hybride_tenue is not None %}{% if delta_hybride_tenue > 0 %}+{% endif %}{{ delta_hybride_tenue|floatformat:0 }} €{% else %}—{% endif %}</td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+          <div class="mt-auto pt-2" style="font-size:10px;color:#64748B;">Charges fixes réparties sur les membres LB. Variables (énergie, nettoyage) à la tenue pour tous.</div>
         </div>
       </div>
       <div class="col-md-3 col-sm-6">

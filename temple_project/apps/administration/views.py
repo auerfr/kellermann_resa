@@ -6657,6 +6657,17 @@ def budget_simulation(request):
             'ecart_avec':      (params.tarif_exc_avec_agapes or Decimal('0')) - (cout_mutualise_par_tenue + cout_marginal_par_tenue + cout_agapes_par_tenue),
         }
 
+    # Écarts tarifs actuels (AG) → tarifs d'équilibre (pour affichage dans les cartes modèles)
+    delta_tarif_lb = delta_tarif_hg_b = delta_hybride_membre = delta_hybride_tenue = None
+    if tarif_eq_lb_display and params.tarif_membre_loge:
+        delta_tarif_lb = tarif_eq_lb_display - Decimal(str(params.tarif_membre_loge))
+    if tarif_eq_hg_display and params.tarif_membre_hg:
+        delta_tarif_hg_b = tarif_eq_hg_display - Decimal(str(params.tarif_membre_hg))
+    if tarif_hybride_membre and params.tarif_membre_loge:
+        delta_hybride_membre = tarif_hybride_membre - Decimal(str(params.tarif_membre_loge))
+    if tarif_hybride_tenue and params.tarif_exc_sans_agapes:
+        delta_hybride_tenue = tarif_hybride_tenue - Decimal(str(params.tarif_exc_sans_agapes))
+
     return render(request, 'administration/budget_simulation.html', {
         'saison': saison,
         'saisons_dispo': saisons_dispo,
@@ -6708,6 +6719,10 @@ def budget_simulation(request):
         'sogofim_hg_godf':           Decimal('7.50'),
         'sogofim_hg_autre':          Decimal('10.00'),
         'sogofim_breakdown':         sogofim_breakdown if sim else None,
+        'delta_tarif_lb':        delta_tarif_lb,
+        'delta_tarif_hg_b':      delta_tarif_hg_b,
+        'delta_hybride_membre':  delta_hybride_membre,
+        'delta_hybride_tenue':   delta_hybride_tenue,
     })
 
 
