@@ -6661,12 +6661,17 @@ def budget_simulation(request):
             if _hg_raw:
                 _params.tarif_membre_hg = Decimal(_hg_raw)
                 _fields.append('tarif_membre_hg')
+            _modele_raw = request.POST.get('modele_cotisation', '').strip()
+            if _modele_raw in ('A', 'B'):
+                _params.modele_cotisation = _modele_raw
+                _fields.append('modele_cotisation')
             if _fields:
                 _params.save(update_fields=_fields)
+                _modele_label = "Cas A (€/mbr/tenue)" if _params.modele_cotisation == 'A' else "Cas B (€/membre)"
                 messages.success(
                     request,
-                    f"Tarifs AG mis à jour — LB : {_params.tarif_membre_loge} €/mbr · "
-                    f"HG : {_params.tarif_membre_hg} €/tenue"
+                    f"Tarifs AG mis à jour — {_modele_label} · LB : {_params.tarif_membre_loge} € · "
+                    f"HG : {_params.tarif_membre_hg} €"
                 )
         except InvalidOperation as e:
             messages.error(request, f"Valeur invalide : {e}")
@@ -8370,12 +8375,22 @@ def finance_generer_brouillons(request):
                 type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
                 cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
                 suffix = " — estimation, effectif à renseigner" if effectif_est else ""
+                if params.modele_cotisation == 'A':
+                    nb_t = activite['nb_regulieres']
+                    quantite = D(str(effectif)) * D(str(nb_t))
+                    libelle = (f"Cotisation annuelle — {cat} "
+                               f"({effectif} mbr × {nb_t} tenue{_p(nb_t)} × {tarif} €){suffix}")
+                    unite = 'mbr×tenue'
+                else:
+                    quantite = D(str(effectif))
+                    libelle = f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €){suffix}"
+                    unite = 'membre'
                 LigneFacture.objects.create(
                     facture=facture, type_ligne=type_l,
-                    libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €){suffix}",
-                    quantite=D(str(effectif)), unite='membre',
+                    libelle=libelle,
+                    quantite=quantite, unite=unite,
                     montant_unitaire=tarif,
-                    montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
+                    montant_total=(tarif * quantite).quantize(D('0.01')),
                     ordre=ordre,
                     note_override="Effectif estimé (par défaut)" if effectif_est else "",
                 )
@@ -8706,12 +8721,22 @@ def finance_resa_reclasser(request, pk, resa_pk):
             type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
             cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
             suffix = " — estimation, effectif à renseigner" if effectif_est else ""
+            if params.modele_cotisation == 'A':
+                nb_t = activite['nb_regulieres']
+                quantite = D(str(effectif)) * D(str(nb_t))
+                libelle = (f"Cotisation annuelle — {cat} "
+                           f"({effectif} mbr × {nb_t} tenue{_p(nb_t)} × {tarif} €){suffix}")
+                unite = 'mbr×tenue'
+            else:
+                quantite = D(str(effectif))
+                libelle = f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €){suffix}"
+                unite = 'membre'
             LigneFacture.objects.create(
                 facture=facture, type_ligne=type_l,
-                libelle=f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €){suffix}",
-                quantite=D(str(effectif)), unite='membre',
+                libelle=libelle,
+                quantite=quantite, unite=unite,
                 montant_unitaire=tarif,
-                montant_total=(tarif * D(str(effectif))).quantize(D('0.01')),
+                montant_total=(tarif * quantite).quantize(D('0.01')),
                 ordre=ordre,
                 note_override="Effectif estimé (par défaut)" if effectif_est else "",
             )

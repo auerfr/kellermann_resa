@@ -320,11 +320,30 @@
             {% endif %}
           </div>
           {% if stats_cas_a %}
-          <div class="mt-auto pt-2 border-top" style="font-size:10px;color:#78350F;margin-top:auto!important;">
+          <div class="pt-2 border-top" style="font-size:10px;color:#78350F;">
             <span class="d-block">↑ Hausse max : <strong>{{ stats_cas_a.max_hausse_loge.loge_nom }} (+{{ stats_cas_a.max_hausse_val|floatformat:0 }} €)</strong></span>
             <span class="d-block">↓ Baisse max : <strong>{{ stats_cas_a.max_baisse_loge.loge_nom }} ({{ stats_cas_a.max_baisse_val|floatformat:0 }} €)</strong></span>
             <span class="d-block">{{ stats_cas_a.nb_hausse }} hausse(s) · {{ stats_cas_a.nb_baisse }} baisse(s) · {{ stats_cas_a.nb_neutre }} neutre(s)</span>
             {% if stats_cas_a.mean_pct %}<span class="d-block">Var. moy : {% if stats_cas_a.mean_pct > 0 %}+{% endif %}{{ stats_cas_a.mean_pct|floatformat:1 }} %</span>{% endif %}
+          </div>
+          {% endif %}
+          {% if tarif_eq_cas_a_lb %}
+          <div class="mt-auto pt-2" style="margin-top:auto!important;">
+            <form method="post" action="{% url 'administration:budget_simulation' %}"
+                  onsubmit="return confirm('Fixer en AG — Cas A ?\n\nLB : {{ tarif_eq_cas_a_lb|floatformat:2 }} €/mbr/tenue\nHG : {{ tarif_eq_cas_a_hg|floatformat:2 }} €/mbr/tenue\nRatio HG/LB = {{ ratio_hg_cas_a }}\n\nLa cotisation de chaque loge sera calculée\ncomme : tarif × effectif × nb_tenues.\n\nCes montants seront utilisés pour la facturation.');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="fixer_tarif_ag">
+              <input type="hidden" name="tarif_lb_ag" value="{{ tarif_eq_cas_a_lb }}">
+              <input type="hidden" name="tarif_hg_ag" value="{{ tarif_eq_cas_a_hg }}">
+              <input type="hidden" name="modele_cotisation" value="A">
+              <input type="hidden" name="redirect_qs" value="{{ request.GET.urlencode }}">
+              <div style="font-size:10px;color:#92400E;margin-bottom:5px;">
+                Actuel AG : {{ params.modele_cotisation|default:"B" }} · LB {{ params.tarif_membre_loge|floatformat:2 }} € · HG {{ params.tarif_membre_hg|floatformat:2 }} €
+              </div>
+              <button type="submit" class="btn btn-sm w-100" style="background:#F97316;color:#fff;font-weight:700;border:0;font-size:12px;">
+                ✓ Fixer en AG — Cas A
+              </button>
+            </form>
           </div>
           {% endif %}
         </div>
@@ -488,6 +507,7 @@
               <input type="hidden" name="action" value="fixer_tarif_ag">
               <input type="hidden" name="tarif_lb_ag" value="{{ scenario_propose.tarif_lb }}">
               <input type="hidden" name="tarif_hg_ag" value="{{ scenario_propose.tarif_hg }}">
+              <input type="hidden" name="modele_cotisation" value="B">
               <input type="hidden" name="redirect_qs" value="{{ request.GET.urlencode }}">
               <div style="font-size:10px;color:#A78BFA;margin-bottom:6px;">
                 Actuel AG : LB {{ params.tarif_membre_loge|floatformat:2 }} € · HG {{ params.tarif_membre_hg|floatformat:2 }} €

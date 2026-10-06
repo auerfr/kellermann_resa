@@ -66,6 +66,15 @@ class Parametres(models.Model):
         default=25,
         help_text="Effectif utilisé (en estimation) pour le calcul des cotisations "
                   "quand la fiche loge n'a pas encore d'effectif saisi.")
+    # Modèle de cotisation voté en AG
+    modele_cotisation = models.CharField(
+        max_length=1,
+        choices=[('B', 'Cas B — €/membre (tarif fixe annuel)'),
+                 ('A', 'Cas A — €/membre/tenue (tarif proportionnel à l\'activité)')],
+        default='B',
+        help_text="Cas B = cotisation fixe par membre. "
+                  "Cas A = tarif × effectif × nb_tenues par loge (reflète l'utilisation réelle)."
+    )
     # Lien vers le schéma de tarification actuellement actif (nullable, compatibilité)
     schema_actif = models.ForeignKey(
         'SchemaTarification', null=True, blank=True,
