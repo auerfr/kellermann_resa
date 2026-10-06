@@ -428,7 +428,10 @@ def valider_acces_portail(request, pk):
 def valider_demande_modif(request, pk):
     from temple_project.apps.reservations.models import DemandeModificationReservation
     from temple_project.apps.administration.email_utils import send_mail_kellermann
-    dmr = get_object_or_404(DemandeModificationReservation, pk=pk, statut='attente')
+    dmr = get_object_or_404(DemandeModificationReservation, pk=pk)
+    if dmr.statut != 'attente':
+        messages.warning(request, f"Cette demande a déjà été traitée (statut : {dmr.get_statut_display()}).")
+        return redirect('administration:tableau_de_bord')
 
     resa = dmr.reservation or dmr.reservation_salle
     is_temple = dmr.reservation is not None
@@ -439,6 +442,21 @@ def valider_demande_modif(request, pk):
 
         if decision == 'accepter':
             if dmr.type_demande == 'annulation':
+                # Clore les autres demandes en attente sur la même réservation avant suppression
+                if dmr.reservation_id:
+                    DemandeModificationReservation.objects.filter(
+                        reservation_id=dmr.reservation_id, statut='attente'
+                    ).exclude(pk=dmr.pk).update(
+                        statut='refusee',
+                        commentaire_admin="Réservation annulée via une autre demande simultanée."
+                    )
+                elif dmr.reservation_salle_id:
+                    DemandeModificationReservation.objects.filter(
+                        reservation_salle_id=dmr.reservation_salle_id, statut='attente'
+                    ).exclude(pk=dmr.pk).update(
+                        statut='refusee',
+                        commentaire_admin="Réservation annulée via une autre demande simultanée."
+                    )
                 if dmr.reservation:
                     dmr.reservation.delete()
                 elif dmr.reservation_salle:
