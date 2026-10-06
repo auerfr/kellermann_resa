@@ -6724,7 +6724,8 @@ def budget_simulation(request):
     tarif_h_tenue_propose  = _parse_dec_param(tarif_h_tenue_p_raw)
     # Ratio HG/LB pour le Cas A (membre×tenue) — défaut 0,90
     ratio_hg_cas_a_raw = request.GET.get('ratio_hg_cas_a', '').strip()
-    ratio_hg_cas_a = _parse_dec_param(ratio_hg_cas_a_raw) or Decimal('0.90')
+    _ratio_raw = _parse_dec_param(ratio_hg_cas_a_raw)
+    ratio_hg_cas_a = Decimal(str(_ratio_raw)) if _ratio_raw is not None else Decimal('0.90')
 
     params = Parametres.get_instance()
     postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
