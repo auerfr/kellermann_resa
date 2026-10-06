@@ -77,12 +77,30 @@
             <a href="?saison={{ saison }}" class="btn btn-outline-secondary btn-sm px-2">✕</a>
           </div>
         </div>
-        {# Scénarios personnalisés (pliable) #}
+        {# Ratio Cas A dans la ligne principale #}
+        <div class="row g-2 align-items-end mt-2">
+          <div class="col-12" style="font-size:11px;font-weight:600;color:#D97706;letter-spacing:.06em;text-transform:uppercase;">📐 Cas A — ratio HG / LB (membre × tenue)</div>
+          <div class="col-md-2 col-6">
+            <label class="form-label small fw-semibold mb-1">Ratio HG/LB</label>
+            <div class="input-group input-group-sm">
+              <input type="number" name="ratio_hg_cas_a" class="form-control" min="0.1" max="2" step="0.05"
+                     placeholder="0.90" value="{% if ratio_hg_cas_a %}{{ ratio_hg_cas_a }}{% endif %}">
+            </div>
+            <div class="form-text" style="font-size:10px;">0,90 = HG légèrement moins cher que LB</div>
+          </div>
+          <div class="col-md-4 col-12">
+            <div class="p-2 rounded" style="background:#FFF7ED;border-left:3px solid #F97316;font-size:11px;color:#92400E;">
+              Cas A = LB et HG facturés en <strong>€/membre/tenue</strong>. Le tarif d'équilibre est calculé automatiquement.
+            </div>
+          </div>
+        </div>
+
+        {# Cas B — tarif personnalisé (pliable) #}
         <div class="collapse mt-3" id="scenParams">
           <div style="border-top:1px solid #E2E8F0;padding-top:12px;">
             <div class="row g-2 align-items-end">
-              <div class="col-12 mb-1" style="font-size:11px;font-weight:600;color:#5B21B6;letter-spacing:.06em;text-transform:uppercase;">
-                🎯 Tester un tarif — Modèles A &amp; B (par membre)
+              <div class="col-12 mb-1" style="font-size:11px;font-weight:600;color:#166534;letter-spacing:.06em;text-transform:uppercase;">
+                ⚖️ Cas B — tester un tarif personnalisé (LB/membre + HG/tenue)
               </div>
               <div class="col-md-2 col-6">
                 <label class="form-label small mb-1">Tarif LB</label>
@@ -91,6 +109,7 @@
                          placeholder="{{ tarif_eq_lb_display|floatformat:0|default:'auto' }}" value="{{ tarif_lb_p }}">
                   <span class="input-group-text text-muted small">€/mbr</span>
                 </div>
+                <div class="form-text" style="font-size:10px;">Équil. : {{ tarif_eq_lb_display|floatformat:2|default:"—" }} €</div>
               </div>
               <div class="col-md-2 col-6">
                 <label class="form-label small mb-1">Tarif HG</label>
@@ -99,39 +118,10 @@
                          placeholder="{{ tarif_eq_hg_display|floatformat:0|default:'auto' }}" value="{{ tarif_hg_p }}">
                   <span class="input-group-text text-muted small">€/tenue</span>
                 </div>
+                <div class="form-text" style="font-size:10px;">Équil. : {{ tarif_eq_hg_display|floatformat:2|default:"—" }} €</div>
               </div>
-              <div class="col-12 mb-1 mt-2" style="font-size:11px;font-weight:600;color:#D97706;letter-spacing:.06em;text-transform:uppercase;">
-                📐 Cas A — ratio HG / LB
-              </div>
-              <div class="col-md-2 col-6">
-                <label class="form-label small mb-1">Ratio HG/LB</label>
-                <div class="input-group input-group-sm">
-                  <input type="number" name="ratio_hg_cas_a" class="form-control" min="0.1" max="2" step="0.05"
-                         placeholder="0.90" value="{% if ratio_hg_cas_a %}{{ ratio_hg_cas_a }}{% endif %}">
-                </div>
-                <div class="form-text" style="font-size:10px;">Défaut 0,90 → HG légèrement moins cher que LB</div>
-              </div>
-              <div class="col-12 mb-1 mt-2" style="font-size:11px;font-weight:600;color:#059669;letter-spacing:.06em;text-transform:uppercase;">
-                🔀 Tester — Modèle C hybride
-              </div>
-              <div class="col-md-2 col-6">
-                <label class="form-label small mb-1">Part fixe LB</label>
-                <div class="input-group input-group-sm">
-                  <input type="number" name="tarif_h_membre_p" class="form-control" min="0" step="0.5"
-                         placeholder="{{ tarif_hybride_membre|floatformat:0|default:'auto' }}" value="{{ tarif_h_membre_p }}">
-                  <span class="input-group-text text-muted small">€/mbr</span>
-                </div>
-              </div>
-              <div class="col-md-2 col-6">
-                <label class="form-label small mb-1">Part tenue</label>
-                <div class="input-group input-group-sm">
-                  <input type="number" name="tarif_h_tenue_p" class="form-control" min="0" step="0.5"
-                         placeholder="{{ tarif_hybride_tenue|floatformat:0|default:'auto' }}" value="{{ tarif_h_tenue_p }}">
-                  <span class="input-group-text text-muted small">€/tenue</span>
-                </div>
-              </div>
-              <div class="col-12">
-                <button type="submit" class="btn btn-primary btn-sm">Simuler avec ces tarifs</button>
+              <div class="col-md-2 col-12 d-flex align-items-end">
+                <button type="submit" class="btn btn-success btn-sm w-100">Simuler</button>
               </div>
             </div>
           </div>
@@ -139,7 +129,7 @@
       </div>
       <div class="card-footer py-2 d-flex gap-4 flex-wrap" style="background:#F8FAFC;font-size:12px;">
         <a class="text-muted text-decoration-none" role="button" data-bs-toggle="collapse" href="#scenParams" style="cursor:pointer;">
-          🎯 Tester un tarif personnalisé ▾
+          ⚖️ Tester un tarif Cas B ▾
         </a>
         <a class="text-muted text-decoration-none" role="button" data-bs-toggle="collapse" href="#methodoPanel" style="cursor:pointer;">
           📖 Méthodologie de calcul ▾
@@ -174,8 +164,8 @@
         </div>
       </div>
       <div class="alert alert-info py-2 mb-0 mt-3" style="font-size:12px;">
-        <strong>Tarif d'équilibre LB</strong> = charges LB ÷ effectif total LB → €/membre/an.
-        <strong>Tarif HG</strong> = coûts variables HG ÷ nb tenues → €/tenue (l'effectif HG varie, la tenue est l'unité stable).
+        <strong>Cas B :</strong> tarif LB = charges LB ÷ effectif LB → €/membre/an · tarif HG = coûts variables HG ÷ nb tenues → €/tenue.<br>
+        <strong>Cas A :</strong> tarif LB = charges nettes ÷ (Σ effectif×tenues LB + ratio × Σ effectif×tenues HG) → €/membre/tenue · tarif HG = tarif LB × ratio.
       </div>
     </div>
   </div>
@@ -211,8 +201,8 @@
     {% if tarif_eq_lb_display %}
     <div class="card border-0 shadow-sm text-center py-3 h-100" style="border-left:3px solid #C8A84B!important;">
       <div style="font-size:1.5rem;font-weight:700;color:#0F2137;">{{ tarif_eq_lb_display|floatformat:0 }} €</div>
-      <div class="text-muted small">Tarif équilibre LB / membre</div>
-      {% if tarif_eq_hg_display %}<div style="font-size:10px;color:#94A3B8;">HG : {{ tarif_eq_hg_display|floatformat:0 }} €/tenue</div>{% endif %}
+      <div class="text-muted small">Cas B — tarif équilibre LB</div>
+      {% if tarif_eq_hg_display %}<div style="font-size:10px;color:#94A3B8;">HG : {{ tarif_eq_hg_display|floatformat:0 }} €/tenue · {{ tarif_eq_cas_a_lb|floatformat:0|default:"—" }} €/mbr/tenue (A)</div>{% endif %}
     </div>
     {% else %}
     <div class="card border-0 shadow-sm text-center py-3 h-100">
@@ -671,13 +661,13 @@
     </div>
     {% endif %}
 
-    {# Note de transition #}
+    {# Note de synthèse #}
     <div class="alert alert-light border py-2 mb-0" style="font-size:12.5px;">
-      <strong>💡 Transition progressive :</strong>
-      Commencer par le modèle A ou B (lisibles en AG), puis migrer vers le modèle C une fois la notion de tenue facturée intégrée.
-      Le tarif tenue de {{ tarif_hybride_tenue|floatformat:0 }} €/tenue (modèle C) est proche du tarif exceptionnel voté ({{ params.tarif_exc_sans_agapes|floatformat:0 }} € sans agapes) — le passage sera naturel.<br>
-      <strong>ℹ️ SOGOFIM :</strong> référence nationale calibrée pour de grands temples avec des charges supérieures.
-      Kellermann se situe à {{ tarif_eq_lb_display|floatformat:0|default:"?" }} €/mbr — bien en dessous du minimum SOGOFIM (138 €).
+      <strong>💡 Les 3 cas en résumé :</strong>
+      <strong>Actuel</strong> (AG) = LB {{ params.tarif_membre_loge|floatformat:2 }} €/mbr + HG {{ params.tarif_membre_hg|floatformat:2 }} €/mbr, les HG paient deux fois.
+      <strong>Cas A</strong> (membre × tenue) = LB + HG facturés par membre <em>et</em> par tenue — proportionnel à l'usage mais pénalise les grosses loges actives.
+      <strong>Cas B</strong> (recommandé) = LB {{ tarif_eq_lb_display|floatformat:0|default:"?" }} €/mbr/an + HG {{ tarif_eq_hg_display|floatformat:0|default:"?" }} €/tenue — LB prévisible, HG à l'usage réel.<br>
+      <strong>ℹ️ SOGOFIM :</strong> référence nationale (138–180 €/mbr). Kellermann se situe à {{ tarif_eq_lb_display|floatformat:0|default:"?" }} €/mbr.
     </div>
   </div>
 
