@@ -6695,6 +6695,9 @@ def budget_simulation(request):
     tarif_h_tenue_p_raw  = request.GET.get('tarif_h_tenue_p',  '').strip()
     tarif_h_membre_propose = _parse_dec_param(tarif_h_membre_p_raw)
     tarif_h_tenue_propose  = _parse_dec_param(tarif_h_tenue_p_raw)
+    # Ratio HG/LB pour le Cas A (membre×tenue) — défaut 0,90
+    ratio_hg_cas_a_raw = request.GET.get('ratio_hg_cas_a', '').strip()
+    ratio_hg_cas_a = _parse_dec_param(ratio_hg_cas_a_raw) or Decimal('0.90')
 
     params = Parametres.get_instance()
     postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
@@ -6870,6 +6873,42 @@ def budget_simulation(request):
             else:
                 l['ecart_sogofim'] = None
 
+    # ── Cas A : tarif membre × tenue (ratio HG/LB = ratio_hg_cas_a) ─────────────
+    tarif_eq_cas_a_lb = tarif_eq_cas_a_hg = None
+    total_mt_lb = total_mt_hg = 0
+    if sim and sim.get('par_loge'):
+        total_mt_lb = sum(
+            (l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+            for l in sim['par_loge']
+            if l.get('membre_association') and l.get('type_loge') == 'loge'
+        )
+        total_mt_hg = sum(
+            (l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+            for l in sim['par_loge']
+            if l.get('membre_association') and l.get('type_loge') == 'haut_grade'
+        )
+        total_mt_pondere = (Decimal(str(total_mt_lb))
+                            + Decimal(str(total_mt_hg)) * ratio_hg_cas_a)
+        if charges_nettes_total and total_mt_pondere:
+            tarif_eq_cas_a_lb = charges_nettes_total / total_mt_pondere
+            tarif_eq_cas_a_hg = tarif_eq_cas_a_lb * ratio_hg_cas_a
+        for l in sim['par_loge']:
+            if not l.get('membre_association'):
+                l['cout_cas_a'] = None
+                l['ecart_cas_a'] = None
+                continue
+            eff  = l.get('effectif') or 0
+            nb_t = l.get('nb_tenues') or 0
+            if l.get('type_loge') == 'loge' and tarif_eq_cas_a_lb and eff and nb_t:
+                l['cout_cas_a'] = tarif_eq_cas_a_lb * eff * nb_t
+            elif l.get('type_loge') == 'haut_grade' and tarif_eq_cas_a_hg and eff and nb_t:
+                l['cout_cas_a'] = tarif_eq_cas_a_hg * eff * nb_t
+            else:
+                l['cout_cas_a'] = None
+            l['ecart_cas_a'] = (l['cout_cas_a'] - l['cotisation_actuelle']
+                                if l.get('cout_cas_a') is not None and l.get('cotisation_actuelle')
+                                else None)
+
     # ── Totaux modèles économiques (pour affichage dans le tableau d'équilibre) ──
     recettes_m1_total = recettes_hybride_total = recettes_eq_total = recettes_actuelles_total = None
     solde_m1 = deficit_hybride = solde_hybride = None
@@ -6887,6 +6926,13 @@ def budget_simulation(request):
         recettes_sogofim_total = sum(l['cout_sogofim'] for l in sim['par_loge'] if l.get('cout_sogofim') is not None) + _rec_exc_adh_s
         if charges_nettes_total is not None:
             solde_sogofim = recettes_sogofim_total - charges_nettes_total
+        _rec_exc_adh_ca = sim.get('recettes_exc_adherents') or Decimal('0')
+        recettes_cas_a_total = (sum(l['cout_cas_a'] for l in sim['par_loge']
+                                    if l.get('cout_cas_a') is not None)
+                                + _rec_exc_adh_ca if tarif_eq_cas_a_lb else None)
+        solde_cas_a = (recettes_cas_a_total - charges_nettes_total
+                       if recettes_cas_a_total is not None and charges_nettes_total is not None
+                       else None)
         # Breakdown GODF vs autres pour transparence
         _sogofim_lb_godf_eff   = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'loge'       and l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
         _sogofim_lb_autre_eff  = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'loge'       and not l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
@@ -6977,6 +7023,28 @@ def budget_simulation(request):
                 'solde': rec_h_tot - charges_nettes_total,
                 'is_custom': is_custom,
             }
+
+    # ── Stats écarts par modèle ────────────────────────────────────────────────
+    def _stats_ecarts_modele(par_loge, ecart_key):
+        loges = [(l, l[ecart_key]) for l in par_loge
+                 if l.get(ecart_key) is not None and l.get('membre_association')
+                 and l.get('cotisation_actuelle')]
+        if not loges:
+            return None
+        max_h = max(loges, key=lambda x: x[1])
+        max_b = min(loges, key=lambda x: x[1])
+        pct_changes = [float(e) / float(l['cotisation_actuelle']) * 100 for l, e in loges]
+        return {
+            'max_hausse_loge': max_h[0], 'max_hausse_val': max_h[1],
+            'max_baisse_loge': max_b[0], 'max_baisse_val': max_b[1],
+            'nb_hausse': sum(1 for _, e in loges if e > 0),
+            'nb_baisse': sum(1 for _, e in loges if e < 0),
+            'nb_neutre': sum(1 for _, e in loges if e == 0),
+            'mean_pct': sum(pct_changes) / len(pct_changes) if pct_changes else None,
+        }
+    stats_cas_a = _stats_ecarts_modele(sim['par_loge'], 'ecart_cas_a') if sim else None
+    stats_cas_b = _stats_ecarts_modele(sim['par_loge'], 'ecart_equilibre') if sim else None
+    stats_actuel_evolution = _stats_ecarts_modele(sim['par_loge'], 'ecart_m1') if sim else None
 
     # ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ─────────────
     # Les charges fixes sont déjà couvertes par la cotisation des adhérents.
@@ -7097,6 +7165,16 @@ def budget_simulation(request):
         'recettes_eq_m1_theorique':      recettes_eq_m1_theorique,
         'recettes_eq_b_theorique':       recettes_eq_b_theorique,
         'recettes_eq_hybride_theorique': recettes_eq_hybride_theorique,
+        'tarif_eq_cas_a_lb':   tarif_eq_cas_a_lb,
+        'tarif_eq_cas_a_hg':   tarif_eq_cas_a_hg,
+        'ratio_hg_cas_a':      ratio_hg_cas_a,
+        'total_mt_lb':         total_mt_lb,
+        'total_mt_hg':         total_mt_hg,
+        'recettes_cas_a_total': recettes_cas_a_total,
+        'solde_cas_a':          solde_cas_a,
+        'stats_cas_a':          stats_cas_a,
+        'stats_cas_b':          stats_cas_b,
+        'stats_actuel_evolution': stats_actuel_evolution,
     })
 
 
