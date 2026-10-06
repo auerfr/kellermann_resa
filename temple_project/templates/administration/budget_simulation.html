@@ -366,7 +366,9 @@
                   <td style="text-align:right;padding:3px 4px 1px;{% if deficit_votee > 0 %}color:#B91C1C;{% else %}color:#059669;{% endif %}font-weight:600;">
                     {% if deficit_votee is not None %}{% if deficit_votee > 0 %}−{{ deficit_votee|floatformat:0 }}{% else %}+{{ deficit_votee|floatformat:0|slice:"1:" }}{% endif %} €{% else %}—{% endif %}
                   </td>
-                  <td style="text-align:right;padding:3px 4px 1px;color:#059669;font-weight:600;">≈ 0 €</td>
+                  <td style="text-align:right;padding:3px 4px 1px;{% if solde_eq_b is not None %}{% if solde_eq_b >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}{% else %}color:#059669;{% endif %}font-weight:600;">
+                    {% if solde_eq_b is not None %}{% if solde_eq_b >= 0 %}+{{ solde_eq_b|floatformat:0 }}{% else %}−{{ solde_eq_b|floatformat:0|slice:"1:" }}{% endif %} €{% else %}≈ 0 €{% endif %}
+                  </td>
                   <td style="text-align:right;padding:3px 0 1px;font-weight:700;{% if scenario_propose.solde >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}">
                     {% if scenario_propose.solde >= 0 %}+{% endif %}{{ scenario_propose.solde|floatformat:0 }} €
                   </td>

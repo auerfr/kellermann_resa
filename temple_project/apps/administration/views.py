@@ -6746,7 +6746,15 @@ def budget_simulation(request):
     pct_lb_defaut = None
     net_lb_display = sim.get('net_lb') if sim else None
     net_hg_display = sim.get('net_hg') if sim else None
-    tarif_eq_lb_display = sim.get('tarif_eq_lb') if sim else None
+    # Inclut hg_fixe_absorbe : les coûts fixes HG non couverts par les tenues HG
+    # sont absorbés par la cotisation LB — sans ça le "tarif d'équilibre" affiché
+    # laisse un déficit structurel de ~9 778 € (hg_fixe_absorbe).
+    if sim and sim.get('eff_eq_lb') and sim.get('net_lb') is not None:
+        tarif_eq_lb_display = (
+            sim['net_lb'] + (sim.get('hg_fixe_absorbe') or Decimal('0'))
+        ) / Decimal(str(sim['eff_eq_lb']))
+    else:
+        tarif_eq_lb_display = None
     tarif_eq_hg_display = sim.get('tarif_eq_hg') if sim else None          # modèle B — par tenue
     tarif_eq_hg_membre_display = sim.get('tarif_eq_hg_per_membre') if sim else None  # modèle A — par membre
 
@@ -6939,7 +6947,7 @@ def budget_simulation(request):
 
     # ── Totaux modèles économiques (pour affichage dans le tableau d'équilibre) ──
     recettes_m1_total = recettes_hybride_total = recettes_eq_total = recettes_actuelles_total = None
-    solde_m1 = deficit_hybride = solde_hybride = None
+    solde_m1 = solde_eq_b = deficit_hybride = solde_hybride = None
     if sim:
         _rec_exc_adh = sim.get('recettes_exc_adherents') or Decimal('0')
         recettes_m1_total        = sum(l['cout_equilibre_m1']   for l in sim['par_loge'] if l.get('cout_equilibre_m1')) + _rec_exc_adh
@@ -6948,6 +6956,7 @@ def budget_simulation(request):
         recettes_actuelles_total = sum(l['cotisation_actuelle'] for l in sim['par_loge'] if l.get('cotisation_actuelle'))+ _rec_exc_adh
         if charges_nettes_total is not None:
             solde_m1        = recettes_m1_total      - charges_nettes_total
+            solde_eq_b      = recettes_eq_total      - charges_nettes_total
             deficit_hybride = charges_nettes_total   - recettes_hybride_total
             solde_hybride   = recettes_hybride_total - charges_nettes_total
         _rec_exc_adh_s = sim.get('recettes_exc_adherents') or Decimal('0')
@@ -7177,6 +7186,7 @@ def budget_simulation(request):
         'recettes_hybride_total':    recettes_hybride_total,
         'recettes_eq_total':         recettes_eq_total,
         'recettes_actuelles_total':  recettes_actuelles_total,
+        'solde_eq_b':                solde_eq_b,
         'deficit_hybride':           deficit_hybride,
         'solde_hybride':             solde_hybride,
         'recettes_sogofim_total':    recettes_sogofim_total,
