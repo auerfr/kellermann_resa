@@ -6535,6 +6535,19 @@ def budget_simulation(request):
         recettes_sogofim_total = sum(l['cout_sogofim'] for l in sim['par_loge'] if l.get('cout_sogofim') is not None) + _rec_exc_adh_s
         if charges_nettes_total is not None:
             solde_sogofim = recettes_sogofim_total - charges_nettes_total
+        # Breakdown GODF vs autres pour transparence
+        _sogofim_lb_godf_eff   = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'loge'       and l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
+        _sogofim_lb_autre_eff  = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'loge'       and not l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
+        _sogofim_hg_godf_eff   = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'haut_grade' and l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
+        _sogofim_hg_autre_eff  = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'haut_grade' and not l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
+        sogofim_breakdown = {
+            'lb_godf_effectif':  _sogofim_lb_godf_eff,
+            'lb_autre_effectif': _sogofim_lb_autre_eff,
+            'hg_godf_effectif':  _sogofim_hg_godf_eff,
+            'hg_autre_effectif': _sogofim_hg_autre_eff,
+            'lb_godf_recettes':  Decimal('138') * _sogofim_lb_godf_eff,
+            'lb_autre_recettes': Decimal('180') * _sogofim_lb_autre_eff,
+        }
 
     # ── Scénario tarif personnalisé ─────────────────────────────────────────────
     scenario_propose = None
@@ -6694,6 +6707,7 @@ def budget_simulation(request):
         'sogofim_lb_autre':          Decimal('180'),
         'sogofim_hg_godf':           Decimal('7.50'),
         'sogofim_hg_autre':          Decimal('10.00'),
+        'sogofim_breakdown':         sogofim_breakdown if sim else None,
     })
 
 

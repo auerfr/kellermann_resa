@@ -534,6 +534,15 @@
             <span class="badge me-1" style="background:#EDE9FE;color:#5B21B6;font-size:10px;">HG autres</span>{{ sogofim_hg_autre }} €/tenue/membre
           </div>
           <div class="text-muted mt-2" style="font-size:11px;">Tarification nationale SOGOFIM 2026. LB facturé à l'année par membre ; HG facturé par tenue et par membre (usage réel).</div>
+          {% if sogofim_breakdown %}
+          <div class="mt-2" style="font-size:10.5px;color:#78350F;">
+            <strong>Répartition :</strong>
+            LB GODF {{ sogofim_breakdown.lb_godf_effectif }} mbr × 138 € = {{ sogofim_breakdown.lb_godf_recettes|floatformat:0 }} €<br>
+            LB Autres {{ sogofim_breakdown.lb_autre_effectif }} mbr × 180 € = {{ sogofim_breakdown.lb_autre_recettes|floatformat:0 }} €<br>
+            HG GODF {{ sogofim_breakdown.hg_godf_effectif }} mbr × 7,50 €/tenue<br>
+            HG Autres {{ sogofim_breakdown.hg_autre_effectif }} mbr × 10 €/tenue
+          </div>
+          {% endif %}
           {% if solde_sogofim is not None %}
           <div class="mt-2 fw-semibold" style="font-size:11px;{% if solde_sogofim >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}">
             {% if solde_sogofim >= 0 %}✓ Excédent : +{{ solde_sogofim|floatformat:0 }} €{% else %}⚠ Déficit : {{ solde_sogofim|floatformat:0 }} €{% endif %}
