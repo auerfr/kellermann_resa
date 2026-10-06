@@ -6646,7 +6646,34 @@ def budget_config(request):
 @staff_required
 def budget_simulation(request):
     """Simulation de répartition des charges par loge."""
-    from decimal import Decimal
+    from decimal import Decimal, InvalidOperation
+
+    # ── Action POST : fixer un tarif validé en AG ─────────────────────────────
+    if request.method == 'POST' and request.POST.get('action') == 'fixer_tarif_ag':
+        _params = Parametres.get_instance()
+        try:
+            _lb_raw = request.POST.get('tarif_lb_ag', '').strip()
+            _hg_raw = request.POST.get('tarif_hg_ag', '').strip()
+            _fields = []
+            if _lb_raw:
+                _params.tarif_membre_loge = Decimal(_lb_raw)
+                _fields.append('tarif_membre_loge')
+            if _hg_raw:
+                _params.tarif_membre_hg = Decimal(_hg_raw)
+                _fields.append('tarif_membre_hg')
+            if _fields:
+                _params.save(update_fields=_fields)
+                messages.success(
+                    request,
+                    f"Tarifs AG mis à jour — LB : {_params.tarif_membre_loge} €/mbr · "
+                    f"HG : {_params.tarif_membre_hg} €/tenue"
+                )
+        except InvalidOperation as e:
+            messages.error(request, f"Valeur invalide : {e}")
+        _qs = request.POST.get('redirect_qs', '')
+        from django.shortcuts import redirect
+        _url = reverse('administration:budget_simulation')
+        return redirect(f"{_url}?{_qs}" if _qs else _url)
 
     def _parse_int_param(val, lo=1, hi=9999):
         try:

@@ -334,31 +334,91 @@
       <div class="col-md-4">
         <div class="p-3 rounded h-100 d-flex flex-column" style="background:#F0FDF4;border:2px solid #22C55E;">
           <div class="fw-bold mb-2" style="color:#166534;font-size:13px;">Cas B — LB/mbr + HG/tenue <span class="badge ms-1" style="background:#DCFCE7;color:#14532D;font-size:10px;">★ Recommandé</span></div>
+
+          {# Comparatif : actuel AG / équilibre / simulé #}
           <div class="rounded px-3 py-2 mb-2" style="background:#DCFCE7;">
-            <div style="font-size:9px;font-weight:700;color:#14532D;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">Tarifs d'équilibre</div>
-            {% if tarif_eq_lb_display %}
-            <div style="font-variant-numeric:tabular-nums;">
-              <span class="d-block" style="font-size:15px;font-weight:800;color:#166534;line-height:1.4;">LB : {{ tarif_eq_lb_display|floatformat:2 }} €/mbr/an</span>
-              <span class="d-block" style="font-size:14px;font-weight:700;color:#15803D;line-height:1.4;">HG : {{ tarif_eq_hg_display|floatformat:2 }} €/tenue</span>
-            </div>
-            {% else %}<div class="text-muted small">Données insuffisantes</div>{% endif %}
+            <div style="font-size:9px;font-weight:700;color:#14532D;text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px;">Tarifs</div>
+            <table style="width:100%;font-size:11px;border-collapse:collapse;font-variant-numeric:tabular-nums;">
+              <thead>
+                <tr>
+                  <th style="color:#6B7280;font-weight:500;padding-bottom:3px;"></th>
+                  <th style="color:#6B7280;font-weight:500;text-align:right;padding:0 4px 3px;">Actuel AG</th>
+                  <th style="color:#166534;font-weight:700;text-align:right;padding:0 4px 3px;">Équilibre</th>
+                  {% if scenario_propose %}<th style="color:#7C3AED;font-weight:700;text-align:right;padding:0 0 3px;">Simulé</th>{% endif %}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="color:#4B5563;padding:2px 0;">LB/mbr</td>
+                  <td style="text-align:right;padding:2px 4px;color:#6B7280;">{{ params.tarif_membre_loge|floatformat:2 }} €</td>
+                  <td style="text-align:right;padding:2px 4px;font-weight:700;color:#166534;">{% if tarif_eq_lb_display %}{{ tarif_eq_lb_display|floatformat:2 }} €{% else %}—{% endif %}</td>
+                  {% if scenario_propose %}<td style="text-align:right;padding:2px 0;font-weight:700;color:#7C3AED;">{{ scenario_propose.tarif_lb|floatformat:2 }} €</td>{% endif %}
+                </tr>
+                <tr>
+                  <td style="color:#4B5563;padding:2px 0;">HG/tenue</td>
+                  <td style="text-align:right;padding:2px 4px;color:#6B7280;">{{ params.tarif_membre_hg|floatformat:2 }} €</td>
+                  <td style="text-align:right;padding:2px 4px;font-weight:700;color:#15803D;">{% if tarif_eq_hg_display %}{{ tarif_eq_hg_display|floatformat:2 }} €{% else %}—{% endif %}</td>
+                  {% if scenario_propose %}<td style="text-align:right;padding:2px 0;font-weight:700;color:#7C3AED;">{{ scenario_propose.tarif_hg|floatformat:2 }} €</td>{% endif %}
+                </tr>
+                {% if scenario_propose %}
+                <tr style="border-top:1px dashed #86EFAC;">
+                  <td style="color:#4B5563;padding:3px 0 1px;">Solde</td>
+                  <td style="text-align:right;padding:3px 4px 1px;{% if deficit_votee > 0 %}color:#B91C1C;{% else %}color:#059669;{% endif %}font-weight:600;">
+                    {% if deficit_votee is not None %}{% if deficit_votee > 0 %}−{{ deficit_votee|floatformat:0 }}{% else %}+{{ deficit_votee|floatformat:0|slice:"1:" }}{% endif %} €{% else %}—{% endif %}
+                  </td>
+                  <td style="text-align:right;padding:3px 4px 1px;color:#059669;font-weight:600;">≈ 0 €</td>
+                  <td style="text-align:right;padding:3px 0 1px;font-weight:700;{% if scenario_propose.solde >= 0 %}color:#059669;{% else %}color:#B91C1C;{% endif %}">
+                    {% if scenario_propose.solde >= 0 %}+{% endif %}{{ scenario_propose.solde|floatformat:0 }} €
+                  </td>
+                </tr>
+                {% endif %}
+              </tbody>
+            </table>
           </div>
+
           <div style="font-size:12px;color:#14532D;" class="mb-1">
-            <span class="d-block">Base LB : {{ sim.eff_eq_lb|default:"—" }} membres</span>
-            <span class="d-block">Base HG : {{ sim.nb_resas_hg_adherents|default:"—" }} tenues</span>
+            <span class="d-block">Base LB : {{ sim.eff_eq_lb|default:"—" }} membres · HG : {{ sim.nb_resas_hg_adherents|default:"—" }} tenues</span>
             {% if recettes_eq_b_theorique %}
-            <span class="d-block">Recettes : <strong>{{ recettes_eq_b_theorique|floatformat:0 }} €</strong></span>
+            <span class="d-block">Recettes équilibre : <strong>{{ recettes_eq_b_theorique|floatformat:0 }} €</strong></span>
             {% endif %}
-            <span class="d-block fw-semibold mt-1 text-success">Solde : ≈ 0 € (équilibre)</span>
           </div>
+
           {% if stats_cas_b %}
-          <div class="mt-auto pt-2 border-top" style="font-size:10px;color:#14532D;margin-top:auto!important;">
+          <div class="pt-2 border-top" style="font-size:10px;color:#14532D;">
             <span class="d-block">↑ Hausse max : <strong>{{ stats_cas_b.max_hausse_loge.loge_nom }} (+{{ stats_cas_b.max_hausse_val|floatformat:0 }} €)</strong></span>
             <span class="d-block">↓ Baisse max : <strong>{{ stats_cas_b.max_baisse_loge.loge_nom }} ({{ stats_cas_b.max_baisse_val|floatformat:0 }} €)</strong></span>
-            <span class="d-block">{{ stats_cas_b.nb_hausse }} hausse(s) · {{ stats_cas_b.nb_baisse }} baisse(s) · {{ stats_cas_b.nb_neutre }} neutre(s)</span>
+            <span class="d-block">{{ stats_cas_b.nb_hausse }} hausse(s) · {{ stats_cas_b.nb_baisse }} baisse(s)</span>
             {% if stats_cas_b.mean_pct %}<span class="d-block">Var. moy : {% if stats_cas_b.mean_pct > 0 %}+{% endif %}{{ stats_cas_b.mean_pct|floatformat:1 }} %</span>{% endif %}
           </div>
           {% endif %}
+
+          {# ── Bouton "Fixer en AG" ── #}
+          {% if scenario_propose and scenario_propose.is_custom %}
+          <div class="mt-auto pt-3">
+            <div class="p-2 rounded mb-2" style="background:#EDE9FE;border:1px solid #C4B5FD;font-size:11px;color:#4C1D95;">
+              <strong>Tarif simulé :</strong> LB {{ scenario_propose.tarif_lb|floatformat:2 }} €/mbr · HG {{ scenario_propose.tarif_hg|floatformat:2 }} €/tenue
+              <br><span style="font-size:10px;">Solde simulé :
+                {% if scenario_propose.solde >= 0 %}<span style="color:#059669;font-weight:600;">+{{ scenario_propose.solde|floatformat:0 }} €</span>
+                {% else %}<span style="color:#B91C1C;font-weight:600;">{{ scenario_propose.solde|floatformat:0 }} €</span>{% endif %}
+              </span>
+            </div>
+            <form method="post" action="{% url 'administration:budget_simulation' %}" onsubmit="return confirm('Fixer LB {{ scenario_propose.tarif_lb|floatformat:2 }} € et HG {{ scenario_propose.tarif_hg|floatformat:2 }} € comme tarifs AG ?\n\nCela mettra à jour les tarifs utilisés pour la facturation.');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="fixer_tarif_ag">
+              <input type="hidden" name="tarif_lb_ag" value="{{ scenario_propose.tarif_lb }}">
+              <input type="hidden" name="tarif_hg_ag" value="{{ scenario_propose.tarif_hg }}">
+              <input type="hidden" name="redirect_qs" value="{{ request.GET.urlencode }}">
+              <button type="submit" class="btn btn-sm w-100" style="background:#7C3AED;color:#fff;font-weight:600;">
+                ✓ Fixer en AG — appliquer aux factures
+              </button>
+            </form>
+          </div>
+          {% else %}
+          <div class="mt-auto pt-2" style="font-size:10px;color:#6B7280;">
+            Testez un tarif Cas B dans les paramètres pour activer "Fixer en AG".
+          </div>
+          {% endif %}
+
         </div>
       </div>
     </div>
