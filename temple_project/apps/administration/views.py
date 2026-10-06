@@ -6014,8 +6014,7 @@ def budget_simulation_pdf(request):
     _eq_hg_m = sim.get('tarif_eq_hg_per_membre')
     _c_lb  = float(params.tarif_membre_loge) if params.tarif_membre_loge else None
     _c_hg  = float(params.tarif_membre_hg)   if params.tarif_membre_hg   else None
-    _ch_n  = float((sim.get('charges_lb') or Decimal('0'))
-                  + (sim.get('charges_hg') or Decimal('0')))
+    _ch_n  = float(sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0')))
     _c_rec = (_c_lb or 0) * _eff_lb_pdf + (_c_hg or 0) * _nb_hg_t
 
     # Enrichir les entrées par_loge avec les métriques manquantes
@@ -6103,8 +6102,15 @@ def budget_simulation_pdf(request):
     def _is_neg(v): return v is not None and str(v).startswith('-')
     def _is_pos(v): return v is not None and str(v).startswith('+')
 
+    _rec_a = float(_eq_lb or 0) * _eff_lb_pdf + float(_eq_hg_m or 0) * _eff_hg_pdf
+    _rec_b = float(_eq_lb or 0) * _eff_lb_pdf + float(_eq_hg   or 0) * _nb_hg_t
+    _rec_c = float(_th_m  or 0) * _eff_lb_pdf + float(_th_t    or 0) * _nb_t_pdf
+
     _solde_act = f"{_c_rec - _ch_n:+,.0f} €".replace(',', '\xa0')
     _solde_sog = f"{_sogofim_val - _ch_n:+,.0f} €".replace(',', '\xa0')
+    _solde_a   = f"{_rec_a - _ch_n:+,.0f} €".replace(',', '\xa0') if _eq_lb else '—'
+    _solde_b   = f"{_rec_b - _ch_n:+,.0f} €".replace(',', '\xa0') if _eq_lb else '—'
+    _solde_c   = f"{_rec_c - _ch_n:+,.0f} €".replace(',', '\xa0') if _th_m else '—'
     _delta_lb_a = _md(_eq_lb, _c_lb)
     _delta_lb_b = _md(_eq_lb, _c_lb)
     _delta_lb_c = _md(_th_m,  _c_lb)
@@ -6127,7 +6133,7 @@ def budget_simulation_pdf(request):
          (f"{float(_th_t):.0f} €/tenue" if _th_t else '—'),
          '7,50 €/t./mbr (GODF)\n10,00 €/t./mbr (autre)'],
         ['  Ajustement HG', '—', 'unité changée', _delta_hg_b, _delta_hg_c, 'Barème national'],
-        ['Solde simulé vs charges', _solde_act, '≈ 0 €', '≈ 0 €', '≈ 0 €', _solde_sog],
+        ['Solde simulé vs charges', _solde_act, _solde_a, _solde_b, _solde_c, _solde_sog],
     ]
 
     _lw  = 4.0 * cm
