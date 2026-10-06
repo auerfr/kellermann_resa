@@ -6018,10 +6018,76 @@ def budget_simulation_pdf(request):
                   + (sim.get('charges_hg') or Decimal('0')))
     _c_rec = (_c_lb or 0) * _eff_lb_pdf + (_c_hg or 0) * _nb_hg_t
 
-    # SOGOFIM
+    # Enrichir les entrées par_loge avec les métriques manquantes
+    # (cotisation_actuelle, cout_equilibre_m1, cout_equilibre, cout_hybride, cout_sogofim)
+    # que _simuler_budget ne calcule pas — elles sont normalement ajoutées par la vue principale.
+    SOGOFIM_LB_GODF  = Decimal('138')
+    SOGOFIM_LB_AUTRE = Decimal('180')
+    SOGOFIM_HG_GODF  = Decimal('7.50')
+    SOGOFIM_HG_AUTRE = Decimal('10.00')
+
+    _obe_ids_pdf = {l['loge'].obedience_id for l in sim['par_loge']
+                    if l.get('loge') and l['loge'].obedience_id}
+    _obe_map_pdf = ({o.pk: o.nom.upper()
+                    for o in Obedience.objects.filter(pk__in=_obe_ids_pdf)}
+                   if _obe_ids_pdf else {})
+
+    for _l in sim['par_loge']:
+        if not _l.get('membre_association'):
+            _l.setdefault('cotisation_actuelle', None)
+            _l.setdefault('cout_equilibre_m1',   None)
+            _l.setdefault('cout_equilibre',       None)
+            _l.setdefault('cout_hybride',         None)
+            _l.setdefault('cout_sogofim',         None)
+            continue
+        _eff  = _l.get('effectif') or 0
+        _nb_t = _l.get('nb_tenues') or 0
+        _typ  = _l['type_loge']
+        # Cotisation actuelle AG
+        if _typ == 'loge' and _c_lb and _eff:
+            _l['cotisation_actuelle'] = Decimal(str(_c_lb)) * _eff
+        elif _typ == 'haut_grade' and _c_hg and _eff:
+            _l['cotisation_actuelle'] = Decimal(str(_c_hg)) * _eff
+        else:
+            _l['cotisation_actuelle'] = None
+        # Modèle A (par membre LB et HG)
+        if _typ == 'loge' and _eq_lb and _eff:
+            _l['cout_equilibre_m1'] = _eq_lb * _eff
+        elif _typ == 'haut_grade' and _eq_hg_m and _eff:
+            _l['cout_equilibre_m1'] = _eq_hg_m * _eff
+        else:
+            _l['cout_equilibre_m1'] = None
+        # Modèle B (LB/membre + HG/tenue)
+        if _typ == 'loge' and _eq_lb and _eff:
+            _l['cout_equilibre'] = _eq_lb * _eff
+        elif _typ == 'haut_grade' and _eq_hg and _nb_t:
+            _l['cout_equilibre'] = _eq_hg * _nb_t
+        else:
+            _l['cout_equilibre'] = None
+        # Modèle C hybride
+        if _th_t and _nb_t:
+            if _typ == 'haut_grade':
+                _l['cout_hybride'] = _th_t * _nb_t
+            elif _th_m and _eff:
+                _l['cout_hybride'] = _th_m * _eff + _th_t * _nb_t
+            else:
+                _l['cout_hybride'] = None
+        else:
+            _l['cout_hybride'] = None
+        # SOGOFIM
+        _obe_n = (_obe_map_pdf.get(_l['loge'].obedience_id, '')
+                  if _l.get('loge') and _l['loge'].obedience_id else '')
+        _is_godf_l = 'GODF' in _obe_n or 'GRAND ORIENT' in _obe_n
+        if _typ == 'loge' and _eff:
+            _l['cout_sogofim'] = (SOGOFIM_LB_GODF if _is_godf_l else SOGOFIM_LB_AUTRE) * _eff
+        elif _typ == 'haut_grade' and _eff and _nb_t:
+            _l['cout_sogofim'] = (SOGOFIM_HG_GODF if _is_godf_l else SOGOFIM_HG_AUTRE) * _nb_t * _eff
+        else:
+            _l['cout_sogofim'] = None
+
     _rec_exc_pdf = sim.get('recettes_exc_adherents') or Decimal('0')
-    _sogofim_total = (sum(l['cout_sogofim'] for l in sim['par_loge']
-                          if l.get('cout_sogofim') is not None) + _rec_exc_pdf)
+    _sogofim_total = (sum(_l['cout_sogofim'] for _l in sim['par_loge']
+                          if _l.get('cout_sogofim') is not None) + _rec_exc_pdf)
     _sogofim_val = float(_sogofim_total)
 
     def _mf(v, dec=0):
