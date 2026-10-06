@@ -422,9 +422,9 @@
       <div id="sim-cmp-bars"
         data-charges="{{ charges_nettes_total|floatformat:0 }}"
         data-actuelle="{% if recettes_actuelles_total %}{{ recettes_actuelles_total|floatformat:0 }}{% else %}0{% endif %}"
-        data-m1="{% if recettes_m1_total %}{{ recettes_m1_total|floatformat:0 }}{% else %}0{% endif %}"
-        data-eq="{% if recettes_eq_total %}{{ recettes_eq_total|floatformat:0 }}{% else %}0{% endif %}"
-        data-hybride="{% if recettes_hybride_total %}{{ recettes_hybride_total|floatformat:0 }}{% else %}0{% endif %}"
+        data-m1="{% if recettes_eq_m1_theorique %}{{ recettes_eq_m1_theorique|floatformat:0 }}{% elif recettes_m1_total %}{{ recettes_m1_total|floatformat:0 }}{% else %}0{% endif %}"
+        data-eq="{% if recettes_eq_b_theorique %}{{ recettes_eq_b_theorique|floatformat:0 }}{% elif recettes_eq_total %}{{ recettes_eq_total|floatformat:0 }}{% else %}0{% endif %}"
+        data-hybride="{% if recettes_eq_hybride_theorique %}{{ recettes_eq_hybride_theorique|floatformat:0 }}{% elif recettes_hybride_total %}{{ recettes_hybride_total|floatformat:0 }}{% else %}0{% endif %}"
         data-sogofim="{% if recettes_sogofim_total %}{{ recettes_sogofim_total|floatformat:0 }}{% else %}0{% endif %}"
       ></div>
       <script>

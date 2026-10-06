@@ -5971,6 +5971,197 @@ def budget_simulation_pdf(request):
     elems.append(dec_t)
     elems.append(Spacer(1, 0.5 * cm))
 
+    # ── Comparaison des 3 modèles de facturation ────────────────────────────────
+    from reportlab.graphics.shapes import Drawing, Rect, String, Line
+    from reportlab.lib.enums import TA_LEFT
+
+    note_s = ParagraphStyle('note_s', fontSize=8, textColor=GRIS, spaceAfter=3, leading=11)
+    intro_s = ParagraphStyle('intro_s', fontSize=8.5, textColor=colors.HexColor('#1E293B'),
+                             spaceAfter=4, leading=12)
+
+    elems.append(Paragraph("Comparaison des modèles de facturation", section))
+    elems.append(Paragraph(
+        "Trois approches pour couvrir les charges nettes d'exploitation. "
+        "Le « tarif d'équilibre » est le montant minimum à voter à l'AG pour chaque composant.",
+        intro_s))
+
+    # Calcul des tarifs hybrides (modèle C)
+    _eff_lb_pdf = sim.get('eff_eq_lb') or 0
+    _nb_t_pdf   = sim.get('nb_resas') or 0
+    _nb_hg_t    = sim.get('nb_resas_hg_adherents') or 0
+    _eff_hg_pdf = sim.get('eff_eq_hg') or 0
+    _th_m = sim['total_fixe'] / Decimal(str(_eff_lb_pdf)) if _eff_lb_pdf else None
+    _th_t = ((sim['total_mutualise'] + sim['total_marginal'])
+             / Decimal(str(_nb_t_pdf))) if _nb_t_pdf else None
+    _eq_lb  = sim.get('tarif_eq_lb')
+    _eq_hg  = sim.get('tarif_eq_hg')
+    _eq_hg_m = sim.get('tarif_eq_hg_per_membre')
+    _c_lb = float(params.tarif_membre_loge) if params.tarif_membre_loge else None
+    _c_hg = float(params.tarif_membre_hg)   if params.tarif_membre_hg   else None
+    _ch_n = float((sim.get('charges_lb') or Decimal('0'))
+                 + (sim.get('charges_hg') or Decimal('0')))
+    _c_rec = (_c_lb or 0) * _eff_lb_pdf + (_c_hg or 0) * _nb_hg_t
+
+    def _mf(v, dec=0, unit=''):
+        if v is None: return '—'
+        s = f"{float(v):.{dec}f} €"
+        return s + unit
+
+    def _md(eq, curr):
+        if eq is None or curr is None: return '—'
+        d = float(eq) - float(curr)
+        if d == 0: return '='
+        return f"+{d:.0f} €" if d > 0 else f"{d:.0f} €"
+
+    BLEU_LT = colors.HexColor('#DBEAFE')
+    VERT_LT = colors.HexColor('#DCFCE7')
+    VIOL_LT = colors.HexColor('#EDE9FE')
+    ROUGE_C = colors.HexColor('#B91C1C')
+    VERT_DC = colors.HexColor('#065F46')
+
+    _solde_act = f"{_c_rec - _ch_n:+,.0f} €".replace(',', '\xa0')
+    _solde_a   = f"≈ 0 €"
+    _solde_b   = f"≈ 0 €"
+    _solde_c   = f"≈ 0 €"
+
+    _delta_lb_a  = _md(_eq_lb, _c_lb)
+    _delta_lb_b  = _md(_eq_lb, _c_lb)
+    _delta_lb_c  = _md(_th_m,  _c_lb)
+    _delta_hg_b  = _md(_eq_hg, _c_hg)
+    _delta_hg_c  = _md(_th_t, params.tarif_exc_sans_agapes)
+
+    modeles_data = [
+        ['', 'Actuel AG', 'Modèle A\npar membre', 'Modèle B\nLB/mbr + HG/t.', 'Modèle C ★\nhybride'],
+        ['LB — cotisation/membre',
+         _mf(_c_lb),
+         _mf(_eq_lb),
+         _mf(_eq_lb),
+         (f"{float(_th_m):.0f} € (fixe)" if _th_m else '—')],
+        ['  Ajustement LB',    '—', _delta_lb_a, _delta_lb_b, _delta_lb_c],
+        ['HG — tarif applicable',
+         f"{_mf(_c_hg)}/tenue",
+         (f"{_mf(_eq_hg_m)}/mbr" if _eq_hg_m else '—'),
+         (f"{_mf(_eq_hg)}/tenue"  if _eq_hg  else '—'),
+         (f"{float(_th_t):.0f} €/tenue" if _th_t else '—')],
+        ['  Ajustement HG',    '—', 'unité changée', _delta_hg_b, _delta_hg_c],
+        ['Solde simulé vs charges', _solde_act, _solde_a, _solde_b, _solde_c],
+    ]
+
+    _cw = [4.2*cm, 2.6*cm, 3.0*cm, 3.3*cm, 3.3*cm]
+    mod_t = Table(modeles_data, colWidths=_cw)
+
+    # Detect colours for delta cells
+    def _is_neg(v): return v is not None and str(v).startswith('-')
+    def _is_pos(v): return v is not None and str(v).startswith('+')
+
+    mod_ts = [
+        ('BACKGROUND',  (0, 0), (-1, 0), BLEU),
+        ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',    (0, 0), (-1, 0), 8),
+        ('ALIGN',       (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN',       (1, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',      (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTSIZE',    (0, 1), (-1, -1), 8),
+        ('TOPPADDING',  (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('GRID',        (0, 0), (-1, -1), 0.4, colors.HexColor('#CDD8E8')),
+        # Column colours by model
+        ('BACKGROUND',  (2, 1), (2, -1), BLEU_LT),
+        ('BACKGROUND',  (3, 1), (3, -1), VERT_LT),
+        ('BACKGROUND',  (4, 1), (4, -1), VIOL_LT),
+        # Header column colours
+        ('BACKGROUND',  (2, 0), (2, 0), colors.HexColor('#1D4ED8')),
+        ('BACKGROUND',  (3, 0), (3, 0), colors.HexColor('#15803D')),
+        ('BACKGROUND',  (4, 0), (4, 0), colors.HexColor('#5B21B6')),
+        # Delta rows (2 and 4)
+        ('FONTSIZE',    (0, 2), (-1, 2), 7.5),
+        ('FONTSIZE',    (0, 4), (-1, 4), 7.5),
+        ('TEXTCOLOR',   (0, 2), (0, 2), GRIS),
+        ('TEXTCOLOR',   (0, 4), (0, 4), GRIS),
+        # Solde row
+        ('BACKGROUND',  (0, 5), (-1, 5), colors.HexColor('#F0FDF4')),
+        ('FONTNAME',    (0, 5), (-1, 5), 'Helvetica-Bold'),
+        ('TEXTCOLOR',   (1, 5), (1, 5), ROUGE_C),   # actuel en rouge
+        ('TEXTCOLOR',   (2, 5), (4, 5), VERT_DC),   # modèles en vert
+    ]
+    # Coloriser les deltas positis (rouge) et négatifs (vert)
+    for col_idx, delta_val in [(2, _delta_lb_a), (3, _delta_lb_b), (4, _delta_lb_c)]:
+        if _is_pos(delta_val):
+            mod_ts.append(('TEXTCOLOR', (col_idx, 2), (col_idx, 2), ROUGE_C))
+            mod_ts.append(('FONTNAME',  (col_idx, 2), (col_idx, 2), 'Helvetica-Bold'))
+        elif _is_neg(delta_val):
+            mod_ts.append(('TEXTCOLOR', (col_idx, 2), (col_idx, 2), VERT_DC))
+            mod_ts.append(('FONTNAME',  (col_idx, 2), (col_idx, 2), 'Helvetica-Bold'))
+    for col_idx, delta_val in [(2, '—'), (3, _delta_hg_b), (4, _delta_hg_c)]:
+        if _is_pos(delta_val):
+            mod_ts.append(('TEXTCOLOR', (col_idx, 4), (col_idx, 4), ROUGE_C))
+            mod_ts.append(('FONTNAME',  (col_idx, 4), (col_idx, 4), 'Helvetica-Bold'))
+        elif _is_neg(delta_val):
+            mod_ts.append(('TEXTCOLOR', (col_idx, 4), (col_idx, 4), VERT_DC))
+            mod_ts.append(('FONTNAME',  (col_idx, 4), (col_idx, 4), 'Helvetica-Bold'))
+
+    mod_t.setStyle(TableStyle(mod_ts))
+    elems.append(mod_t)
+    elems.append(Spacer(1, 0.25 * cm))
+
+    # ── Visualisation barres horizontales (recettes vs charges) ─────────────────
+    if _ch_n > 0:
+        _bar_vals = [
+            ('Actuelle — tarifs AG votés',   _c_rec,                   colors.HexColor('#64748B')),
+            ('Modèle A — par membre',        _ch_n,                    colors.HexColor('#1D4ED8')),
+            ('Modèle B — LB/mbr + HG/tenue', _ch_n,                   colors.HexColor('#166534')),
+            ('Modèle C ★ hybride',           (float(_th_m or 0) * _eff_lb_pdf
+                                              + float(_th_t or 0) * _nb_t_pdf), colors.HexColor('#5B21B6')),
+        ]
+        _bar_w = 17 * cm
+        _bar_row_h = 1.0 * cm
+        _lbl_w = 6.0 * cm
+        _val_w = _bar_w - _lbl_w - 2.5 * cm
+        _max_v = max(v for _, v, _ in _bar_vals) * 1.06
+        _ch_x  = _lbl_w + _val_w * (_ch_n / _max_v)  # position ligne rouge
+
+        drw = Drawing(_bar_w, len(_bar_vals) * _bar_row_h + 0.6 * cm)
+        _y0 = len(_bar_vals) * _bar_row_h + 0.1 * cm
+        for i, (lbl, val, col) in enumerate(_bar_vals):
+            y = _y0 - (i + 1) * _bar_row_h
+            bw = _val_w * (val / _max_v) if _max_v else 0
+            solde = val - _ch_n
+            # Label
+            drw.add(String(_lbl_w - 4, y + 4, lbl, fontSize=7.5,
+                           fillColor=colors.HexColor('#1E293B')))
+            # Bar
+            drw.add(Rect(_lbl_w, y, bw, 12,
+                         fillColor=col, strokeColor=None, strokeWidth=0))
+            # Solde text
+            solde_col = colors.HexColor('#059669') if solde >= 0 else ROUGE_C
+            drw.add(String(_lbl_w + bw + 3, y + 3,
+                           f"{val:,.0f} € ({'+' if solde >= 0 else ''}{solde:,.0f} €)".replace(',', '\xa0'),
+                           fontSize=7, fillColor=solde_col))
+        # Ligne rouge charges
+        drw.add(Line(_ch_x, 0, _ch_x, _y0,
+                     strokeColor=ROUGE_C, strokeWidth=1.5, strokeDashArray=[3, 2]))
+        drw.add(String(_ch_x - 12, _y0 + 2,
+                       f"Charges : {_ch_n:,.0f} €".replace(',', '\xa0'),
+                       fontSize=7, fillColor=ROUGE_C))
+        elems.append(drw)
+        elems.append(Spacer(1, 0.15 * cm))
+
+    # Recommendation note
+    if _th_m and _th_t:
+        rec_note = ParagraphStyle('rec_note', fontSize=8, textColor=colors.HexColor('#4C1D95'),
+                                  backColor=colors.HexColor('#EDE9FE'), borderPad=5,
+                                  leftIndent=4, rightIndent=4, spaceBefore=3, spaceAfter=6,
+                                  leading=12)
+        elems.append(Paragraph(
+            f"<b>★ Recommandation — Modèle C hybride :</b> "
+            f"Voter LB à <b>{float(_th_m):.0f} €/membre</b> (charges fixes) "
+            f"+ <b>{float(_th_t):.0f} €/tenue</b> pour tous (charges variables). "
+            f"Tarif proche de la tenue exceptionnelle actuelle "
+            f"({float(params.tarif_exc_sans_agapes):.0f} € sans agapes) — transition naturelle.",
+            rec_note))
+    elems.append(Spacer(1, 0.4 * cm))
+
     # ── Tarif d'équilibre ──
     elems.append(Paragraph("Tarif d'équilibre (coût / membre)", section))
     eq_data = [['Type de loge', 'Membres imputés', 'Charges imputées', 'Tarif équilibre', 'Tarif actuel', 'Écart']]
@@ -6668,6 +6859,25 @@ def budget_simulation(request):
     if tarif_hybride_tenue and params.tarif_exc_sans_agapes:
         delta_hybride_tenue = tarif_hybride_tenue - Decimal(str(params.tarif_exc_sans_agapes))
 
+    # Recettes théoriques à l'équilibre (basées sur l'effectif de simulation, pas les fiches par loge)
+    # → ces valeurs atteignent exactement les charges nettes (ligne rouge du graphique)
+    recettes_eq_m1_theorique = recettes_eq_b_theorique = recettes_eq_hybride_theorique = None
+    if sim:
+        _eff_lb_t   = sim.get('eff_eq_lb') or 0
+        _eff_hg_t   = sim.get('eff_eq_hg') or 0
+        _nb_resas_hg_t = sim.get('nb_resas_hg_adherents') or 0
+        _nb_resas_t = sim.get('nb_resas') or 0
+        _rec_exc_t  = sim.get('recettes_exc_adherents') or Decimal('0')
+        if tarif_eq_lb_display and _eff_lb_t and tarif_eq_hg_membre_display and _eff_hg_t:
+            recettes_eq_m1_theorique = (tarif_eq_lb_display * Decimal(str(_eff_lb_t))
+                + tarif_eq_hg_membre_display * Decimal(str(_eff_hg_t)) + _rec_exc_t)
+        if tarif_eq_lb_display and _eff_lb_t and tarif_eq_hg_display and _nb_resas_hg_t:
+            recettes_eq_b_theorique = (tarif_eq_lb_display * Decimal(str(_eff_lb_t))
+                + tarif_eq_hg_display * Decimal(str(_nb_resas_hg_t)) + _rec_exc_t)
+        if tarif_hybride_membre and _eff_lb_t and tarif_hybride_tenue and _nb_resas_t:
+            recettes_eq_hybride_theorique = (tarif_hybride_membre * Decimal(str(_eff_lb_t))
+                + tarif_hybride_tenue * Decimal(str(_nb_resas_t)) + _rec_exc_t)
+
     return render(request, 'administration/budget_simulation.html', {
         'saison': saison,
         'saisons_dispo': saisons_dispo,
@@ -6723,6 +6933,9 @@ def budget_simulation(request):
         'delta_tarif_hg_b':      delta_tarif_hg_b,
         'delta_hybride_membre':  delta_hybride_membre,
         'delta_hybride_tenue':   delta_hybride_tenue,
+        'recettes_eq_m1_theorique':      recettes_eq_m1_theorique,
+        'recettes_eq_b_theorique':       recettes_eq_b_theorique,
+        'recettes_eq_hybride_theorique': recettes_eq_hybride_theorique,
     })
 
 
