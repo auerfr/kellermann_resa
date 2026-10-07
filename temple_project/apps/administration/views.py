@@ -6653,13 +6653,40 @@ def budget_simulation_export_tresorier(request):
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        wb = openpyxl.load_workbook(template_path)
+        wb_src = openpyxl.load_workbook(template_path)
 
-    ws_syn = wb['Synthèse 2026']
+    # Nouveau classeur : uniquement Synthèse 2026 + Parametres
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    # ── Copier Synthèse 2026 cellule par cellule ──────────────────────────────
+    ws_src = wb_src['Synthèse 2026']
+    ws_syn = wb.create_sheet('Synthèse 2026')
+    for row in ws_src.iter_rows():
+        for src_cell in row:
+            dst_cell = ws_syn.cell(src_cell.row, src_cell.column)
+            dst_cell.value = src_cell.value
+            if src_cell.has_style:
+                dst_cell.number_format = src_cell.number_format
+                if src_cell.font:
+                    dst_cell.font = Font(
+                        bold=src_cell.font.bold, italic=src_cell.font.italic,
+                        size=src_cell.font.size, color=src_cell.font.color,
+                    )
+                if src_cell.alignment:
+                    dst_cell.alignment = Alignment(
+                        horizontal=src_cell.alignment.horizontal,
+                        vertical=src_cell.alignment.vertical,
+                        wrap_text=src_cell.alignment.wrap_text,
+                    )
+    # Copier largeurs de colonnes
+    for col, cdim in ws_src.column_dimensions.items():
+        ws_syn.column_dimensions[col].width = cdim.width
+    # Copier hauteurs de lignes
+    for rnum, rdim in ws_src.row_dimensions.items():
+        ws_syn.row_dimensions[rnum].height = rdim.height
 
     # ── Onglet Parametres (sans accent pour les formules Excel) ──────────────
-    if 'Parametres' in wb.sheetnames:
-        del wb['Parametres']
     ws_p = wb.create_sheet('Parametres', 0)
 
     _b = Font(bold=True, size=10)
@@ -6716,19 +6743,15 @@ def budget_simulation_export_tresorier(request):
     euro_fmt  = '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-'
     ecart_fmt = '#,##0.00\\ "€";[Red]-#,##0.00\\ "€"'
 
-    # ── Lignes de données (rows 3..52) ────────────────────────────────────────
+    # ── Lignes de données (rows 3..52) — toutes les lignes conservées ─────────
     FIRST_ROW, LAST_ROW = 3, 52
     for r in range(FIRST_ROW, LAST_ROW + 1):
         nom_val = ws_syn.cell(r, 3).value   # col C
         k_val   = ws_syn.cell(r, 11).value  # col K
 
-        if not nom_val and k_val is None:
-            continue  # ligne réservée vide
-        if k_val == 0:
-            continue  # loge inactive
-
+        # Toujours conserver la ligne ; chercher la correspondance simulation
         loge_sim = None
-        if nom_val:
+        if nom_val and k_val not in (None, 0):
             nk = _norm(str(nom_val))
             loge_sim = sim_index.get(nk)
             if not loge_sim:
@@ -6741,15 +6764,16 @@ def budget_simulation_export_tresorier(request):
                             break
 
         if not loge_sim:
-            continue
+            continue  # ligne vide, inactive ou non rapprochée : pas de formule
 
         nb_t = loge_sim.get('nb_tenues') or 0
         typ  = loge_sim.get('type_loge', '')
-        if not nb_t:
-            continue
 
-        # M (13) : Nb tenues
-        ws_syn.cell(r, 13).value = nb_t
+        # M (13) : Nb tenues (toujours, même si 0)
+        ws_syn.cell(r, 13).value = nb_t if nb_t else None
+
+        if not nb_t:
+            continue  # pas de tenue enregistrée : pas de formule
 
         # N (14) : Cas B total
         if typ == 'loge':
