@@ -6574,6 +6574,242 @@ def budget_simulation_pdf(request):
 
 
 @staff_required
+def budget_simulation_export_tresorier(request):
+    """Export Excel au format trésorier (base Synthèse 2026) + onglet Parametres + colonnes Cas A/B."""
+    import re, unicodedata, os, warnings
+    from decimal import Decimal
+    from openpyxl.utils import get_column_letter
+
+    def _pi(val):
+        try: v = int(str(val).strip()); return v if 1 <= v <= 9999 else None
+        except: return None
+    def _pd(val):
+        if not val: return None
+        try: v = float(str(val).replace(',', '.').strip()); return v if v >= 0 else None
+        except: return None
+    def _norm(s):
+        s = str(s or '').strip()
+        s = re.sub(r'\s*\([^)]+\)\s*$', '', s).strip()
+        s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+        return s.lower()
+
+    # ── Paramètres simulation ─────────────────────────────────────────────────
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    params = Parametres.get_instance()
+    eff_lb = sum(l.effectif_total for l in Loge.objects.filter(actif=True, type_loge='loge'))
+    eff_hg = sum(l.effectif_total for l in Loge.objects.filter(actif=True, type_loge='haut_grade'))
+    nb_membres_lb  = _pi(request.GET.get('nb_membres_lb', '')) or eff_lb or None
+    nb_membres_hg  = _pi(request.GET.get('nb_membres_hg', '')) or eff_hg or None
+    recettes_exc   = _pd(request.GET.get('recettes_exc', ''))
+    ratio_raw      = _pd(request.GET.get('ratio_hg_cas_a', ''))
+    ratio_hg_cas_a = Decimal(str(ratio_raw)) if ratio_raw is not None else Decimal('0.90')
+
+    postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
+    sim = (_simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
+                           recettes_exc=recettes_exc, params=params)
+           if postes_actifs > 0 else None)
+    if not sim:
+        return HttpResponse("Aucune donnée de simulation disponible pour cette saison.",
+                            status=400, content_type='text/plain; charset=utf-8')
+
+    # ── Tarifs d'équilibre ────────────────────────────────────────────────────
+    tarif_eq_lb = None
+    tarif_eq_hg = sim.get('tarif_eq_hg')
+    if sim.get('eff_eq_lb') and sim.get('net_lb') is not None:
+        tarif_eq_lb = (sim['net_lb'] + (sim.get('hg_fixe_absorbe') or Decimal('0'))
+                       ) / Decimal(str(sim['eff_eq_lb']))
+
+    charges_nettes = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
+    mt_lb = sum((l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+                for l in sim['par_loge']
+                if l.get('type_loge') == 'loge' and l.get('membre_association'))
+    mt_hg = sum((l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+                for l in sim['par_loge']
+                if l.get('type_loge') == 'haut_grade' and l.get('membre_association'))
+    mt_pond = Decimal(str(mt_lb)) + Decimal(str(mt_hg)) * ratio_hg_cas_a
+    tarif_cas_a_lb = tarif_cas_a_hg = None
+    if charges_nettes and mt_pond:
+        tarif_cas_a_lb = charges_nettes / mt_pond
+        tarif_cas_a_hg = tarif_cas_a_lb * ratio_hg_cas_a
+
+    c_lb = params.tarif_membre_loge
+    c_hg = params.tarif_membre_hg
+
+    # ── Index simulation par nom normalisé ────────────────────────────────────
+    sim_index = {}
+    for l in sim['par_loge']:
+        if l.get('membre_association'):
+            k = _norm(l.get('loge_nom', ''))
+            if k:
+                sim_index[k] = l
+
+    # ── Charger le fichier trésorier comme base ───────────────────────────────
+    template_path = os.path.join(
+        str(settings.BASE_DIR), 'temple_project', 'fixtures', 'tresorier_base_2026.xlsx'
+    )
+    if not os.path.exists(template_path):
+        return HttpResponse("Fichier template trésorier introuvable sur le serveur.",
+                            status=500, content_type='text/plain; charset=utf-8')
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        wb = openpyxl.load_workbook(template_path)
+
+    ws_syn = wb['Synthèse 2026']
+
+    # ── Onglet Parametres (sans accent pour les formules Excel) ──────────────
+    if 'Parametres' in wb.sheetnames:
+        del wb['Parametres']
+    ws_p = wb.create_sheet('Parametres', 0)
+
+    _b = Font(bold=True, size=10)
+    ws_p.column_dimensions['A'].width = 34
+    ws_p.column_dimensions['B'].width = 14
+    ws_p.column_dimensions['C'].width = 50
+    ws_p['A1'] = 'Paramètre'; ws_p['B1'] = 'Valeur'; ws_p['C1'] = 'Explication'
+    for col in ['A', 'B', 'C']:
+        ws_p[f'{col}1'].font = _b
+
+    _param_rows = [
+        ('Tarif LB actuel (AG voté)',
+         round(float(c_lb), 4) if c_lb else 85.0,
+         '€/membre/an — barème en vigueur (colonne K du fichier trésorier)'),
+        ('Tarif HG actuel (AG voté)',
+         round(float(c_hg), 4) if c_hg else 22.8,
+         '€/tenue/an — barème en vigueur (colonne K du fichier trésorier)'),
+        ('Cas B — Tarif LB équilibre',
+         round(float(tarif_eq_lb), 4) if tarif_eq_lb else 0.0,
+         '€/membre/an — taux d\'équilibre financier (modifiable pour simulation)'),
+        ('Cas B — Tarif HG équilibre',
+         round(float(tarif_eq_hg), 4) if tarif_eq_hg else 0.0,
+         '€/tenue/an — taux d\'équilibre financier (modifiable pour simulation)'),
+        ('Cas A — Tarif LB équilibre',
+         round(float(tarif_cas_a_lb), 4) if tarif_cas_a_lb else 0.0,
+         '€/membre/tenue — tarif proportionnel à l\'activité LB (modifiable)'),
+        ('Cas A — Tarif HG équilibre',
+         round(float(tarif_cas_a_hg), 4) if tarif_cas_a_hg else 0.0,
+         '€/membre/tenue — tarif proportionnel à l\'activité HG (modifiable)'),
+    ]
+    edit_fill = PatternFill('solid', fgColor='FFF3CD')
+    for i, (label, val, expl) in enumerate(_param_rows, 2):
+        ws_p.cell(i, 1).value = label
+        ws_p.cell(i, 2).value = val
+        ws_p.cell(i, 3).value = expl
+        ws_p.cell(i, 2).number_format = '0.0000'
+        if i >= 4:  # lignes d'équilibre : surligner pour indiquer modifiables
+            ws_p.cell(i, 2).fill = edit_fill
+
+    # ── En-têtes nouvelles colonnes ligne 2 (Synthèse 2026) ──────────────────
+    #   M=13  N=14  O=15  P=16  Q=17  R=18  S=19  T=20  U=21
+    _hb = Font(bold=True, size=9)
+    _hc = Alignment(horizontal='center', wrap_text=True)
+    _new_hdrs = {
+        13: 'Nb\ntenues', 14: 'Cas B\nTotal (€)', 15: 'Cas B\n€/frère/an',
+        16: 'Cas B\n€/fr/tenue', 17: 'Cas A\nTotal (€)', 18: 'Cas A\n€/frère/an',
+        19: 'Cas A\n€/fr/tenue', 20: 'Écart\nCas B', 21: 'Écart\nCas A',
+    }
+    for ci, hdr in _new_hdrs.items():
+        cell = ws_syn.cell(2, ci)
+        cell.value = hdr; cell.font = _hb; cell.alignment = _hc
+
+    # ── Formats ───────────────────────────────────────────────────────────────
+    euro_fmt  = '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-'
+    ecart_fmt = '#,##0.00\\ "€";[Red]-#,##0.00\\ "€"'
+
+    # ── Lignes de données (rows 3..52) ────────────────────────────────────────
+    FIRST_ROW, LAST_ROW = 3, 52
+    for r in range(FIRST_ROW, LAST_ROW + 1):
+        nom_val = ws_syn.cell(r, 3).value   # col C
+        k_val   = ws_syn.cell(r, 11).value  # col K
+
+        if not nom_val and k_val is None:
+            continue  # ligne réservée vide
+        if k_val == 0:
+            continue  # loge inactive
+
+        loge_sim = None
+        if nom_val:
+            nk = _norm(str(nom_val))
+            loge_sim = sim_index.get(nk)
+            if not loge_sim:
+                # Tentative sans le suffixe de degré (" 04/14", " 18", " 30")
+                nk2 = re.sub(r'\s+\d{1,2}(/\d{2})?$', '', nk).strip()
+                if nk2 != nk:
+                    for sk, sv in sim_index.items():
+                        if nk2 and sk.startswith(nk2):
+                            loge_sim = sv
+                            break
+
+        if not loge_sim:
+            continue
+
+        nb_t = loge_sim.get('nb_tenues') or 0
+        typ  = loge_sim.get('type_loge', '')
+        if not nb_t:
+            continue
+
+        # M (13) : Nb tenues
+        ws_syn.cell(r, 13).value = nb_t
+
+        # N (14) : Cas B total
+        if typ == 'loge':
+            ws_syn.cell(r, 14).value = f'=+J{r}*Parametres!$B$4'
+        else:
+            ws_syn.cell(r, 14).value = f'=+M{r}*Parametres!$B$5'
+
+        # O (15) : Cas B €/frère/an
+        ws_syn.cell(r, 15).value = f'=+N{r}/J{r}'
+
+        # P (16) : Cas B €/frère/tenue
+        ws_syn.cell(r, 16).value = f'=+N{r}/J{r}/M{r}'
+
+        # Q (17) : Cas A total
+        if typ == 'loge':
+            ws_syn.cell(r, 17).value = f'=+J{r}*M{r}*Parametres!$B$6'
+        else:
+            ws_syn.cell(r, 17).value = f'=+J{r}*M{r}*Parametres!$B$7'
+
+        # R (18) : Cas A €/frère/an
+        ws_syn.cell(r, 18).value = f'=+Q{r}/J{r}'
+
+        # S (19) : Cas A €/frère/tenue
+        ws_syn.cell(r, 19).value = f'=+Q{r}/J{r}/M{r}'
+
+        # T (20) : Écart Cas B vs actuel
+        ws_syn.cell(r, 20).value = f'=+N{r}-L{r}'
+
+        # U (21) : Écart Cas A vs actuel
+        ws_syn.cell(r, 21).value = f'=+Q{r}-L{r}'
+
+        for ci in range(14, 20):
+            ws_syn.cell(r, ci).number_format = euro_fmt
+        for ci in [20, 21]:
+            ws_syn.cell(r, ci).number_format = ecart_fmt
+
+    # ── Ligne 53 : totaux colonnes ajoutées ──────────────────────────────────
+    ws_syn.cell(53, 13).value = f'=SUM(M{FIRST_ROW}:M{LAST_ROW})'
+    ws_syn.cell(53, 14).value = f'=SUM(N{FIRST_ROW}:N{LAST_ROW})'
+    ws_syn.cell(53, 17).value = f'=SUM(Q{FIRST_ROW}:Q{LAST_ROW})'
+    ws_syn.cell(53, 20).value = f'=SUM(T{FIRST_ROW}:T{LAST_ROW})'
+    ws_syn.cell(53, 21).value = f'=SUM(U{FIRST_ROW}:U{LAST_ROW})'
+    for ci in [14, 17, 20, 21]:
+        ws_syn.cell(53, ci).number_format = euro_fmt
+
+    # ── Largeurs colonnes ajoutées ────────────────────────────────────────────
+    ws_syn.column_dimensions['M'].width = 8
+    for col in ['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U']:
+        ws_syn.column_dimensions[col].width = 13
+
+    # ── Réponse HTTP ──────────────────────────────────────────────────────────
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = (
+        f'attachment; filename="Synthese_tresorier_{saison}-{saison+1}_{date.today():%Y%m%d}.xlsx"')
+    wb.save(response)
+    return response
+
+
+@staff_required
 def budget_simulation_export_excel(request):
     """Export Excel de la simulation budgétaire : Actuel / Cas A / Cas B par loge."""
     from decimal import Decimal

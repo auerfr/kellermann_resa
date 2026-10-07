@@ -14,6 +14,8 @@
        class="btn btn-danger btn-sm">🧾 PDF synthèse</a>
     <a href="{% url 'administration:budget_simulation_export' %}?saison={{ saison }}{% if nb_membres_lb %}&nb_membres_lb={{ nb_membres_lb }}{% endif %}{% if nb_membres_hg %}&nb_membres_hg={{ nb_membres_hg }}{% endif %}{% if recettes_exc %}&recettes_exc={{ recettes_exc }}{% endif %}{% if ratio_hg_cas_a %}&ratio_hg_cas_a={{ ratio_hg_cas_a }}{% endif %}"
        class="btn btn-success btn-sm">📊 Export Excel</a>
+    <a href="{% url 'administration:budget_simulation_export_tresorier' %}?saison={{ saison }}{% if nb_membres_lb %}&nb_membres_lb={{ nb_membres_lb }}{% endif %}{% if nb_membres_hg %}&nb_membres_hg={{ nb_membres_hg }}{% endif %}{% if recettes_exc %}&recettes_exc={{ recettes_exc }}{% endif %}{% if ratio_hg_cas_a %}&ratio_hg_cas_a={{ ratio_hg_cas_a }}{% endif %}"
+       class="btn btn-outline-success btn-sm" title="Format trésorier : base Synthèse 2026 + Cas A/B + onglet Paramètres">📋 Format trésorier</a>
     {% endif %}
     <a href="{% url 'administration:budget_config' %}?saison={{ saison }}" class="btn btn-outline-secondary btn-sm">⚙️ Postes de charge</a>
     <a href="{% url 'administration:finance_saison' %}" class="btn btn-outline-secondary btn-sm">← Facturation</a>

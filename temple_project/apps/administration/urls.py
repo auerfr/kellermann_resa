@@ -68,6 +68,7 @@ urlpatterns = [
     path("facturation/simulation/", views.budget_simulation, name="budget_simulation"),
     path("facturation/simulation/pdf/", views.budget_simulation_pdf, name="budget_simulation_pdf"),
     path("facturation/simulation/export/", views.budget_simulation_export_excel, name="budget_simulation_export"),
+    path("facturation/simulation/export/tresorier/", views.budget_simulation_export_tresorier, name="budget_simulation_export_tresorier"),
     path("facturation/", views.facturation, name="facturation"),
     path("facturation/export/", views.facturation_export_excel, name="facturation_export"),
     path("facturation/pdf/", views.facturation_pdf, name="facturation_pdf"),
