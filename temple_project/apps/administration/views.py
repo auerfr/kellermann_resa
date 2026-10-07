@@ -6574,6 +6574,264 @@ def budget_simulation_pdf(request):
 
 
 @staff_required
+def budget_simulation_export_excel(request):
+    """Export Excel de la simulation budgétaire : Actuel / Cas A / Cas B par loge."""
+    from decimal import Decimal
+    from openpyxl.utils import get_column_letter
+
+    def _pi(val):
+        try: v = int(str(val).strip()); return v if 1 <= v <= 9999 else None
+        except: return None
+    def _pd(val):
+        if not val: return None
+        try: v = float(str(val).replace(',', '.').strip()); return v if v >= 0 else None
+        except: return None
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    params = Parametres.get_instance()
+
+    eff_lb = sum(l.effectif_total for l in Loge.objects.filter(actif=True, type_loge='loge'))
+    eff_hg = sum(l.effectif_total for l in Loge.objects.filter(actif=True, type_loge='haut_grade'))
+    nb_membres_lb = _pi(request.GET.get('nb_membres_lb', '')) or eff_lb or None
+    nb_membres_hg = _pi(request.GET.get('nb_membres_hg', '')) or eff_hg or None
+    recettes_exc  = _pd(request.GET.get('recettes_exc', ''))
+    ratio_raw     = _pd(request.GET.get('ratio_hg_cas_a', ''))
+    ratio_hg_cas_a = Decimal(str(ratio_raw)) if ratio_raw is not None else Decimal('0.90')
+
+    postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
+    sim = (_simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
+                           recettes_exc=recettes_exc, params=params)
+           if postes_actifs > 0 else None)
+    if not sim:
+        return HttpResponse("Aucune donnée de simulation disponible pour cette saison.", status=400,
+                            content_type='text/plain; charset=utf-8')
+
+    # ── Tarifs d'équilibre ────────────────────────────────────────────────────
+    tarif_eq_lb = None
+    tarif_eq_hg = sim.get('tarif_eq_hg')
+    if sim.get('eff_eq_lb') and sim.get('net_lb') is not None:
+        tarif_eq_lb = (
+            sim['net_lb'] + (sim.get('hg_fixe_absorbe') or Decimal('0'))
+        ) / Decimal(str(sim['eff_eq_lb']))
+
+    charges_nettes = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
+    mt_lb = sum((l.get('effectif') or 0)
+                for l in sim['par_loge']
+                if l.get('type_loge') == 'loge' and l.get('membre_association'))
+    mt_hg = sum((l.get('nb_tenues') or 0)
+                for l in sim['par_loge']
+                if l.get('type_loge') == 'haut_grade' and l.get('membre_association'))
+    mt_pond = Decimal(str(mt_lb)) + Decimal(str(mt_hg)) * ratio_hg_cas_a
+    tarif_cas_a_lb = tarif_cas_a_hg = None
+    if charges_nettes and mt_pond:
+        tarif_cas_a_lb = charges_nettes / mt_pond
+        tarif_cas_a_hg = tarif_cas_a_lb * ratio_hg_cas_a
+
+    c_lb = params.tarif_membre_loge
+    c_hg = params.tarif_membre_hg
+
+    # ── Enrichissement par loge ───────────────────────────────────────────────
+    for l in sim['par_loge']:
+        if not l.get('membre_association'):
+            l['_actuel'] = l['_cas_a'] = l['_cas_b'] = None
+            continue
+        eff = l.get('effectif') or 0
+        nb_t = l.get('nb_tenues') or 0
+        typ = l['type_loge']
+        # Actuel
+        tarif_act = c_lb if typ == 'loge' else c_hg
+        if eff and tarif_act:
+            if params.modele_cotisation == 'A' and nb_t:
+                l['_actuel'] = Decimal(str(tarif_act)) * eff * nb_t
+            else:
+                l['_actuel'] = Decimal(str(tarif_act)) * eff
+        else:
+            l['_actuel'] = None
+        # Cas A
+        tarif_a = tarif_cas_a_lb if typ == 'loge' else tarif_cas_a_hg
+        l['_cas_a'] = (tarif_a * eff * nb_t) if (tarif_a and eff and nb_t) else None
+        # Cas B
+        if typ == 'loge' and tarif_eq_lb and eff:
+            l['_cas_b'] = tarif_eq_lb * eff
+        elif typ == 'haut_grade' and tarif_eq_hg and nb_t:
+            l['_cas_b'] = tarif_eq_hg * nb_t
+        else:
+            l['_cas_b'] = None
+
+    # ── Build workbook ────────────────────────────────────────────────────────
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Simulation {saison}-{saison + 1}"
+
+    euro  = '#,##0.00\\ "€"'
+    euro0 = '#,##0\\ "€"'
+
+    W = Font(bold=True, color="FFFFFF", size=10)
+    D = Font(size=9)
+    B = Font(bold=True)
+    Bs = Font(bold=True, size=9)
+    Sm = Font(size=9, italic=True)
+    C  = Alignment(horizontal='center', wrap_text=True)
+    R  = Alignment(horizontal='right')
+
+    fill_info  = PatternFill("solid", fgColor="0F2137")
+    fill_act   = PatternFill("solid", fgColor="475569")
+    fill_cas_a = PatternFill("solid", fgColor="C2410C")
+    fill_cas_b = PatternFill("solid", fgColor="166534")
+    fill_ecart = PatternFill("solid", fgColor="78350F")
+    sub_act    = PatternFill("solid", fgColor="E2E8F0")
+    sub_a      = PatternFill("solid", fgColor="FED7AA")
+    sub_b      = PatternFill("solid", fgColor="DCFCE7")
+    sub_ec     = PatternFill("solid", fgColor="FEF9C3")
+    sub_info   = PatternFill("solid", fgColor="DBEAFE")
+    red_f      = Font(bold=True, color="B91C1C", size=10)
+    grn_f      = Font(bold=True, color="166534", size=10)
+    tot_fill   = PatternFill("solid", fgColor="0F2137")
+
+    # ── Ligne 1 : titre ───────────────────────────────────────────────────────
+    ws.append([f"Simulation budgétaire — Saison {saison}/{saison + 1}"] +
+              [None] * 14)
+    ws.merge_cells('A1:O1')
+    ws['A1'].font = Font(bold=True, size=13, color="0F2137")
+
+    # ── Ligne 2 : tarifs de référence ─────────────────────────────────────────
+    _act_lbl = (f"Barème AG actuel ({params.modele_cotisation}) — "
+                f"LB : {float(c_lb):.2f} €  HG : {float(c_hg):.2f} €")
+    _b_lbl   = (f"Cas B équilibre — LB : {float(tarif_eq_lb):.2f} €/mbr  "
+                f"HG : {float(tarif_eq_hg):.2f} €/tenue"
+                if tarif_eq_lb and tarif_eq_hg else "Cas B : données insuffisantes")
+    _a_lbl   = (f"Cas A équilibre — LB : {float(tarif_cas_a_lb):.3f} €/mbr/tenue  "
+                f"HG : {float(tarif_cas_a_hg):.3f} €/mbr/tenue  (ratio {float(ratio_hg_cas_a):.2f})"
+                if tarif_cas_a_lb else "Cas A : données insuffisantes")
+    ws.append([_act_lbl, None, None, None,
+               None, None, None,
+               _a_lbl, None, None, None,
+               _b_lbl, None, None, None])
+    ws.merge_cells('A2:G2')
+    ws.merge_cells('H2:K2')
+    ws.merge_cells('L2:O2')
+    for col_l in ['A', 'H', 'L']:
+        ws[f'{col_l}2'].font = Font(size=9, italic=True, color="475569")
+    ws.append([])
+
+    # ── Ligne 4 : en-têtes de groupes ─────────────────────────────────────────
+    ws.append([""] * 4 +
+              ["ACTUEL — barème AG voté"] + [""] * 2 +
+              ["CAS A — €/membre/tenue"] + [""] * 2 +
+              ["CAS B — LB €/membre + HG €/tenue"] + [""] * 2 +
+              ["ÉCARTS VS ACTUEL"] + [""])
+    r4 = ws.max_row
+    spans = [(1, 4, None), (5, 7, fill_act), (8, 10, fill_cas_a),
+             (11, 13, fill_cas_b), (14, 15, fill_ecart)]
+    for sc, ec, fill in spans:
+        ws.merge_cells(start_row=r4, start_column=sc, end_row=r4, end_column=ec)
+        if fill:
+            cell = ws.cell(r4, sc)
+            cell.fill = fill
+            cell.font = W
+            cell.alignment = C
+
+    # ── Ligne 5 : en-têtes de colonnes ────────────────────────────────────────
+    ws.append(["Loge", "Type", "Effectif", "Nb tenues/an",
+               "Total €", "€/frère/an", "€/frère/tenue",
+               "Total €", "€/frère/an", "€/frère/tenue",
+               "Total €", "€/frère/an", "€/frère/tenue",
+               "Cas A (€)", "Cas B (€)"])
+    r5 = ws.max_row
+    col_fills = [sub_info] * 4 + [sub_act] * 3 + [sub_a] * 3 + [sub_b] * 3 + [sub_ec] * 2
+    for ci, cf in enumerate(col_fills, 1):
+        cell = ws.cell(r5, ci)
+        cell.fill = cf
+        cell.font = Bs
+        cell.alignment = C
+
+    # ── Données par loge ──────────────────────────────────────────────────────
+    loges_data = sorted(
+        [l for l in sim['par_loge'] if l.get('membre_association')],
+        key=lambda l: (0 if l['type_loge'] == 'loge' else 1, l.get('loge_nom', ''))
+    )
+    odd_lb = PatternFill("solid", fgColor="F0F9FF")
+    odd_hg = PatternFill("solid", fgColor="FFF7ED")
+    row_idx = 0
+    for l in loges_data:
+        eff   = l.get('effectif') or 0
+        nb_t  = l.get('nb_tenues') or 0
+        typ   = l['type_loge']
+        label = "Haut Grade" if typ == 'haut_grade' else "Loge Bleue"
+        row_fill = (odd_hg if typ == 'haut_grade' else odd_lb) if row_idx % 2 else None
+        row_idx += 1
+
+        act = l.get('_actuel')
+        ca  = l.get('_cas_a')
+        cb  = l.get('_cas_b')
+
+        def _per_fr(total): return float(total) / eff if (total and eff) else None
+        def _per_fr_t(total): return float(total) / eff / nb_t if (total and eff and nb_t) else None
+        def _fv(v): return float(v) if v is not None else None
+
+        ws.append([
+            l.get('loge_nom', ''), label, eff, nb_t,
+            _fv(act), _per_fr(act), _per_fr_t(act),
+            _fv(ca),  _per_fr(ca),  _per_fr_t(ca),
+            _fv(cb),  _per_fr(cb),  _per_fr_t(cb),
+            _fv(ca - act) if (ca and act) else None,
+            _fv(cb - act) if (cb and act) else None,
+        ])
+        dr = ws.max_row
+        if row_fill:
+            for ci in range(1, 16):
+                ws.cell(dr, ci).fill = row_fill
+        # Formatage monétaire
+        for ci in [5, 6, 7, 8, 9, 10, 11, 12, 13]:
+            ws.cell(dr, ci).number_format = euro
+        # Écarts : rouge si négatif, vert si positif
+        for ci in [14, 15]:
+            cell = ws.cell(dr, ci)
+            cell.number_format = euro
+            if cell.value is not None:
+                cell.font = red_f if cell.value < 0 else grn_f
+        ws.cell(dr, 1).font = B
+        ws.cell(dr, 3).number_format = '#,##0'
+        ws.cell(dr, 4).number_format = '#,##0'
+
+    # ── Ligne de total ────────────────────────────────────────────────────────
+    ws.append([])
+    tot_act = sum(float(l['_actuel']) for l in loges_data if l.get('_actuel'))
+    tot_ca  = sum(float(l['_cas_a'])  for l in loges_data if l.get('_cas_a'))
+    tot_cb  = sum(float(l['_cas_b'])  for l in loges_data if l.get('_cas_b'))
+    ws.append(["TOTAL", None, None, None,
+               tot_act, None, None,
+               tot_ca,  None, None,
+               tot_cb,  None, None,
+               tot_ca - tot_act if (tot_ca and tot_act) else None,
+               tot_cb - tot_act if (tot_cb and tot_act) else None])
+    tr = ws.max_row
+    ws.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=4)
+    for ci in range(1, 16):
+        cell = ws.cell(tr, ci)
+        cell.fill = tot_fill
+        cell.font = Font(bold=True, color="FFFFFF", size=10)
+    for ci in [5, 8, 11, 14, 15]:
+        ws.cell(tr, ci).number_format = euro0
+    ws.cell(tr, 1).alignment = Alignment(horizontal='center')
+
+    # ── Largeurs de colonnes ──────────────────────────────────────────────────
+    widths = [28, 12, 10, 13,  13, 13, 14,  13, 13, 14,  13, 13, 14,  13, 13]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # Figer les 5 premières lignes (titres + groupes + colonnes)
+    ws.freeze_panes = 'A6'
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = (
+        f'attachment; filename="Simulation_{saison}-{saison + 1}_{date.today():%Y%m%d}.xlsx"')
+    wb.save(response)
+    return response
+
+
+@staff_required
 def budget_config(request):
     """Saisie et gestion des postes de charges par temple et saison."""
     saison = int(request.GET.get('saison') or _annee_saison_courante())
