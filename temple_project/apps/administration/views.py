@@ -6615,10 +6615,10 @@ def budget_simulation_export_excel(request):
         ) / Decimal(str(sim['eff_eq_lb']))
 
     charges_nettes = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
-    mt_lb = sum((l.get('effectif') or 0)
+    mt_lb = sum((l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
                 for l in sim['par_loge']
                 if l.get('type_loge') == 'loge' and l.get('membre_association'))
-    mt_hg = sum((l.get('nb_tenues') or 0)
+    mt_hg = sum((l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
                 for l in sim['par_loge']
                 if l.get('type_loge') == 'haut_grade' and l.get('membre_association'))
     mt_pond = Decimal(str(mt_lb)) + Decimal(str(mt_hg)) * ratio_hg_cas_a
