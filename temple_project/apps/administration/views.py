@@ -13,10 +13,14 @@ from temple_project.apps.reservations.models import (
     Reservation, RegleRecurrence, Temple, SalleReunion, ReservationSalle,
     DemandeAccesPortail, ValidationSaison, ValidationSaisonLigne,
     Indisponibilite, BlocageCreneaux, RegleRecurrenceSalle,
-    DemandeRegleRecurrenceSalle,
+    DemandeRegleRecurrenceSalle, DemandeRegleRecurrence,
 )
 from temple_project.apps.loges.models import Loge, Obedience
-from .models import Parametres, JournalEvenement, Annonce
+from .models import (
+    Parametres, JournalEvenement, Annonce, FAQ, PosteCharge,
+    SchemaTarification, DecisionAG, POSTES_BUDGET, Facture, LigneFacture,
+)
+from django.db import models as dj_models
 from .journal import log_evenement
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -44,14 +48,43 @@ def staff_required(view_func):
 @staff_required
 def tableau_de_bord(request):
     reservations_attente  = Reservation.objects.filter(statut='attente').select_related('loge', 'temple').order_by('date')
-    reservations_recentes = Reservation.objects.order_by('-created_at')[:10]
+    # Fusionner Reservation (tenues) + ReservationSalle (salles/cabinets) pour l'affichage récent
+    _recentes_tenues = Reservation.objects.order_by('-created_at').select_related('loge', 'temple')[:20]
+    _recentes_salles = ReservationSalle.objects.order_by('-created_at').select_related('loge', 'salle')[:20]
+    _items_recents = []
+    for r in _recentes_tenues:
+        _items_recents.append({
+            'kind': 'Tenue',
+            'loge_nom': r.loge.abreviation if r.loge else '—',
+            'date': r.date,
+            'lieu': str(r.temple) if r.temple else '—',
+            'statut': r.statut,
+            'created_at': r.created_at,
+        })
+    for r in _recentes_salles:
+        if r.type_reunion == 'cabinet_reflexion':
+            kind = 'Cabinet'
+        else:
+            kind = 'Salle'
+        _items_recents.append({
+            'kind': kind,
+            'loge_nom': r.loge.abreviation if r.loge else (r.organisation[:20] or r.nom_demandeur[:20]),
+            'date': r.date,
+            'lieu': str(r.salle) if r.salle else '—',
+            'statut': r.statut,
+            'created_at': r.created_at,
+        })
+    _items_recents.sort(key=lambda x: x['created_at'], reverse=True)
+    reservations_recentes = _items_recents[:15]
     reservations_salle_attente = ReservationSalle.objects.filter(
         statut='attente'
     ).select_related('salle').order_by('date')
     demandes_portail_attente = DemandeAccesPortail.objects.filter(statut='attente').order_by('created_at')
     demandes_recsalle_attente = DemandeRegleRecurrenceSalle.objects.filter(statut='attente').select_related('loge').order_by('date_demande')
-    from temple_project.apps.reservations.models import MessageContact
+    demandes_rectemple_attente = DemandeRegleRecurrence.objects.filter(statut='attente').select_related('loge').order_by('date_demande')
+    from temple_project.apps.reservations.models import MessageContact, DemandeModificationReservation
     messages_nouveaux = MessageContact.objects.filter(statut='nouveau').order_by('-created_at')
+    demandes_modif_attente = DemandeModificationReservation.objects.filter(statut='attente').select_related('loge', 'reservation', 'reservation_salle').order_by('created_at')
     context = {
         'attente':                  reservations_attente,
         'recentes':                 reservations_recentes,
@@ -65,8 +98,12 @@ def tableau_de_bord(request):
         'nb_demandes_portail':      demandes_portail_attente.count(),
         'demandes_recsalle':        demandes_recsalle_attente,
         'nb_demandes_recsalle':     demandes_recsalle_attente.count(),
+        'demandes_rectemple':       demandes_rectemple_attente,
+        'nb_demandes_rectemple':    demandes_rectemple_attente.count(),
         'messages_nouveaux':        messages_nouveaux,
         'nb_messages_nx':           messages_nouveaux.count(),
+        'demandes_modif_attente':   demandes_modif_attente,
+        'nb_demandes_modif':        demandes_modif_attente.count(),
     }
     return render(request, 'administration/tableau_de_bord.html', context)
 
@@ -197,6 +234,7 @@ def valider_reservation(request, pk):
         'temples_alternatives': temples_alternatives,
         'occupants_recurrents': occupants_rec,
         'echange_next':         request.get_full_path(),
+        'loge_panel':          _get_loge_panel(resa.loge, exclude_pk=resa.pk, model='temple'),
     })
 
 
@@ -301,6 +339,7 @@ def valider_reservation_salle(request, pk):
         'blocages':         blocages,
         'indisponibilites': indisponibilites,
         'salles_alternatives': salles_alternatives,
+        'loge_panel':       _get_loge_panel(resa.loge, exclude_pk=resa.pk, model='salle'),
     })
 
 
@@ -383,6 +422,104 @@ def valider_acces_portail(request, pk):
         return redirect('administration:tableau_de_bord')
 
     return render(request, 'administration/valider_acces_portail.html', {'demande': demande})
+
+
+@staff_required
+def valider_demande_modif(request, pk):
+    from temple_project.apps.reservations.models import DemandeModificationReservation
+    from temple_project.apps.administration.email_utils import send_mail_kellermann
+    dmr = get_object_or_404(DemandeModificationReservation, pk=pk)
+    if dmr.statut != 'attente':
+        messages.warning(request, f"Cette demande a déjà été traitée (statut : {dmr.get_statut_display()}).")
+        return redirect('administration:tableau_de_bord')
+
+    resa = dmr.reservation or dmr.reservation_salle
+    is_temple = dmr.reservation is not None
+
+    if request.method == 'POST':
+        decision     = request.POST.get('decision')
+        commentaire  = request.POST.get('commentaire', '').strip()
+
+        if decision == 'accepter':
+            if dmr.type_demande == 'annulation':
+                # Clore les autres demandes en attente sur la même réservation avant suppression
+                if dmr.reservation_id:
+                    DemandeModificationReservation.objects.filter(
+                        reservation_id=dmr.reservation_id, statut='attente'
+                    ).exclude(pk=dmr.pk).update(
+                        statut='refusee',
+                        commentaire_admin="Réservation annulée via une autre demande simultanée."
+                    )
+                elif dmr.reservation_salle_id:
+                    DemandeModificationReservation.objects.filter(
+                        reservation_salle_id=dmr.reservation_salle_id, statut='attente'
+                    ).exclude(pk=dmr.pk).update(
+                        statut='refusee',
+                        commentaire_admin="Réservation annulée via une autre demande simultanée."
+                    )
+                if dmr.reservation:
+                    dmr.reservation.delete()
+                elif dmr.reservation_salle:
+                    dmr.reservation_salle.delete()
+                dmr.statut = 'acceptee'
+                dmr.commentaire_admin = commentaire
+                dmr.save()
+                result_msg = "annulée"
+            elif dmr.type_demande == 'deplacement' and dmr.nouvelle_date:
+                if dmr.reservation:
+                    dmr.reservation.date = dmr.nouvelle_date
+                    dmr.reservation.save()
+                elif dmr.reservation_salle:
+                    dmr.reservation_salle.date = dmr.nouvelle_date
+                    dmr.reservation_salle.save()
+                dmr.statut = 'acceptee'
+                dmr.commentaire_admin = commentaire
+                dmr.save()
+                result_msg = f"déplacée au {dmr.nouvelle_date.strftime('%d/%m/%Y')}"
+            else:
+                dmr.statut = 'acceptee'
+                dmr.commentaire_admin = commentaire
+                dmr.save()
+                result_msg = "mise à jour"
+
+            # Notify loge
+            if dmr.loge and dmr.loge.email:
+                send_mail_kellermann(
+                    subject=f"[Kellermann] Votre demande de modification a été acceptée",
+                    message=(
+                        f"Bonjour,\n\n"
+                        f"Votre demande de {dmr.get_type_demande_display().lower()} a été acceptée.\n"
+                        f"La réservation a été {result_msg}.\n\n"
+                        f"Commentaire de l'administration : {commentaire or '(aucun)'}\n\n"
+                        f"Cordialement,\nL'équipe Kellermann"
+                    ),
+                    recipient_list=[dmr.loge.email],
+                )
+            messages.success(request, f"Demande acceptée — réservation {result_msg}.")
+        else:
+            dmr.statut = 'refusee'
+            dmr.commentaire_admin = commentaire
+            dmr.save()
+            if dmr.loge and dmr.loge.email:
+                send_mail_kellermann(
+                    subject=f"[Kellermann] Votre demande de modification a été refusée",
+                    message=(
+                        f"Bonjour,\n\n"
+                        f"Votre demande de {dmr.get_type_demande_display().lower()} n'a pas pu être accordée.\n\n"
+                        f"Motif : {commentaire or '(non précisé)'}\n\n"
+                        f"Cordialement,\nL'équipe Kellermann"
+                    ),
+                    recipient_list=[dmr.loge.email],
+                )
+            messages.success(request, "Demande refusée.")
+
+        return redirect('administration:tableau_de_bord')
+
+    return render(request, 'administration/valider_demande_modif.html', {
+        'dmr': dmr,
+        'resa': resa,
+        'is_temple': is_temple,
+    })
 
 
 def _envoyer_email_decision_salle(resa, action, commentaire_admin=''):
@@ -1223,14 +1360,66 @@ def occupation(request):
         temple_id = int(request.GET.get('temple') or 0) or None
     except (TypeError, ValueError):
         temple_id = None
-    moment = request.GET.get('moment', 'soir')  # défaut : le soir (cas principal)
-    weekend = request.GET.get('weekend')  # '1' = inclure le week-end
+    moment = request.GET.get('moment', 'soir')
+    weekend = request.GET.get('weekend')
     ctx = _occupation_full(annee, temple_id, moment, inclure_weekend=(weekend == '1'))
     ctx['annees'] = [defaut - 1, defaut, defaut + 1]
     ctx['tous_temples'] = Temple.objects.all().order_by('nom')
     ctx['temple_sel'] = temple_id
     ctx['moment_sel'] = moment
     ctx['weekend_sel'] = weekend
+
+    # Simulation financière personnalisable via GET
+    params = Parametres.get_instance()
+
+    def _float_param(name, default_float):
+        raw = request.GET.get(name, '').replace(',', '.').strip()
+        if raw:
+            try:
+                v = float(raw)
+                if v > 0:
+                    return v
+            except ValueError:
+                pass
+        return default_float
+
+    def _int_param(name, default_int):
+        try:
+            v = int(request.GET.get(name, '') or default_int)
+            return max(1, v)
+        except (TypeError, ValueError):
+            return default_int
+
+    # Tarifs : utiliser ceux des params, avec fallback si non configurés (0 ou None)
+    tarif_lb_defaut = float(params.tarif_membre_loge) if params.tarif_membre_loge else 85.0
+    tarif_hg_defaut = float(params.tarif_membre_hg) if params.tarif_membre_hg else 22.8
+
+    t_loge = _float_param('t_loge', tarif_lb_defaut)
+    t_hg   = _float_param('t_hg',   tarif_hg_defaut)
+    mb_min = _int_param('mb_min', 15)
+    mb_max = max(mb_min, _int_param('mb_max', 20))
+
+    cap_loges = ctx['cap_sem_bleues']
+    cap_hg    = ctx['cap_sem_hg']
+    fin_custom = {
+        't_loge': t_loge, 't_hg': t_hg,
+        'mb_min': mb_min, 'mb_max': mb_max,
+        'loge_min': round(mb_min * t_loge),
+        'loge_max': round(mb_max * t_loge),
+        'hg_min':   round(mb_min * t_hg),
+        'hg_max':   round(mb_max * t_hg),
+        'cap_loges': cap_loges, 'cap_hg': cap_hg,
+        'pot_loges_min': round(cap_loges * mb_min * t_loge),
+        'pot_loges_max': round(cap_loges * mb_max * t_loge),
+        'pot_hg_min':    round(cap_hg * mb_min * t_hg),
+        'pot_hg_max':    round(cap_hg * mb_max * t_hg),
+    }
+    ctx['fin'] = fin_custom
+    ctx['params'] = params
+    ctx['sim_t_loge'] = t_loge
+    ctx['sim_t_hg'] = t_hg
+    ctx['sim_mb_min'] = mb_min
+    ctx['sim_mb_max'] = mb_max
     return render(request, 'administration/occupation.html', ctx)
 
 
@@ -1798,7 +1987,8 @@ def message_detail(request, pk):
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'repondre':
-            reponse = request.POST.get('reponse', '').strip()
+            reponse    = request.POST.get('reponse', '').strip()
+            email_dest = request.POST.get('email_dest', '').strip() or m.email
             if not reponse:
                 messages.error(request, "Le message de réponse est vide.")
             else:
@@ -1810,17 +2000,19 @@ def message_detail(request, pk):
                         f"En réponse à votre message du {m.created_at:%d/%m/%Y} :\n"
                         f"« {m.message} »"
                     ),
-                    recipient_list=[m.email],
+                    recipient_list=[email_dest],
                 )
+                if email_dest != m.email:
+                    m.email = email_dest
                 m.reponse = reponse
                 m.date_reponse = timezone.now()
                 m.repondu_par = request.user.get_username()
                 m.statut = 'traite'
                 m.save()
                 log_evenement('reponse_message',
-                              f"Réponse envoyée à {m.email} (message #{m.pk})",
+                              f"Réponse envoyée à {email_dest} (message #{m.pk})",
                               request=request, objet=m)
-                messages.success(request, f"Réponse envoyée à {m.email}.")
+                messages.success(request, f"Réponse envoyée à {email_dest}.")
             return redirect('administration:message_detail', pk=m.pk)
         elif action == 'traite':
             m.statut = 'traite'; m.save(update_fields=['statut'])
@@ -1839,6 +2031,48 @@ def message_detail(request, pk):
         m.statut = 'lu'
         m.save(update_fields=['statut'])
     return render(request, 'administration/message_detail.html', {'m': m})
+
+
+@staff_required
+def messagerie_nouveau(request):
+    """Composer un message sortant vers un contact de loge."""
+    from temple_project.apps.loges.models import Loge
+    from temple_project.apps.reservations.models import MessageContact
+
+    loges = Loge.objects.filter(email__gt='').order_by('nom')
+
+    if request.method == 'POST':
+        nom_dest   = request.POST.get('nom_dest', '').strip()
+        email_dest = request.POST.get('email_dest', '').strip()
+        sujet      = request.POST.get('sujet', '').strip()
+        corps      = request.POST.get('corps', '').strip()
+
+        if not email_dest or not corps:
+            messages.error(request, "L'adresse email et le message sont obligatoires.")
+        else:
+            send_mail_kellermann(
+                subject=sujet or "Message — Temples Kellermann",
+                message=corps,
+                recipient_list=[email_dest],
+            )
+            MessageContact.objects.create(
+                nom=nom_dest or email_dest,
+                email=email_dest,
+                sujet=sujet,
+                message=corps,
+                statut='traite',
+                reponse=corps,
+                date_reponse=timezone.now(),
+                repondu_par=request.user.get_username(),
+                emis=True,
+            )
+            log_evenement('message_emis',
+                          f"Message émis vers {email_dest}",
+                          request=request)
+            messages.success(request, f"Message envoyé à {email_dest}.")
+            return redirect('administration:messagerie')
+
+    return render(request, 'administration/messagerie_nouveau.html', {'loges': loges})
 
 
 @staff_required
@@ -3127,6 +3361,81 @@ def validation_saison_admin(request):
             messages.success(request, f"Validation de {val.loge} réinitialisée.")
             return redirect(f"{request.path}?annee={annee}")
 
+        elif action == 'annuler_tenue_validation':
+            ligne_pk = request.POST.get('ligne_pk')
+            ligne = get_object_or_404(ValidationSaisonLigne, pk=ligne_pk)
+            annee_cible = ligne.validation.annee
+            resa = Reservation.objects.filter(
+                loge=ligne.validation.loge,
+                date=ligne.date,
+                statut__in=['validee', 'attente'],
+            ).first()
+            if resa:
+                info = f"{ligne.validation.loge} — {ligne.date:%d/%m/%Y} ({ligne.temple_nom})"
+                _exclure_date_regle(resa)
+                log_evenement('modification_reservation',
+                    f"Tenue annulée via validation saison : {info}", request=request, objet=resa)
+                resa.delete()
+                messages.success(request, f"Tenue annulée : {info}")
+            else:
+                messages.warning(request, "Réservation introuvable — déjà supprimée ?")
+            ligne.avis = 'ok'
+            ligne.commentaire = (ligne.commentaire + " [annulée par l'admin]").strip()
+            ligne.save(update_fields=['avis', 'commentaire'])
+            val = ligne.validation
+            if not val.lignes.filter(avis__in=['deplacer', 'annuler']).exists():
+                val.statut = 'traitee'
+                val.save(update_fields=['statut'])
+            return redirect(f"{request.path}?annee={annee_cible}")
+
+        elif action == 'deplacer_tenue_validation':
+            ligne_pk = request.POST.get('ligne_pk')
+            ligne = get_object_or_404(ValidationSaisonLigne, pk=ligne_pk)
+            annee_cible = ligne.validation.annee
+            try:
+                nd = date.fromisoformat(request.POST.get('nouvelle_date', ''))
+            except ValueError:
+                messages.error(request, "Date invalide.")
+                return redirect(f"{request.path}?annee={annee_cible}")
+            resa = Reservation.objects.filter(
+                loge=ligne.validation.loge,
+                date=ligne.date,
+                statut__in=['validee', 'attente'],
+            ).first()
+            if not resa:
+                messages.warning(request, "Réservation introuvable — déjà déplacée ?")
+                return redirect(f"{request.path}?annee={annee_cible}")
+            temple_cible = Temple.objects.filter(pk=request.POST.get('nouveau_temple')).first() or resa.temple
+            conflit = Reservation.objects.filter(
+                temple=temple_cible, date=nd,
+                heure_debut__lt=resa.heure_fin, heure_fin__gt=resa.heure_debut,
+                statut__in=['validee', 'attente'],
+            ).exclude(pk=resa.pk).select_related('loge').first()
+            if conflit:
+                qui = conflit.loge or conflit.nom_organisation or conflit.nom_demandeur
+                messages.warning(request,
+                    f"{temple_cible} est déjà occupé le {nd:%d/%m/%Y} par {qui}. "
+                    "Choisissez une autre date ou un autre temple.")
+                return redirect(f"{request.path}?annee={annee_cible}")
+            ancienne = resa.date
+            note = f"Déplacée du {ancienne:%d/%m/%Y} au {nd:%d/%m/%Y} (demande loge via validation saison)"
+            _exclure_date_regle(resa)
+            resa.date = nd
+            resa.temple = temple_cible
+            resa.regle_source = None
+            resa.commentaire = (resa.commentaire + "\n" if resa.commentaire else "") + note
+            resa.save()
+            log_evenement('modification_reservation', note + f" — {resa.loge}", request=request, objet=resa)
+            messages.success(request, f"Tenue de {resa.loge} déplacée au {nd:%d/%m/%Y}.")
+            ligne.avis = 'ok'
+            ligne.commentaire = (ligne.commentaire + f" [déplacée au {nd:%d/%m/%Y}]").strip()
+            ligne.save(update_fields=['avis', 'commentaire'])
+            val = ligne.validation
+            if not val.lignes.filter(avis__in=['deplacer', 'annuler']).exists():
+                val.statut = 'traitee'
+                val.save(update_fields=['statut'])
+            return redirect(f"{request.path}?annee={annee_cible}")
+
         elif action == 'relancer':
             annee_cible = int(request.POST.get('annee_cible', annee))
             periode_cible = f"01/09/{annee_cible} → 30/06/{annee_cible + 1}"
@@ -3219,6 +3528,22 @@ def validation_saison_admin(request):
     validations_attente_list = [v for v in validations if v.statut == 'attente']
     validations_ouverte_list = [v for v in validations if v.statut == 'ouverte']
 
+    # Anomalies avec leur réservation associée
+    lignes_anomalies = []
+    if nb_anomalies_total > 0:
+        for ligne in ValidationSaisonLigne.objects.filter(
+            validation__annee=annee,
+            avis__in=['deplacer', 'annuler'],
+        ).select_related('validation__loge').order_by('date'):
+            resa = Reservation.objects.filter(
+                loge=ligne.validation.loge,
+                date=ligne.date,
+                statut__in=['validee', 'attente'],
+            ).first()
+            lignes_anomalies.append({'ligne': ligne, 'resa': resa})
+
+    temples = Temple.objects.all().order_by('nom')
+
     return render(request, 'administration/validation_saison.html', {
         'annee':                   annee,
         'annees':                  annees,
@@ -3234,6 +3559,8 @@ def validation_saison_admin(request):
         'nb_traitee':              nb_traitee,
         'nb_anomalies_total':      nb_anomalies_total,
         'loges_manquantes':        loges_manquantes,
+        'lignes_anomalies':        lignes_anomalies,
+        'temples':                 temples,
     })
 
 
@@ -3802,6 +4129,12 @@ def parametres(request):
         params.smtp_user = request.POST.get('smtp_user', params.smtp_user)
         params.smtp_password = request.POST.get('smtp_password', params.smtp_password)
         params.smtp_tls = request.POST.get('smtp_tls') == 'on'
+        params.facturation_active   = request.POST.get('facturation_active') == 'on'
+        params.module_finance_actif = request.POST.get('module_finance_actif') == 'on'
+        try:
+            params.effectif_par_defaut = max(1, int(request.POST.get('effectif_par_defaut', 25)))
+        except (ValueError, TypeError):
+            pass
         params.save()
         messages.success(request, "Paramètres sauvegardés.")
         return redirect('administration:parametres')
@@ -5085,6 +5418,2327 @@ def _facturation_data(date_debut, date_fin, params):
     return groupes_list, total, nb_lignes
 
 
+# ─────────────────────────────────────────────────────────────────
+#  BUDGET / SIMULATION
+# ─────────────────────────────────────────────────────────────────
+
+def _annee_saison_courante():
+    today = date.today()
+    return today.year if today.month >= 9 else today.year - 1
+
+
+def _simuler_budget(saison, nb_membres_global=None, nb_membres_lb=None, nb_membres_hg=None, recettes_exc=None, params=None):
+    """Moteur de simulation budgétaire.
+
+    nb_membres_lb / nb_membres_hg : effectif TOTAL de la catégorie (pas par loge).
+      → utilisé comme dénominateur du tarif d'équilibre.
+      → sert aussi de fallback par loge pour les loges sans effectif_total saisi
+        (on divise par le nb de loges distinctes présentes dans les resas).
+    recettes_exc : recettes exceptionnelles à déduire des charges avant calcul du tarif d'équilibre.
+    """
+    from decimal import Decimal
+    from datetime import datetime, timedelta
+    from collections import defaultdict
+
+    debut = date(saison, 9, 1)
+    fin   = date(saison + 1, 8, 31)
+
+    resas = list(
+        Reservation.objects
+        .filter(date__gte=debut, date__lte=fin, statut='validee')
+        .select_related('loge', 'temple')
+        .order_by('date', 'heure_debut')
+    )
+    nb_resas = len(resas)
+    if nb_resas == 0:
+        return {'par_loge': [], 'total_global': Decimal('0'),
+                'total_fixe': Decimal('0'), 'total_mutualise': Decimal('0'),
+                'total_marginal': Decimal('0'), 'nb_resas': 0,
+                'cout_moyen_tenue': Decimal('0'), 'detail': []}
+
+    # Réservations de salles validées (hors cabinets de réflexion)
+    from temple_project.apps.reservations.models import ReservationSalle
+    resas_salle = list(
+        ReservationSalle.objects
+        .filter(date__gte=debut, date__lte=fin, statut='validee')
+        .exclude(salle__type_salle='cabinet_reflexion')
+        .select_related('loge', 'salle')
+        .order_by('date', 'heure_debut')
+    )
+
+    # ── Loges ayant une tenue temple par jour (pour dédup salle+tenue même loge)
+    tenues_loge_ids_par_jour = defaultdict(set)
+    for r in resas:
+        if r.loge_id:
+            tenues_loge_ids_par_jour[r.date].add(r.loge_id)
+
+    # ── Nombre total d'occupants par jour (tenues temple + salles non-cabinet)
+    # → sert à répartir équitablement les charges mutualisées du bâtiment
+    # Une salle réservée par une loge qui a déjà une tenue ce jour-là ne compte
+    # pas comme occupant supplémentaire pour les charges annuelles (elle ne paye
+    # pas la part annuelle mutualisée qui est déjà couverte via la tenue).
+    occupants_par_jour = defaultdict(int)
+    for r in resas:
+        occupants_par_jour[r.date] += 1
+    for rs in resas_salle:
+        if rs.loge_id and rs.loge_id in tenues_loge_ids_par_jour[rs.date]:
+            continue  # déjà compté via la tenue, ne pas gonfler le dénominateur
+        occupants_par_jour[rs.date] += 1
+
+    # ── Nombre de tenues avec agapes par jour → partage coût cuisine
+    agapes_par_jour = defaultdict(int)
+    for r in resas:
+        if r.besoin_agapes:
+            agapes_par_jour[r.date] += 1
+
+    # ── Réservations par temple (pour diluer les charges fixes par temple)
+    resas_par_temple = defaultdict(list)
+    for r in resas:
+        resas_par_temple[r.temple_id].append(r)
+
+    postes = list(PosteCharge.objects.filter(saison=saison, actif=True).select_related('temple'))
+
+    # Charges fixes globales (temple=None) → divisées par le nb TOTAL de tenues temple
+    fixe_global = Decimal('0')
+    for p in postes:
+        if p.type_charge == 'fixe' and p.temple_id is None:
+            fixe_global += p.montant_annuel_normalise
+
+    def _fixe_annuel_temple(temple_id):
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != 'fixe' or p.temple_id is None:
+                continue
+            if p.temple_id == temple_id:
+                total += p.montant_annuel_normalise
+        return total
+
+    def _salle_brut(duree_h, nb_resas_salle_tot):
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != 'salle':
+                continue
+            if p.unite == 'par_evenement':
+                total += p.montant
+            elif p.unite == 'par_heure':
+                total += p.montant * Decimal(str(round(duree_h, 4)))
+            elif p.unite in ('annuel', 'mensuel'):
+                total += p.montant_annuel_normalise / Decimal(str(nb_resas_salle_tot or 1))
+        return total
+
+    nb_resas_salle_tot = len(resas_salle)
+    # Nombre de jours distincts où le bâtiment est ouvert (tenues + salles)
+    nb_jours_ouverts = len(occupants_par_jour) or 1
+
+    def _variable_event(type_charge, temple_id, duree_h):
+        """Charges par_evenement / par_heure : coût brut à diviser par occupants du jour."""
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != type_charge:
+                continue
+            if p.temple_id is not None and p.temple_id != temple_id:
+                continue
+            if p.unite == 'par_evenement':
+                total += p.montant
+            elif p.unite == 'par_heure':
+                total += p.montant * Decimal(str(round(duree_h, 4)))
+        return total
+
+    def _variable_annuel(type_charge, temple_id, nb_resas_temple_loc, nb_occupants_jour_loc):
+        """Charges annuelles/mensuelles.
+        Global bâtiment → coût journalier (annuel / nb_jours_ouverts) divisé
+        par les occupants du jour : les jours avec beaucoup de monde sont moins chers
+        par tête, et la somme annuelle est toujours exactement couverte.
+        Spécifique temple → dilué sur les tenues de ce temple.
+        """
+        total = Decimal('0')
+        for p in postes:
+            if p.type_charge != type_charge:
+                continue
+            if p.temple_id is not None and p.temple_id != temple_id:
+                continue
+            if p.unite in ('annuel', 'mensuel'):
+                if p.temple_id is not None:
+                    total += p.montant_annuel_normalise / Decimal(str(nb_resas_temple_loc or 1))
+                else:
+                    # Coût journalier / occupants du jour
+                    cout_jour = p.montant_annuel_normalise / Decimal(str(nb_jours_ouverts))
+                    total += cout_jour / Decimal(str(nb_occupants_jour_loc or 1))
+        return total
+
+    # Nb de loges distinctes par type présentes dans les resas (pour fallback effectif par loge)
+    loges_lb_set = {r.loge_id for r in resas if r.loge and r.loge.type_loge == 'loge' and r.loge_id}
+    loges_hg_set = {r.loge_id for r in resas if r.loge and r.loge.type_loge == 'haut_grade' and r.loge_id}
+    nb_loges_lb_resas = len(loges_lb_set) or 1
+    nb_loges_hg_resas = len(loges_hg_set) or 1
+
+    detail = []
+    for r in resas:
+        debut_dt = datetime.combine(r.date, r.heure_debut)
+        fin_dt   = datetime.combine(r.date, r.heure_fin)
+        if fin_dt <= debut_dt:
+            fin_dt += timedelta(days=1)
+        duree_h = (fin_dt - debut_dt).total_seconds() / 3600
+
+        nb_resas_temple = len(resas_par_temple[r.temple_id]) or 1
+        nb_occupants_jour = occupants_par_jour[r.date] or 1
+        nb_agapes_jour    = agapes_par_jour[r.date] or 1
+
+        part_fixe_global = fixe_global / Decimal(str(nb_resas or 1))
+        part_fixe_temple = _fixe_annuel_temple(r.temple_id) / nb_resas_temple
+        part_fixe        = part_fixe_global + part_fixe_temple
+
+        # Mutualisé : event/heure partagé par occupants du jour + annuel/an amortie globalement
+        part_mutualise = (
+            _variable_event('mutualise', r.temple_id, duree_h) / nb_occupants_jour
+            + _variable_annuel('mutualise', r.temple_id, nb_resas_temple, nb_occupants_jour)
+        )
+        part_marginal = (
+            _variable_event('marginal', r.temple_id, duree_h)
+            + _variable_annuel('marginal', r.temple_id, nb_resas_temple, nb_occupants_jour)
+        )
+        # Cuisine/agapes : partagée entre toutes les loges avec agapes ce jour
+        if r.besoin_agapes:
+            part_agapes = (
+                _variable_event('agapes', r.temple_id, duree_h) / nb_agapes_jour
+                + _variable_annuel('agapes', r.temple_id, nb_resas_temple, nb_agapes_jour)
+            )
+        else:
+            part_agapes = Decimal('0')
+        cout_total = part_fixe + part_mutualise + part_marginal + part_agapes
+
+        # Effectif par loge : utilise loge.effectif_total en priorité ;
+        # fallback = total_override / nb_loges si override fourni, sinon 20.
+        if nb_membres_global:
+            effectif = nb_membres_global
+        elif r.loge:
+            if r.loge.effectif_total > 0:
+                effectif = r.loge.effectif_total
+            else:
+                type_loge = r.loge.type_loge
+                if type_loge == 'loge' and nb_membres_lb:
+                    effectif = max(1, nb_membres_lb // nb_loges_lb_resas)
+                elif type_loge == 'haut_grade' and nb_membres_hg:
+                    effectif = max(1, nb_membres_hg // nb_loges_hg_resas)
+                else:
+                    effectif = 20  # défaut si effectif non renseigné
+        else:
+            effectif = 20
+
+        detail.append({
+            'resa': r,
+            'loge_nom': r.loge.nom if r.loge else '— Hors loge (exceptionnelle / congrès)',
+            'loge': r.loge,
+            'temple': str(r.temple),
+            'date': r.date,
+            'duree_h': round(duree_h, 1),
+            'nb_occupants_jour': nb_occupants_jour,
+            'seul': nb_occupants_jour == 1,
+            'agapes': r.besoin_agapes,
+            'part_fixe': part_fixe,
+            'part_mutualise': part_mutualise,
+            'part_marginal': part_marginal,
+            'part_agapes': part_agapes,
+            'cout_total': cout_total,
+            'effectif': effectif,
+            'is_reguliere': r.type_reservation == 'reguliere',
+            'membre_association': r.loge.membre_association if r.loge else False,
+            'cout_par_membre': cout_total / Decimal(str(effectif)),
+        })
+
+    # Agréger par loge (tenues temple)
+    agg = defaultdict(lambda: {
+        'loge': None, 'loge_nom': '', 'type_loge': '',
+        'nb_tenues': 0, 'nb_salles': 0, 'effectif': 0,
+        'has_regulier': False, 'membre_association': False,
+        'total_fixe': Decimal('0'), 'total_mutualise': Decimal('0'),
+        'total_marginal': Decimal('0'), 'total_agapes': Decimal('0'),
+        'total_salle': Decimal('0'), 'total_cout': Decimal('0'),
+    })
+    for d in detail:
+        k = d['loge'].pk if d['loge'] else f"anon_{d['loge_nom']}"
+        a = agg[k]
+        a['loge']      = d['loge']
+        a['loge_nom']  = d['loge_nom']
+        a['type_loge'] = d['loge'].type_loge if d['loge'] else ''
+        a['nb_tenues']       += 1
+        a['effectif']         = d['effectif']
+        if d['is_reguliere']:
+            a['has_regulier'] = True
+        if d['membre_association']:
+            a['membre_association'] = True
+        a['total_fixe']      += d['part_fixe']
+        a['total_mutualise'] += d['part_mutualise']
+        a['total_marginal']  += d['part_marginal']
+        a['total_agapes']    += d['part_agapes']
+        a['total_cout']      += d['cout_total']
+
+    # Salles de réunion : la loge paie sa part de mutualisé du jour
+    # + les charges spécifiques salle.
+    # Si la loge a déjà une tenue ce jour → annuel mutualisé déjà payé via tenue.
+    for rs in resas_salle:
+        if not rs.loge_id:
+            continue
+        debut_dt = datetime.combine(rs.date, rs.heure_debut)
+        fin_dt   = datetime.combine(rs.date, rs.heure_fin)
+        if fin_dt <= debut_dt:
+            fin_dt += timedelta(days=1)
+        duree_h = (fin_dt - debut_dt).total_seconds() / 3600
+        nb_occupants_jour = occupants_par_jour[rs.date] or 1
+
+        # Part de mutualisé du bâtiment pour cette occupation de salle
+        # (event/heure divisé par occupants du jour ; annuel déjà dans total_occupants_annuel)
+        cout_mutualise_salle = (
+            _variable_event('mutualise', None, duree_h) / nb_occupants_jour
+            + _variable_annuel('mutualise', None, 1, nb_occupants_jour)
+        )
+        cout_salle_specifique = _salle_brut(duree_h, nb_resas_salle_tot or 1)
+        cout_s = cout_mutualise_salle + cout_salle_specifique
+
+        # Si la loge a déjà une tenue ce jour → part annuelle mutualisé déjà comptée
+        # via la tenue ; garder seulement event mutualisé (partagé) + spécifique salle
+        if rs.loge_id in tenues_loge_ids_par_jour[rs.date]:
+            cout_s = (
+                _variable_event('mutualise', None, duree_h) / nb_occupants_jour
+                + cout_salle_specifique
+            )
+
+        if cout_s == 0:
+            continue
+        k = rs.loge_id
+        a = agg[k]
+        if a['loge'] is None:
+            a['loge']      = rs.loge
+            a['loge_nom']  = rs.loge.nom
+            a['type_loge'] = rs.loge.type_loge
+        a['nb_salles']   += 1
+        a['total_salle'] += cout_s
+        a['total_cout']  += cout_s
+
+    for a in agg.values():
+        eff = a['effectif'] or 1
+        nb_t = (a['nb_tenues'] + a['nb_salles']) or 1
+        a['cout_par_tenue']  = a['total_cout'] / nb_t
+        a['cout_par_membre'] = a['total_cout'] / Decimal(str(eff))
+
+    par_loge = sorted(agg.values(), key=lambda x: -x['total_cout'])
+
+    total_tenues     = sum(d['cout_total']     for d in detail)
+    total_fixe       = sum(d['part_fixe']      for d in detail)
+    total_mutualise  = sum(d['part_mutualise'] for d in detail)
+    total_marginal   = sum(d['part_marginal']  for d in detail)
+    total_agapes     = sum(d['part_agapes']    for d in detail)
+    total_salle      = sum(a['total_salle']    for a in agg.values())
+    total_global     = total_tenues + total_salle  # total réel toutes occupations
+    nb_resas_salle_total = len(resas_salle)
+
+    # ── Tarif d'équilibre ──────────────────────────────────────────
+    # Exclusions du calcul de cotisation annuelle :
+    #  - agapes / salle : auto-financés par les tarifs à la tenue
+    #  - occasionnels (membre_association=False) : couvert par leur facturation
+    #    exceptionnelle à la tenue ; traité comme recette en face des charges
+    #
+    # Les membres de hauts grades sont déjà adhérents d'une loge bleue : leurs
+    # cotisations LB couvrent déjà les charges fixes du bâtiment.  La cotisation
+    # HG ne couvre donc que les coûts VARIABLES de leurs tenues HG
+    # (mutualise + marginal), pas à nouveau les frais de structure (fixe).
+    charges_lb  = sum(a['total_cout']
+                      for a in par_loge if a['type_loge'] == 'loge' and a['membre_association'])
+    # HG : coûts variables (mutualise + marginal + salle + agapes), hors charges fixes du bâtiment
+    charges_hg  = sum(a['total_mutualise'] + a['total_marginal'] + a['total_salle'] + a['total_agapes']
+                      for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
+    # Charges fixes HG "absorbées" par la cotisation LB des mêmes membres
+    hg_fixe_absorbe = sum(a['total_fixe']
+                          for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
+    # Recettes des occupants occasionnels au tarif voté (congrès, exceptionnel…)
+    # On utilise tarif_reservation() pour refléter exactement ce qui est facturé
+    # (ex. CAALA congrès = 300 €/jour × nb_jours, indépendamment du coût réel).
+    if params is None:
+        params = Parametres.get_instance()
+    recettes_occasionnels = sum(
+        tarif_reservation(r, params)
+        for r in resas
+        if r.loge and not r.loge.membre_association
+    )
+    total_auto_finance = recettes_occasionnels
+
+    # effectif_lb/hg = somme des effectifs des loges ADHÉRENTES uniquement
+    # Les occupants occasionnels (membre_association=False) ne paient pas de cotisation annuelle
+    effectif_lb  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'loge'       and a['membre_association'])
+    effectif_hg  = sum(a['effectif'] for a in par_loge if a['type_loge'] == 'haut_grade' and a['membre_association'])
+    effectif_tot = sum(a['effectif'] for a in par_loge) or 1
+
+    # Pour le tarif d'équilibre, utiliser le total override (nb_membres_lb/hg) si fourni ;
+    # sinon retomber sur la somme des effectifs du détail.
+    eff_eq_lb = nb_membres_lb if nb_membres_lb else (effectif_lb or None)
+    eff_eq_hg = nb_membres_hg if nb_membres_hg else (effectif_hg or None)
+
+    # Recettes des tenues exceptionnelles / congrès des loges ADHÉRENTES
+    # (ces tenues sont facturées séparément → réduisent la cotisation à couvrir)
+    recettes_exc_adherents = sum(
+        tarif_reservation(r, params)
+        for r in resas
+        if r.loge and r.loge.membre_association
+        and r.type_reservation in ('exceptionnelle', 'congres')
+    )
+
+    # Déduction totale : recettes exceptionnelles adhérents + autres recettes manuelles
+    recettes_autres = Decimal(str(recettes_exc)) if recettes_exc else Decimal('0')
+    recettes_dec = recettes_exc_adherents + recettes_autres
+    if recettes_dec > 0 and total_global > 0:
+        net_lb = charges_lb - recettes_dec * charges_lb / (charges_lb + charges_hg or total_global)
+        net_hg = charges_hg - recettes_dec * charges_hg / (charges_lb + charges_hg or total_global)
+    else:
+        net_lb = charges_lb
+        net_hg = charges_hg
+
+    tarif_eq_lb  = net_lb / Decimal(str(eff_eq_lb)) if eff_eq_lb else None
+    # HG : tarif par TENUE (modèle B — les membres HG viennent de divers orients)
+    nb_resas_hg_adherents = sum(
+        a['nb_tenues'] for a in par_loge
+        if a['type_loge'] == 'haut_grade' and a['membre_association']
+    )
+    tarif_eq_hg  = net_hg / Decimal(str(nb_resas_hg_adherents)) if nb_resas_hg_adherents else None
+    # HG : tarif par MEMBRE (modèle A — par membre pour tous)
+    tarif_eq_hg_per_membre = net_hg / Decimal(str(eff_eq_hg)) if eff_eq_hg else None
+    eff_eq_tot   = (eff_eq_lb or 0) + sum(
+        a['effectif'] for a in par_loge if a['type_loge'] not in ('loge',))
+    total_pour_equilibre = total_global - total_auto_finance
+    tarif_eq_global = (total_pour_equilibre - recettes_dec) / Decimal(str(eff_eq_tot or effectif_tot))
+
+    return {
+        'par_loge': par_loge,
+        'total_global':    total_global,
+        'total_fixe':      total_fixe,
+        'total_mutualise': total_mutualise,
+        'total_marginal':  total_marginal,
+        'total_agapes':    total_agapes,
+        'total_salle':     total_salle,
+        'nb_resas':        nb_resas,
+        'nb_resas_salle':  nb_resas_salle_total,
+        'cout_moyen_tenue': total_tenues / nb_resas if nb_resas else Decimal('0'),
+        'detail': detail,
+        # équilibre
+        'charges_lb':        charges_lb,
+        'charges_hg':        charges_hg,
+        'hg_fixe_absorbe':   hg_fixe_absorbe,
+        'net_lb':            net_lb,
+        'net_hg':            net_hg,
+        'total_auto_finance':        total_auto_finance,
+        'recettes_occasionnels':     recettes_occasionnels,
+        'recettes_exc_adherents':    recettes_exc_adherents,
+        'recettes_autres':           recettes_autres,
+        'total_pour_equilibre':      total_pour_equilibre,
+        'effectif_lb':           effectif_lb,
+        'effectif_hg':           effectif_hg,
+        'eff_eq_lb':             eff_eq_lb,
+        'eff_eq_hg':             eff_eq_hg,
+        'nb_resas_hg_adherents': nb_resas_hg_adherents,
+        'recettes_exc': recettes_dec,
+        'tarif_eq_lb':  tarif_eq_lb,
+        'tarif_eq_hg':  tarif_eq_hg,              # par TENUE — modèle B
+        'tarif_eq_hg_per_membre': tarif_eq_hg_per_membre,  # par MEMBRE — modèle A
+        'tarif_eq_global': tarif_eq_global,
+    }
+
+
+@staff_required
+def budget_simulation_pdf(request):
+    """Export PDF de synthèse budgétaire — destiné au président et trésorier."""
+    from io import BytesIO
+    from decimal import Decimal
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable, PageBreak,
+                                    KeepTogether)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+    from reportlab.graphics.shapes import Drawing, Rect, String, Line, Circle
+
+    def _p(val, lo=1, hi=9999):
+        try:
+            v = int(str(val).strip())
+            return v if lo <= v <= hi else None
+        except (TypeError, ValueError):
+            return None
+
+    def _pd(val):
+        if not val:
+            return None
+        try:
+            v = float(str(val).replace(',', '.').strip())
+            return v if v >= 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    nb_membres_lb = _p(request.GET.get('nb_membres_lb'))
+    nb_membres_hg = _p(request.GET.get('nb_membres_hg'))
+    recettes_exc  = _pd(request.GET.get('recettes_exc'))
+
+    sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
+                          recettes_exc=recettes_exc)
+    params = Parametres.get_instance()
+
+    # Palette
+    BLEU     = colors.HexColor('#0F2137')
+    OR       = colors.HexColor('#C8A84B')
+    GRIS     = colors.HexColor('#64748B')
+    FOND     = colors.HexColor('#EBF1FA')
+    ROUGE_C  = colors.HexColor('#B91C1C')
+    VERT_DC  = colors.HexColor('#065F46')
+    BLEU_LT  = colors.HexColor('#DBEAFE')
+    VERT_LT  = colors.HexColor('#DCFCE7')
+    VIOL_LT  = colors.HexColor('#EDE9FE')
+    ORANGE_LT= colors.HexColor('#FFEDD5')
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                            topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+                            leftMargin=1.8 * cm, rightMargin=1.8 * cm)
+    styles = getSampleStyleSheet()
+    titre    = ParagraphStyle('titre',   fontSize=20, textColor=BLEU, spaceAfter=2,  fontName='Helvetica-Bold')
+    sous     = ParagraphStyle('sous',    fontSize=10, textColor=GRIS, spaceAfter=2)
+    section  = ParagraphStyle('section', fontSize=11, textColor=BLEU, spaceBefore=8, spaceAfter=4, fontName='Helvetica-Bold')
+    note     = ParagraphStyle('note',    fontSize=8,  textColor=GRIS, spaceAfter=2)
+    centré   = ParagraphStyle('centré',  fontSize=8,  textColor=GRIS, alignment=TA_CENTER)
+    note_s   = ParagraphStyle('note_s',  fontSize=8,  textColor=GRIS, spaceAfter=3, leading=11)
+    intro_s  = ParagraphStyle('intro_s', fontSize=8.5, textColor=colors.HexColor('#1E293B'),
+                              spaceAfter=4, leading=12)
+    meth_s   = ParagraphStyle('meth_s',  fontSize=8.5, textColor=colors.HexColor('#1E293B'),
+                              spaceAfter=4, leading=13)
+    bullet_s = ParagraphStyle('bullet_s', parent=meth_s, leftIndent=14, firstLineIndent=-10)
+
+    # Largeur utile en paysage A4
+    _PW = landscape(A4)[0] - 3.6 * cm   # ≈ 26.1 cm
+
+    elems = []
+
+    # ── En-tête ──
+    elems.append(Paragraph("Temples Kellermann — Simulation budgétaire", titre))
+    meta_parts = [f"Saison {saison}–{saison+1}", f"Généré le {date.today():%d/%m/%Y}"]
+    if nb_membres_lb:
+        meta_parts.append(f"LB simulé : {nb_membres_lb} membres")
+    if nb_membres_hg:
+        meta_parts.append(f"HG simulé : {nb_membres_hg} membres")
+    elems.append(Paragraph("  ·  ".join(meta_parts), sous))
+    elems.append(HRFlowable(width='100%', thickness=2, color=OR, spaceAfter=8))
+
+    # ── KPI synthèse ──
+    elems.append(Paragraph("Synthèse", section))
+    _kw = _PW / 5
+    kpi_data = [
+        ['Charges totales', 'dont fixes (LB)', 'dont variables', 'Tenues validées', 'Coût moyen / tenue'],
+        [
+            f"{sim['total_global']:,.0f} €".replace(',', '\xa0'),
+            f"{sim['total_fixe']:,.0f} €".replace(',', '\xa0'),
+            f"{(sim['total_mutualise'] + sim['total_marginal']):,.0f} €".replace(',', '\xa0'),
+            str(sim['nb_resas']),
+            f"{sim['cout_moyen_tenue']:,.0f} €".replace(',', '\xa0'),
+        ],
+    ]
+    kpi_t = Table(kpi_data, colWidths=[_kw] * 5)
+    kpi_t.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, 0), BLEU),
+        ('TEXTCOLOR',     (0, 0), (-1, 0), colors.white),
+        ('FONTSIZE',      (0, 0), (-1, 0), 8),
+        ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BACKGROUND',    (0, 1), (-1, 1), FOND),
+        ('FONTNAME',      (0, 1), (-1, 1), 'Helvetica-Bold'),
+        ('FONTSIZE',      (0, 1), (-1, 1), 14),
+        ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 9),
+        ('BOX',           (0, 0), (-1, -1), 0.5, GRIS),
+        ('INNERGRID',     (0, 0), (-1, -1), 0.3, colors.white),
+        # Colorise colonne charges totales
+        ('TEXTCOLOR',     (0, 1), (0, 1), ROUGE_C),
+    ]))
+    elems.append(kpi_t)
+    elems.append(Spacer(1, 0.4 * cm))
+
+    # ── Décomposition charges (2 colonnes côte à côte : tableau + barres) ──
+    elems.append(Paragraph("Décomposition des charges", section))
+    total_g = sim['total_global'] or Decimal('1')
+    pct_f = float(sim['total_fixe']   / total_g * 100)
+    pct_m = float(sim['total_mutualise'] / total_g * 100)
+    pct_r = float(sim['total_marginal']  / total_g * 100)
+    dec_data = [
+        ['Type de charge', 'Montant annuel', '% du total'],
+        ['Charges fixes (loyer, assurances…)',
+         f"{sim['total_fixe']:,.0f} €".replace(',', '\xa0'), f"{pct_f:.1f} %"],
+        ['Charges mutualisées (chauffage…)',
+         f"{sim['total_mutualise']:,.0f} €".replace(',', '\xa0'), f"{pct_m:.1f} %"],
+        ['Charges marginales (nettoyage…)',
+         f"{sim['total_marginal']:,.0f} €".replace(',', '\xa0'), f"{pct_r:.1f} %"],
+        ['TOTAL',
+         f"{sim['total_global']:,.0f} €".replace(',', '\xa0'), '100 %'],
+    ]
+    dec_t = Table(dec_data, colWidths=[9 * cm, 3.5 * cm, 2.5 * cm])
+    dec_t.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, 0), BLEU),
+        ('TEXTCOLOR',     (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',      (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BACKGROUND',    (0, -1), (-1, -1), FOND),
+        ('FONTNAME',      (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('ROWBACKGROUNDS',(0, 1),  (-1, -2), [colors.white, colors.HexColor('#F8FAFC')]),
+        ('FONTSIZE',      (0, 0), (-1, -1), 9),
+        ('ALIGN',         (1, 0), (-1, -1), 'RIGHT'),
+        ('GRID',          (0, 0), (-1, -1), 0.4, colors.HexColor('#CDD8E8')),
+        ('TOPPADDING',    (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elems.append(dec_t)
+    elems.append(Spacer(1, 0.4 * cm))
+
+    # ── Comparaison des 4 modèles de facturation ────────────────────────────────
+    elems.append(Paragraph("Comparaison des modèles de facturation", section))
+    elems.append(Paragraph(
+        "Quatre approches pour couvrir les charges nettes d'exploitation. "
+        "Le « tarif d'équilibre » est le montant minimum à voter à l'AG pour chaque composant.",
+        intro_s))
+
+    # Tarifs et effectifs
+    _eff_lb_pdf = sim.get('eff_eq_lb') or 0
+    _nb_t_pdf   = sim.get('nb_resas') or 0
+    _nb_hg_t    = sim.get('nb_resas_hg_adherents') or 0
+    _eff_hg_pdf = sim.get('eff_eq_hg') or 0
+    _th_m  = sim['total_fixe'] / Decimal(str(_eff_lb_pdf)) if _eff_lb_pdf else None
+    _th_t  = ((sim['total_mutualise'] + sim['total_marginal'])
+              / Decimal(str(_nb_t_pdf))) if _nb_t_pdf else None
+    _eq_lb   = sim.get('tarif_eq_lb')
+    _eq_hg   = sim.get('tarif_eq_hg')
+    _eq_hg_m = sim.get('tarif_eq_hg_per_membre')
+    _c_lb  = float(params.tarif_membre_loge) if params.tarif_membre_loge else None
+    _c_hg  = float(params.tarif_membre_hg)   if params.tarif_membre_hg   else None
+    _ch_n  = float(sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0')))
+    _c_rec = (_c_lb or 0) * _eff_lb_pdf + (_c_hg or 0) * _nb_hg_t
+
+    # Enrichir les entrées par_loge avec les métriques manquantes
+    # (cotisation_actuelle, cout_equilibre_m1, cout_equilibre, cout_hybride, cout_sogofim)
+    # que _simuler_budget ne calcule pas — elles sont normalement ajoutées par la vue principale.
+    SOGOFIM_LB_GODF  = Decimal('138')
+    SOGOFIM_LB_AUTRE = Decimal('180')
+    SOGOFIM_HG_GODF  = Decimal('7.50')
+    SOGOFIM_HG_AUTRE = Decimal('10.00')
+
+    _obe_ids_pdf = {l['loge'].obedience_id for l in sim['par_loge']
+                    if l.get('loge') and l['loge'].obedience_id}
+    _obe_map_pdf = ({o.pk: o.nom.upper()
+                    for o in Obedience.objects.filter(pk__in=_obe_ids_pdf)}
+                   if _obe_ids_pdf else {})
+
+    for _l in sim['par_loge']:
+        if not _l.get('membre_association'):
+            _l.setdefault('cotisation_actuelle', None)
+            _l.setdefault('cout_equilibre_m1',   None)
+            _l.setdefault('cout_equilibre',       None)
+            _l.setdefault('cout_hybride',         None)
+            _l.setdefault('cout_sogofim',         None)
+            continue
+        _eff  = _l.get('effectif') or 0
+        _nb_t = _l.get('nb_tenues') or 0
+        _typ  = _l['type_loge']
+        # Cotisation actuelle AG
+        if _typ == 'loge' and _c_lb and _eff:
+            _l['cotisation_actuelle'] = Decimal(str(_c_lb)) * _eff
+        elif _typ == 'haut_grade' and _c_hg and _eff:
+            _l['cotisation_actuelle'] = Decimal(str(_c_hg)) * _eff
+        else:
+            _l['cotisation_actuelle'] = None
+        # Modèle A (par membre LB et HG)
+        if _typ == 'loge' and _eq_lb and _eff:
+            _l['cout_equilibre_m1'] = _eq_lb * _eff
+        elif _typ == 'haut_grade' and _eq_hg_m and _eff:
+            _l['cout_equilibre_m1'] = _eq_hg_m * _eff
+        else:
+            _l['cout_equilibre_m1'] = None
+        # Modèle B (LB/membre + HG/tenue)
+        if _typ == 'loge' and _eq_lb and _eff:
+            _l['cout_equilibre'] = _eq_lb * _eff
+        elif _typ == 'haut_grade' and _eq_hg and _nb_t:
+            _l['cout_equilibre'] = _eq_hg * _nb_t
+        else:
+            _l['cout_equilibre'] = None
+        # Modèle C hybride
+        if _th_t and _nb_t:
+            if _typ == 'haut_grade':
+                _l['cout_hybride'] = _th_t * _nb_t
+            elif _th_m and _eff:
+                _l['cout_hybride'] = _th_m * _eff + _th_t * _nb_t
+            else:
+                _l['cout_hybride'] = None
+        else:
+            _l['cout_hybride'] = None
+        # SOGOFIM
+        _obe_n = (_obe_map_pdf.get(_l['loge'].obedience_id, '')
+                  if _l.get('loge') and _l['loge'].obedience_id else '')
+        _is_godf_l = 'GODF' in _obe_n or 'GRAND ORIENT' in _obe_n
+        if _typ == 'loge' and _eff:
+            _l['cout_sogofim'] = (SOGOFIM_LB_GODF if _is_godf_l else SOGOFIM_LB_AUTRE) * _eff
+        elif _typ == 'haut_grade' and _eff and _nb_t:
+            _l['cout_sogofim'] = (SOGOFIM_HG_GODF if _is_godf_l else SOGOFIM_HG_AUTRE) * _nb_t * _eff
+        else:
+            _l['cout_sogofim'] = None
+
+    _rec_exc_pdf = sim.get('recettes_exc_adherents') or Decimal('0')
+    _sogofim_total = (sum(_l['cout_sogofim'] for _l in sim['par_loge']
+                          if _l.get('cout_sogofim') is not None) + _rec_exc_pdf)
+    _sogofim_val = float(_sogofim_total)
+
+    def _mf(v, dec=0):
+        if v is None: return '—'
+        return f"{float(v):.{dec}f} €"
+
+    def _md(eq, curr):
+        if eq is None or curr is None: return '—'
+        d = float(eq) - float(curr)
+        if d == 0: return '='
+        return f"+{d:.0f} €" if d > 0 else f"{d:.0f} €"
+
+    def _is_neg(v): return v is not None and str(v).startswith('-')
+    def _is_pos(v): return v is not None and str(v).startswith('+')
+
+    _rec_a = float(_eq_lb or 0) * _eff_lb_pdf + float(_eq_hg_m or 0) * _eff_hg_pdf
+    _rec_b = float(_eq_lb or 0) * _eff_lb_pdf + float(_eq_hg   or 0) * _nb_hg_t
+    _rec_c = float(_th_m  or 0) * _eff_lb_pdf + float(_th_t    or 0) * _nb_t_pdf
+
+    _solde_act = f"{_c_rec - _ch_n:+,.0f} €".replace(',', '\xa0')
+    _solde_sog = f"{_sogofim_val - _ch_n:+,.0f} €".replace(',', '\xa0')
+    _solde_a   = f"{_rec_a - _ch_n:+,.0f} €".replace(',', '\xa0') if _eq_lb else '—'
+    _solde_b   = f"{_rec_b - _ch_n:+,.0f} €".replace(',', '\xa0') if _eq_lb else '—'
+    _solde_c   = f"{_rec_c - _ch_n:+,.0f} €".replace(',', '\xa0') if _th_m else '—'
+    _delta_lb_a = _md(_eq_lb, _c_lb)
+    _delta_lb_b = _md(_eq_lb, _c_lb)
+    _delta_lb_c = _md(_th_m,  _c_lb)
+    _delta_hg_b = _md(_eq_hg, _c_hg)
+    _delta_hg_c = _md(_th_t, params.tarif_exc_sans_agapes)
+
+    modeles_data = [
+        ['', 'Actuel AG', 'Modèle A\npar membre', 'Modèle B\nLB/mbr + HG/t.', 'Modèle C ★\nhybride', 'SOGOFIM\n(référence nationale)'],
+        ['LB — cotisation/membre',
+         _mf(_c_lb),
+         _mf(_eq_lb),
+         _mf(_eq_lb),
+         (f"{float(_th_m):.0f} € (fixe)" if _th_m else '—'),
+         '138 € (GODF)\n180 € (autre)'],
+        ['  Ajustement LB', '—', _delta_lb_a, _delta_lb_b, _delta_lb_c, 'Barème national'],
+        ['HG — tarif applicable',
+         f"{_mf(_c_hg)}/tenue",
+         (f"{_mf(_eq_hg_m)}/mbr" if _eq_hg_m else '—'),
+         (f"{_mf(_eq_hg)}/tenue" if _eq_hg else '—'),
+         (f"{float(_th_t):.0f} €/tenue" if _th_t else '—'),
+         '7,50 €/t./mbr (GODF)\n10,00 €/t./mbr (autre)'],
+        ['  Ajustement HG', '—', 'unité changée', _delta_hg_b, _delta_hg_c, 'Barème national'],
+        ['Solde simulé vs charges', _solde_act, _solde_a, _solde_b, _solde_c, _solde_sog],
+    ]
+
+    _lw  = 4.0 * cm
+    _col = (_PW - _lw) / 5
+    mod_t = Table(modeles_data, colWidths=[_lw] + [_col] * 5)
+
+    mod_ts = [
+        ('BACKGROUND',    (0, 0), (-1, 0),   BLEU),
+        ('TEXTCOLOR',     (0, 0), (-1, 0),   colors.white),
+        ('FONTNAME',      (0, 0), (-1, 0),   'Helvetica-Bold'),
+        ('FONTSIZE',      (0, 0), (-1, 0),   7.5),
+        ('ALIGN',         (0, 0), (0, -1),   'LEFT'),
+        ('ALIGN',         (1, 0), (-1, -1),  'CENTER'),
+        ('VALIGN',        (0, 0), (-1, -1),  'MIDDLE'),
+        ('FONTSIZE',      (0, 1), (-1, -1),  8),
+        ('TOPPADDING',    (0, 0), (-1, -1),  4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1),  4),
+        ('GRID',          (0, 0), (-1, -1),  0.4, colors.HexColor('#CDD8E8')),
+        # Couleurs colonnes modèles
+        ('BACKGROUND',    (2, 1), (2, -1),   BLEU_LT),
+        ('BACKGROUND',    (3, 1), (3, -1),   VERT_LT),
+        ('BACKGROUND',    (4, 1), (4, -1),   VIOL_LT),
+        ('BACKGROUND',    (5, 1), (5, -1),   ORANGE_LT),
+        # Couleurs en-têtes colonnes
+        ('BACKGROUND',    (2, 0), (2, 0),    colors.HexColor('#1D4ED8')),
+        ('BACKGROUND',    (3, 0), (3, 0),    colors.HexColor('#15803D')),
+        ('BACKGROUND',    (4, 0), (4, 0),    colors.HexColor('#5B21B6')),
+        ('BACKGROUND',    (5, 0), (5, 0),    colors.HexColor('#C2410C')),
+        # Lignes d'ajustement (indices 2 et 4)
+        ('FONTSIZE',      (0, 2), (-1, 2),   7),
+        ('FONTSIZE',      (0, 4), (-1, 4),   7),
+        ('TEXTCOLOR',     (0, 2), (0, 2),    GRIS),
+        ('TEXTCOLOR',     (0, 4), (0, 4),    GRIS),
+        # Ligne solde
+        ('BACKGROUND',    (0, 5), (-1, 5),   colors.HexColor('#F0FDF4')),
+        ('FONTNAME',      (0, 5), (-1, 5),   'Helvetica-Bold'),
+        ('TEXTCOLOR',     (1, 5), (1, 5),    ROUGE_C),
+        ('TEXTCOLOR',     (2, 5), (4, 5),    VERT_DC),
+    ]
+    # Colorer solde SOGOFIM selon signe
+    if _sogofim_val >= _ch_n:
+        mod_ts.append(('TEXTCOLOR', (5, 5), (5, 5), VERT_DC))
+    else:
+        mod_ts.append(('TEXTCOLOR', (5, 5), (5, 5), ROUGE_C))
+    # Coloriser les deltas LB
+    for col_idx, delta_val in [(2, _delta_lb_a), (3, _delta_lb_b), (4, _delta_lb_c)]:
+        if _is_pos(delta_val):
+            mod_ts += [('TEXTCOLOR', (col_idx, 2), (col_idx, 2), ROUGE_C),
+                       ('FONTNAME',  (col_idx, 2), (col_idx, 2), 'Helvetica-Bold')]
+        elif _is_neg(delta_val):
+            mod_ts += [('TEXTCOLOR', (col_idx, 2), (col_idx, 2), VERT_DC),
+                       ('FONTNAME',  (col_idx, 2), (col_idx, 2), 'Helvetica-Bold')]
+    # Coloriser les deltas HG
+    for col_idx, delta_val in [(3, _delta_hg_b), (4, _delta_hg_c)]:
+        if _is_pos(delta_val):
+            mod_ts += [('TEXTCOLOR', (col_idx, 4), (col_idx, 4), ROUGE_C),
+                       ('FONTNAME',  (col_idx, 4), (col_idx, 4), 'Helvetica-Bold')]
+        elif _is_neg(delta_val):
+            mod_ts += [('TEXTCOLOR', (col_idx, 4), (col_idx, 4), VERT_DC),
+                       ('FONTNAME',  (col_idx, 4), (col_idx, 4), 'Helvetica-Bold')]
+
+    mod_t.setStyle(TableStyle(mod_ts))
+    elems.append(mod_t)
+    elems.append(Spacer(1, 0.3 * cm))
+
+    # ── Visualisation barres horizontales (recettes vs charges) ─────────────────
+    if _ch_n > 0:
+        _recettes_a = float(_eq_lb or 0) * _eff_lb_pdf + float(_eq_hg_m or 0) * _eff_hg_pdf + float(_rec_exc_pdf)
+        _recettes_b = float(_eq_lb or 0) * _eff_lb_pdf + float(_eq_hg or 0) * _nb_hg_t + float(_rec_exc_pdf)
+        _recettes_c = float(_th_m or 0) * _eff_lb_pdf + float(_th_t or 0) * _nb_t_pdf + float(_rec_exc_pdf)
+        _bar_vals = [
+            ('Actuelle — tarifs AG votés',     _c_rec,      colors.HexColor('#64748B')),
+            ('Modèle A — par membre',           _recettes_a if _recettes_a > 0 else _ch_n, colors.HexColor('#1D4ED8')),
+            ('Modèle B — LB/mbr + HG/tenue',   _recettes_b if _recettes_b > 0 else _ch_n, colors.HexColor('#166534')),
+            ('Modèle C ★ hybride',             _recettes_c if _recettes_c > 0 else _ch_n, colors.HexColor('#5B21B6')),
+            ('SOGOFIM — référence nationale',  _sogofim_val,  colors.HexColor('#C2410C')),
+        ]
+        _bar_w    = _PW
+        _bar_rh   = 0.9 * cm
+        _lbl_w    = 6.5 * cm
+        _val_w    = _bar_w - _lbl_w - 3.5 * cm
+        _max_v    = max(v for _, v, _ in _bar_vals) * 1.08
+        _ch_x     = _lbl_w + _val_w * (_ch_n / _max_v)
+
+        drw = Drawing(_bar_w, len(_bar_vals) * _bar_rh + 0.8 * cm)
+        _y0 = len(_bar_vals) * _bar_rh + 0.2 * cm
+        for i, (lbl, val, col) in enumerate(_bar_vals):
+            y   = _y0 - (i + 1) * _bar_rh
+            bw  = _val_w * (val / _max_v) if _max_v else 0
+            sol = val - _ch_n
+            drw.add(String(_lbl_w - 4, y + 5, lbl, fontSize=8,
+                           fillColor=colors.HexColor('#1E293B')))
+            drw.add(Rect(_lbl_w, y + 1, bw, 14,
+                         fillColor=col, strokeColor=None, strokeWidth=0))
+            sol_col = colors.HexColor('#059669') if sol >= 0 else ROUGE_C
+            drw.add(String(_lbl_w + bw + 4, y + 4,
+                           f"{val:,.0f} € ({'+' if sol >= 0 else ''}{sol:,.0f} €)".replace(',', '\xa0'),
+                           fontSize=7.5, fillColor=sol_col))
+        drw.add(Line(_ch_x, 0, _ch_x, _y0,
+                     strokeColor=ROUGE_C, strokeWidth=1.5, strokeDashArray=[3, 2]))
+        drw.add(String(_ch_x - 10, _y0 + 2,
+                       f"Charges : {_ch_n:,.0f} €".replace(',', '\xa0'),
+                       fontSize=7.5, fillColor=ROUGE_C))
+        elems.append(drw)
+        elems.append(Spacer(1, 0.15 * cm))
+
+    # Note de recommandation Modèle C
+    if _th_m and _th_t:
+        rec_note = ParagraphStyle('rec_note', fontSize=8.5, textColor=colors.HexColor('#4C1D95'),
+                                  backColor=colors.HexColor('#EDE9FE'), borderPad=6,
+                                  leftIndent=6, rightIndent=6, spaceBefore=4, spaceAfter=6,
+                                  leading=12)
+        elems.append(Paragraph(
+            f"<b>★ Recommandation — Modèle C hybride :</b> "
+            f"Voter LB à <b>{float(_th_m):.0f} €/membre</b> (charges fixes) "
+            f"+ <b>{float(_th_t):.0f} €/tenue</b> pour tous (charges variables). "
+            f"Tarif proche de la tenue exceptionnelle actuelle "
+            f"({float(params.tarif_exc_sans_agapes):.0f} € sans agapes) — transition naturelle.",
+            rec_note))
+    elems.append(Spacer(1, 0.4 * cm))
+
+    # ── Tarif d'équilibre ──
+    elems.append(Paragraph("Tarif d'équilibre (coût / membre)", section))
+    eq_data = [['Type de loge', 'Membres imputés', 'Charges imputées', 'Tarif équilibre', 'Tarif actuel', 'Écart']]
+    def _ecart(eq, actuel):
+        if eq is None or actuel is None:
+            return '—'
+        diff = eq - actuel
+        return f"+{diff:.2f} €" if diff >= 0 else f"{diff:.2f} €"
+
+    if sim['tarif_eq_lb'] is not None:
+        eq_data.append([
+            'Loges bleues',
+            str(sim['effectif_lb']),
+            f"{sim['charges_lb']:,.0f} €".replace(',', ' '),
+            f"{sim['tarif_eq_lb']:.2f} €",
+            f"{params.tarif_membre_loge:.2f} €",
+            _ecart(sim['tarif_eq_lb'], params.tarif_membre_loge),
+        ])
+    if sim['tarif_eq_hg'] is not None:
+        eq_data.append([
+            'Hauts grades',
+            str(sim['effectif_hg']),
+            f"{sim['charges_hg']:,.0f} €".replace(',', ' '),
+            f"{sim['tarif_eq_hg']:.2f} €",
+            f"{params.tarif_membre_hg:.2f} €",
+            _ecart(sim['tarif_eq_hg'], params.tarif_membre_hg),
+        ])
+
+    if len(eq_data) > 1:
+        eq_t = Table(eq_data, colWidths=[4*cm, 2.5*cm, 3.5*cm, 3.5*cm, 2.8*cm, 2.8*cm])
+        eq_t.setStyle(TableStyle([
+            ('BACKGROUND',  (0, 0), (-1, 0), BLEU),
+            ('TEXTCOLOR',   (0, 0), (-1, 0), colors.white),
+            ('FONTNAME',    (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('FONTSIZE',    (0, 0), (-1, -1), 9),
+            ('ALIGN',       (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID',        (0, 0), (-1, -1), 0.4, colors.HexColor('#CDD8E8')),
+            ('TOPPADDING',  (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elems.append(eq_t)
+    elems.append(Spacer(1, 0.5 * cm))
+
+    # ── Impact sur les cotisations (agrégat, sans nommer les loges) ──
+    elems.append(Paragraph("Impact sur les cotisations — loges bleues", section))
+    elems.append(Paragraph(
+        "Variation de cotisation par rapport aux tarifs AG actuels, pour chaque modèle. "
+        "Les chiffres représentent l'effort annuel total par loge (effectif × écart de tarif).",
+        intro_s))
+
+    def _impact_stats(loges, cost_key):
+        deltas = []
+        for l in loges:
+            curr = l.get('cotisation_actuelle')
+            new  = l.get(cost_key)
+            if curr is not None and new is not None:
+                deltas.append(float(new) - float(curr))
+        if not deltas:
+            return None
+        return {
+            'max_hausse': max(deltas),
+            'max_baisse': min(deltas),
+            'moyenne':    sum(deltas) / len(deltas),
+            'n':          len(deltas),
+        }
+
+    lb_loges = [l for l in sim['par_loge'] if l.get('type_loge') == 'loge']
+    hg_loges = [l for l in sim['par_loge'] if l.get('type_loge') == 'haut_grade']
+
+    _st_lb_a  = _impact_stats(lb_loges, 'cout_equilibre_m1')
+    _st_lb_b  = _impact_stats(lb_loges, 'cout_equilibre')
+    _st_lb_c  = _impact_stats(lb_loges, 'cout_hybride')
+    _st_lb_s  = _impact_stats(lb_loges, 'cout_sogofim')
+    _st_hg_a  = _impact_stats(hg_loges, 'cout_equilibre_m1')
+    _st_hg_b  = _impact_stats(hg_loges, 'cout_equilibre')
+    _st_hg_c  = _impact_stats(hg_loges, 'cout_hybride')
+    _st_hg_s  = _impact_stats(hg_loges, 'cout_sogofim')
+
+    def _fmt_d(v, always_sign=True):
+        if v is None: return '—'
+        sign = '+' if v >= 0 else ''
+        return f"{sign}{v:,.0f} €".replace(',', '\xa0')
+
+    def _st_row(label, st):
+        if not st:
+            return [label, '—', '—', '—']
+        return [label,
+                _fmt_d(st['max_hausse']),
+                _fmt_d(st['max_baisse']),
+                _fmt_d(st['moyenne'])]
+
+    imp_hdr = ['Modèle', 'Max hausse (1 loge)', 'Max baisse (1 loge)', f"Moyenne ({len(lb_loges)} loges)"]
+    imp_lb_data = [
+        imp_hdr,
+        _st_row('Modèle A — par membre',          _st_lb_a),
+        _st_row('Modèle B — LB/mbr + HG/tenue',   _st_lb_b),
+        _st_row('Modèle C ★ hybride',             _st_lb_c),
+        _st_row('SOGOFIM — référence nationale',  _st_lb_s),
+    ]
+
+    _icw = [_PW * 0.32, _PW * 0.23, _PW * 0.23, _PW * 0.22]
+    imp_lb_t = Table(imp_lb_data, colWidths=_icw)
+
+    def _impact_style(data, n_rows_data):
+        ts = [
+            ('BACKGROUND',    (0, 0), (-1, 0),  BLEU),
+            ('TEXTCOLOR',     (0, 0), (-1, 0),  colors.white),
+            ('FONTNAME',      (0, 0), (-1, 0),  'Helvetica-Bold'),
+            ('FONTSIZE',      (0, 0), (-1, -1), 9),
+            ('ALIGN',         (0, 0), (0, -1),  'LEFT'),
+            ('ALIGN',         (1, 0), (-1, -1), 'CENTER'),
+            ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS',(0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+            ('GRID',          (0, 0), (-1, -1), 0.4, colors.HexColor('#CDD8E8')),
+            ('TOPPADDING',    (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]
+        # Coloriser max_hausse (col 1) et max_baisse (col 2) par signe
+        for row in range(1, n_rows_data + 1):
+            v_hausse = data[row][1] if row < len(data) else '—'
+            v_baisse = data[row][2] if row < len(data) else '—'
+            v_moy    = data[row][3] if row < len(data) else '—'
+            for col, val in [(1, v_hausse), (2, v_baisse), (3, v_moy)]:
+                if str(val).startswith('+') and not str(val).startswith('+0'):
+                    ts.append(('TEXTCOLOR', (col, row), (col, row), ROUGE_C))
+                    ts.append(('FONTNAME',  (col, row), (col, row), 'Helvetica-Bold'))
+                elif str(val).startswith('-'):
+                    ts.append(('TEXTCOLOR', (col, row), (col, row), VERT_DC))
+                    ts.append(('FONTNAME',  (col, row), (col, row), 'Helvetica-Bold'))
+        return ts
+
+    imp_lb_t.setStyle(TableStyle(_impact_style(imp_lb_data, 4)))
+    elems.append(imp_lb_t)
+    elems.append(Spacer(1, 0.4 * cm))
+
+    # Impact HG
+    if hg_loges:
+        elems.append(Paragraph("Impact sur les cotisations — hauts grades", section))
+        elems.append(Paragraph(
+            "Même lecture pour les ateliers de hauts grades. "
+            "Le tarif HG actuel est une cotisation annuelle par membre pour les ateliers réguliers.",
+            intro_s))
+        imp_hg_hdr = ['Modèle', 'Max hausse (1 atelier)', 'Max baisse (1 atelier)', f"Moyenne ({len(hg_loges)} ateliers)"]
+        imp_hg_data = [
+            imp_hg_hdr,
+            _st_row('Modèle A — par membre',         _st_hg_a),
+            _st_row('Modèle B — LB/mbr + HG/tenue',  _st_hg_b),
+            _st_row('Modèle C ★ hybride',            _st_hg_c),
+            _st_row('SOGOFIM — référence nationale', _st_hg_s),
+        ]
+        imp_hg_t = Table(imp_hg_data, colWidths=_icw)
+        imp_hg_t.setStyle(TableStyle(_impact_style(imp_hg_data, 4)))
+        elems.append(imp_hg_t)
+        elems.append(Spacer(1, 0.4 * cm))
+
+    # ── Avertissement effectif ──
+    avert_style = ParagraphStyle('avert', fontSize=8.5, textColor=colors.HexColor('#92400E'),
+                                 backColor=colors.HexColor('#FFFBEB'), borderPad=6,
+                                 leftIndent=6, rightIndent=6, spaceBefore=4, spaceAfter=4)
+    effectif_note = (
+        "<b>⚠ Attention — effectifs à confirmer.</b> "
+        "Les effectifs indiqués proviennent des fiches loges (champ « Effectif total »). "
+        "Si ce champ n'est pas renseigné, la simulation utilise 20 membres par défaut. "
+        "Le tarif d'équilibre par membre est donc <b>directement fonction de l'effectif saisi</b> : "
+        "un effectif sous-estimé donne un tarif sur-estimé, et inversement."
+    )
+    if nb_membres_lb or nb_membres_hg:
+        parts = []
+        if nb_membres_lb: parts.append(f"LB : {nb_membres_lb} membres")
+        if nb_membres_hg: parts.append(f"HG : {nb_membres_hg} membres")
+        effectif_note = (
+            f"<b>ℹ Effectifs simulés ({' · '.join(parts)})</b>. "
+            "Les tarifs d'équilibre sont calculés sur cette base et non sur les effectifs réels des loges."
+        )
+    elems.append(Paragraph(effectif_note, avert_style))
+
+    # ── Méthodologie ──
+    elems.append(Spacer(1, 0.5 * cm))
+    elems.append(Paragraph("Méthodologie de calcul", section))
+    elems.append(Paragraph(
+        "Les charges sont réparties en trois niveaux :", meth_s))
+    elems.append(Paragraph(
+        "• <b>Charges fixes</b> (loyer, assurances, maintenance) : montant annuel total divisé "
+        "par le nombre de tenues de la saison. Chaque tenue supporte une quote-part égale.",
+        bullet_s))
+    elems.append(Paragraph(
+        "• <b>Charges mutualisées</b> (chauffage, électricité de base) : coût partagé entre les loges "
+        "présentes le même jour dans le même temple. Une seule loge supporte 100 % du coût.",
+        bullet_s))
+    elems.append(Paragraph(
+        "• <b>Charges marginales</b> (nettoyage, consommables) : coût fixe par tenue, "
+        "quel que soit le nombre de loges présentes.",
+        bullet_s))
+    elems.append(Paragraph(
+        "<b>Tarif d'équilibre</b> = total des charges imputées à un type de loge ÷ "
+        "nombre total de membres de ce type. C'est le montant minimum à voter à l'AG "
+        "pour couvrir exactement les charges simulées.",
+        meth_s))
+
+    # ── Proposition de tarifs pour l'AG ──────────────────────────────────────
+    elems.append(PageBreak())
+    elems.append(Paragraph(f"Proposition de tarifs — AG Saison {saison}–{saison + 1}", titre))
+    elems.append(HRFlowable(width='100%', thickness=2, color=OR, spaceAfter=8))
+    elems.append(Paragraph(
+        "Tableau récapitulatif des tarifs à soumettre au vote de l'assemblée générale. "
+        "La colonne « Équilibre simulé » est calculée depuis la simulation ci-dessus ; "
+        "elle représente le montant minimum pour couvrir exactement les charges de la saison.",
+        meth_s))
+    elems.append(Spacer(1, 0.3 * cm))
+
+    VERT_FONCE = colors.HexColor('#065F46')
+    VERT_CLAIR = colors.HexColor('#D1FAE5')
+    JAUNE      = colors.HexColor('#FEF3C7')
+    JAUNE_T    = colors.HexColor('#B45309')
+    GRIS_FOND  = colors.HexColor('#F3F4F6')
+
+    def _ligne_tarif(libelle, categorie, actuel, equilibre, note=''):
+        eq_str  = f"{equilibre:.2f} €" if equilibre is not None else "—"
+        act_str = f"{actuel:.2f} €"
+        return [libelle, categorie, act_str, eq_str, note]
+
+    eq_lb = sim.get('tarif_eq_lb')
+    eq_hg = sim.get('tarif_eq_hg')
+
+    tarif_rows = [
+        ['Type d\'occupation / loge', 'Catégorie', 'Tarif actuel', 'Équilibre simulé', 'Observations'],
+        _ligne_tarif(
+            'Cotisation annuelle / membre — Loge bleue', 'Récurrent par membre',
+            params.tarif_membre_loge, eq_lb,
+            'Multiplié par l\'effectif déclaré'),
+        _ligne_tarif(
+            'Cotisation annuelle / membre — Haut grade interne régulier', 'Récurrent par membre',
+            params.tarif_membre_hg, eq_hg,
+            'Multiplié par l\'effectif déclaré'),
+        _ligne_tarif(
+            'Loge externe / occasionnelle', 'À la tenue',
+            params.tarif_loge_occasionnelle, None,
+            'Loge invitée, de passage'),
+        _ligne_tarif(
+            'Haut grade externe', 'À la tenue',
+            params.tarif_hg_externe, None,
+            'Atelier inter-obédientiel ou de passage'),
+        _ligne_tarif(
+            'HG interne non régulier', 'À la tenue',
+            params.tarif_hg_interne_non_regulier, None,
+            '< 4 tenues/an, pas de règle récurrente'),
+        _ligne_tarif(
+            'Tenue exceptionnelle sans agapes', 'À la tenue',
+            params.tarif_exc_sans_agapes, None,
+            'Week-end / vacances scolaires'),
+        _ligne_tarif(
+            'Tenue exceptionnelle avec agapes', 'À la tenue',
+            params.tarif_exc_avec_agapes, None,
+            'Week-end / vacances, repas inclus'),
+        _ligne_tarif(
+            'Congrès / session régionale', 'Par jour',
+            params.tarif_congres_jour, None,
+            'Occupation journée complète'),
+        _ligne_tarif(
+            'Tenue funèbre exceptionnelle', 'À la tenue',
+            params.tarif_funebre, None,
+            'Week-end / vacances uniquement'),
+    ]
+
+    ag_tbl = Table(tarif_rows, colWidths=[8*cm, 3.5*cm, 2.8*cm, 2.8*cm, _PW - 17.1*cm], repeatRows=1)
+    ag_tbl.setStyle(TableStyle([
+        # En-tête
+        ('BACKGROUND',    (0,0), (-1,0),  BLEU),
+        ('TEXTCOLOR',     (0,0), (-1,0),  colors.white),
+        ('FONTNAME',      (0,0), (-1,0),  'Helvetica-Bold'),
+        ('FONTSIZE',      (0,0), (-1,-1), 8),
+        ('ALIGN',         (0,0), (-1,-1), 'LEFT'),
+        ('ALIGN',         (2,0), (3,-1),  'CENTER'),
+        ('ROWBACKGROUNDS',(0,1), (-1,-1), [colors.white, GRIS_FOND]),
+        ('GRID',          (0,0), (-1,-1), 0.25, colors.HexColor('#D1D5DB')),
+        ('TOPPADDING',    (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 5),
+        ('VALIGN',        (0,0), (-1,-1), 'MIDDLE'),
+        # Ligne cotisation LB — équilibre en vert
+        ('BACKGROUND',    (3,1), (3,2),  VERT_CLAIR),
+        ('TEXTCOLOR',     (3,1), (3,2),  VERT_FONCE),
+        ('FONTNAME',      (3,1), (3,2),  'Helvetica-Bold'),
+        # Lignes "à la tenue" : équilibre absent → colonne grisée
+        ('TEXTCOLOR',     (3,3), (3,-1), colors.HexColor('#9CA3AF')),
+    ]))
+    elems.append(ag_tbl)
+    elems.append(Spacer(1, 0.5 * cm))
+
+    note_ag = ParagraphStyle('note_ag', fontSize=8, textColor=GRIS, spaceAfter=3, leading=12)
+    elems.append(Paragraph(
+        "⚠ Le « tarif d'équilibre simulé » pour les cotisations par membre est calculé sur la base "
+        "des réservations validées de la saison et d'un effectif simulé. Il constitue le seuil minimum "
+        "théorique pour couvrir les charges. Tout tarif voté en-dessous crée un déficit structurel ; "
+        "tout tarif au-dessus constitue une réserve.",
+        note_ag))
+    elems.append(Paragraph(
+        "Les tarifs « à la tenue » (loges occasionnelles, exceptionnelles, congrès) n'ont pas "
+        "d'équilibre simulé direct : ils sont fixés librement par l'AG, sur la base du coût marginal "
+        "d'une occupation + une contribution solidaire aux charges fixes.",
+        note_ag))
+
+    # ── Pied de page ──
+    elems.append(Spacer(1, 0.8 * cm))
+    elems.append(HRFlowable(width='100%', thickness=0.5, color=GRIS))
+    elems.append(Spacer(1, 0.2 * cm))
+    elems.append(Paragraph(
+        "Document confidentiel — Temples Kellermann · Simulation budgétaire interne · "
+        "Les tarifs d'équilibre sont indicatifs et basés sur les réservations validées de la saison.",
+        centré))
+
+    doc.build(elems)
+    buf.seek(0)
+    resp = HttpResponse(buf, content_type='application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="Simulation_budgetaire_{saison}-{saison+1}_{date.today():%Y%m%d}.pdf"'
+    return resp
+
+
+@staff_required
+def budget_simulation_export_tresorier(request):
+    """Export Excel au format trésorier (base Synthèse 2026) + onglet Parametres + colonnes Cas A/B."""
+    import re, unicodedata, os, warnings
+    from decimal import Decimal
+    from openpyxl.utils import get_column_letter
+
+    def _pi(val):
+        try: v = int(str(val).strip()); return v if 1 <= v <= 9999 else None
+        except: return None
+    def _pd(val):
+        if not val: return None
+        try: v = float(str(val).replace(',', '.').strip()); return v if v >= 0 else None
+        except: return None
+    def _norm(s):
+        s = str(s or '').strip()
+        s = re.sub(r'\s*\([^)]+\)\s*$', '', s).strip()
+        s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+        return s.lower()
+
+    # ── Paramètres simulation ─────────────────────────────────────────────────
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    params = Parametres.get_instance()
+    eff_lb = sum(l.effectif_total for l in Loge.objects.filter(actif=True, type_loge='loge'))
+    eff_hg = sum(l.effectif_total for l in Loge.objects.filter(actif=True, type_loge='haut_grade'))
+    nb_membres_lb  = _pi(request.GET.get('nb_membres_lb', '')) or eff_lb or None
+    nb_membres_hg  = _pi(request.GET.get('nb_membres_hg', '')) or eff_hg or None
+    recettes_exc   = _pd(request.GET.get('recettes_exc', ''))
+    ratio_raw      = _pd(request.GET.get('ratio_hg_cas_a', ''))
+    ratio_hg_cas_a = Decimal(str(ratio_raw)) if ratio_raw is not None else Decimal('0.90')
+
+    postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
+    sim = (_simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
+                           recettes_exc=recettes_exc, params=params)
+           if postes_actifs > 0 else None)
+    if not sim:
+        return HttpResponse("Aucune donnée de simulation disponible pour cette saison.",
+                            status=400, content_type='text/plain; charset=utf-8')
+
+    # ── Tarifs d'équilibre ────────────────────────────────────────────────────
+    tarif_eq_lb = None
+    tarif_eq_hg = sim.get('tarif_eq_hg')
+    if sim.get('eff_eq_lb') and sim.get('net_lb') is not None:
+        tarif_eq_lb = (sim['net_lb'] + (sim.get('hg_fixe_absorbe') or Decimal('0'))
+                       ) / Decimal(str(sim['eff_eq_lb']))
+
+    charges_nettes = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
+    mt_lb = sum((l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+                for l in sim['par_loge']
+                if l.get('type_loge') == 'loge' and l.get('membre_association'))
+    mt_hg = sum((l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+                for l in sim['par_loge']
+                if l.get('type_loge') == 'haut_grade' and l.get('membre_association'))
+    mt_pond = Decimal(str(mt_lb)) + Decimal(str(mt_hg)) * ratio_hg_cas_a
+    tarif_cas_a_lb = tarif_cas_a_hg = None
+    if charges_nettes and mt_pond:
+        tarif_cas_a_lb = charges_nettes / mt_pond
+        tarif_cas_a_hg = tarif_cas_a_lb * ratio_hg_cas_a
+
+    c_lb = params.tarif_membre_loge
+    c_hg = params.tarif_membre_hg
+
+    # ── Index simulation par nom normalisé ────────────────────────────────────
+    sim_index = {}
+    for l in sim['par_loge']:
+        if l.get('membre_association'):
+            k = _norm(l.get('loge_nom', ''))
+            if k:
+                sim_index[k] = l
+
+    # ── Charger le fichier trésorier comme base ───────────────────────────────
+    template_path = os.path.join(
+        str(settings.BASE_DIR), 'temple_project', 'fixtures', 'tresorier_base_2026.xlsx'
+    )
+    if not os.path.exists(template_path):
+        return HttpResponse("Fichier template trésorier introuvable sur le serveur.",
+                            status=500, content_type='text/plain; charset=utf-8')
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        wb_src = openpyxl.load_workbook(template_path)
+
+    # Nouveau classeur : uniquement Synthèse 2026 + Parametres
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    # ── Copier Synthèse 2026 cellule par cellule ──────────────────────────────
+    ws_src = wb_src['Synthèse 2026']
+    ws_syn = wb.create_sheet('Synthèse 2026')
+    for row in ws_src.iter_rows():
+        for src_cell in row:
+            dst_cell = ws_syn.cell(src_cell.row, src_cell.column)
+            dst_cell.value = src_cell.value
+            if src_cell.has_style:
+                dst_cell.number_format = src_cell.number_format
+                if src_cell.font:
+                    dst_cell.font = Font(
+                        bold=src_cell.font.bold, italic=src_cell.font.italic,
+                        size=src_cell.font.size, color=src_cell.font.color,
+                    )
+                if src_cell.alignment:
+                    dst_cell.alignment = Alignment(
+                        horizontal=src_cell.alignment.horizontal,
+                        vertical=src_cell.alignment.vertical,
+                        wrap_text=src_cell.alignment.wrap_text,
+                    )
+    # Copier largeurs de colonnes
+    for col, cdim in ws_src.column_dimensions.items():
+        ws_syn.column_dimensions[col].width = cdim.width
+    # Copier hauteurs de lignes
+    for rnum, rdim in ws_src.row_dimensions.items():
+        ws_syn.row_dimensions[rnum].height = rdim.height
+
+    # ── Onglet Parametres (sans accent pour les formules Excel) ──────────────
+    ws_p = wb.create_sheet('Parametres', 0)
+
+    _b = Font(bold=True, size=10)
+    ws_p.column_dimensions['A'].width = 34
+    ws_p.column_dimensions['B'].width = 14
+    ws_p.column_dimensions['C'].width = 50
+    ws_p['A1'] = 'Paramètre'; ws_p['B1'] = 'Valeur'; ws_p['C1'] = 'Explication'
+    for col in ['A', 'B', 'C']:
+        ws_p[f'{col}1'].font = _b
+
+    _param_rows = [
+        ('Tarif LB actuel (AG voté)',
+         round(float(c_lb), 4) if c_lb else 85.0,
+         '€/membre/an — barème en vigueur (colonne K du fichier trésorier)'),
+        ('Tarif HG actuel (AG voté)',
+         round(float(c_hg), 4) if c_hg else 22.8,
+         '€/tenue/an — barème en vigueur (colonne K du fichier trésorier)'),
+        ('Cas B — Tarif LB équilibre',
+         round(float(tarif_eq_lb), 4) if tarif_eq_lb else 0.0,
+         '€/membre/an — taux d\'équilibre financier (modifiable pour simulation)'),
+        ('Cas B — Tarif HG équilibre',
+         round(float(tarif_eq_hg), 4) if tarif_eq_hg else 0.0,
+         '€/tenue/an — taux d\'équilibre financier (modifiable pour simulation)'),
+        ('Cas A — Tarif LB équilibre',
+         round(float(tarif_cas_a_lb), 4) if tarif_cas_a_lb else 0.0,
+         '€/membre/tenue — tarif proportionnel à l\'activité LB (modifiable)'),
+        ('Cas A — Tarif HG équilibre',
+         round(float(tarif_cas_a_hg), 4) if tarif_cas_a_hg else 0.0,
+         '€/membre/tenue — tarif proportionnel à l\'activité HG (modifiable)'),
+    ]
+    edit_fill = PatternFill('solid', fgColor='FFF3CD')
+    for i, (label, val, expl) in enumerate(_param_rows, 2):
+        ws_p.cell(i, 1).value = label
+        ws_p.cell(i, 2).value = val
+        ws_p.cell(i, 3).value = expl
+        ws_p.cell(i, 2).number_format = '0.0000'
+        if i >= 4:  # lignes d'équilibre : surligner pour indiquer modifiables
+            ws_p.cell(i, 2).fill = edit_fill
+
+    # ── En-têtes nouvelles colonnes ligne 2 (Synthèse 2026) ──────────────────
+    #   M=13  N=14  O=15  P=16  Q=17  R=18  S=19  T=20  U=21
+    _hb = Font(bold=True, size=9)
+    _hc = Alignment(horizontal='center', wrap_text=True)
+    _new_hdrs = {
+        13: 'Nb\ntenues', 14: 'Cas B\nTotal (€)', 15: 'Cas B\n€/frère/an',
+        16: 'Cas B\n€/fr/tenue', 17: 'Cas A\nTotal (€)', 18: 'Cas A\n€/frère/an',
+        19: 'Cas A\n€/fr/tenue', 20: 'Écart\nCas B', 21: 'Écart\nCas A',
+    }
+    for ci, hdr in _new_hdrs.items():
+        cell = ws_syn.cell(2, ci)
+        cell.value = hdr; cell.font = _hb; cell.alignment = _hc
+
+    # ── Formats ───────────────────────────────────────────────────────────────
+    euro_fmt  = '_-* #,##0.00_-;\\-* #,##0.00_-;_-* "-"??_-;_-@_-'
+    ecart_fmt = '#,##0.00\\ "€";[Red]-#,##0.00\\ "€"'
+
+    # ── Lignes de données (rows 3..52) — toutes les lignes conservées ─────────
+    FIRST_ROW, LAST_ROW = 3, 52
+    for r in range(FIRST_ROW, LAST_ROW + 1):
+        nom_val = ws_syn.cell(r, 3).value   # col C
+        k_val   = ws_syn.cell(r, 11).value  # col K
+
+        # Toujours conserver la ligne ; chercher la correspondance simulation
+        loge_sim = None
+        if nom_val and k_val not in (None, 0):
+            nk = _norm(str(nom_val))
+            loge_sim = sim_index.get(nk)
+            if not loge_sim:
+                # Tentative sans le suffixe de degré (" 04/14", " 18", " 30")
+                nk2 = re.sub(r'\s+\d{1,2}(/\d{2})?$', '', nk).strip()
+                if nk2 != nk:
+                    for sk, sv in sim_index.items():
+                        if nk2 and sk.startswith(nk2):
+                            loge_sim = sv
+                            break
+
+        if not loge_sim:
+            continue  # ligne vide, inactive ou non rapprochée : pas de formule
+
+        nb_t = loge_sim.get('nb_tenues') or 0
+        typ  = loge_sim.get('type_loge', '')
+
+        # M (13) : Nb tenues (toujours, même si 0)
+        ws_syn.cell(r, 13).value = nb_t if nb_t else None
+
+        if not nb_t:
+            continue  # pas de tenue enregistrée : pas de formule
+
+        # N (14) : Cas B total
+        if typ == 'loge':
+            ws_syn.cell(r, 14).value = f'=+J{r}*Parametres!$B$4'
+        else:
+            ws_syn.cell(r, 14).value = f'=+M{r}*Parametres!$B$5'
+
+        # O (15) : Cas B €/frère/an
+        ws_syn.cell(r, 15).value = f'=+N{r}/J{r}'
+
+        # P (16) : Cas B €/frère/tenue
+        ws_syn.cell(r, 16).value = f'=+N{r}/J{r}/M{r}'
+
+        # Q (17) : Cas A total
+        if typ == 'loge':
+            ws_syn.cell(r, 17).value = f'=+J{r}*M{r}*Parametres!$B$6'
+        else:
+            ws_syn.cell(r, 17).value = f'=+J{r}*M{r}*Parametres!$B$7'
+
+        # R (18) : Cas A €/frère/an
+        ws_syn.cell(r, 18).value = f'=+Q{r}/J{r}'
+
+        # S (19) : Cas A €/frère/tenue
+        ws_syn.cell(r, 19).value = f'=+Q{r}/J{r}/M{r}'
+
+        # T (20) : Écart Cas B vs actuel
+        ws_syn.cell(r, 20).value = f'=+N{r}-L{r}'
+
+        # U (21) : Écart Cas A vs actuel
+        ws_syn.cell(r, 21).value = f'=+Q{r}-L{r}'
+
+        for ci in range(14, 20):
+            ws_syn.cell(r, ci).number_format = euro_fmt
+        for ci in [20, 21]:
+            ws_syn.cell(r, ci).number_format = ecart_fmt
+
+    # ── Ligne 53 : totaux colonnes ajoutées ──────────────────────────────────
+    ws_syn.cell(53, 13).value = f'=SUM(M{FIRST_ROW}:M{LAST_ROW})'
+    ws_syn.cell(53, 14).value = f'=SUM(N{FIRST_ROW}:N{LAST_ROW})'
+    ws_syn.cell(53, 17).value = f'=SUM(Q{FIRST_ROW}:Q{LAST_ROW})'
+    ws_syn.cell(53, 20).value = f'=SUM(T{FIRST_ROW}:T{LAST_ROW})'
+    ws_syn.cell(53, 21).value = f'=SUM(U{FIRST_ROW}:U{LAST_ROW})'
+    for ci in [14, 17, 20, 21]:
+        ws_syn.cell(53, ci).number_format = euro_fmt
+
+    # ── Largeurs colonnes ajoutées ────────────────────────────────────────────
+    ws_syn.column_dimensions['M'].width = 8
+    for col in ['N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U']:
+        ws_syn.column_dimensions[col].width = 13
+
+    # ── Réponse HTTP ──────────────────────────────────────────────────────────
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = (
+        f'attachment; filename="Synthese_tresorier_{saison}-{saison+1}_{date.today():%Y%m%d}.xlsx"')
+    wb.save(response)
+    return response
+
+
+@staff_required
+def budget_simulation_export_excel(request):
+    """Export Excel de la simulation budgétaire : Actuel / Cas A / Cas B par loge."""
+    from decimal import Decimal
+    from openpyxl.utils import get_column_letter
+
+    def _pi(val):
+        try: v = int(str(val).strip()); return v if 1 <= v <= 9999 else None
+        except: return None
+    def _pd(val):
+        if not val: return None
+        try: v = float(str(val).replace(',', '.').strip()); return v if v >= 0 else None
+        except: return None
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    params = Parametres.get_instance()
+
+    eff_lb = sum(l.effectif_total for l in Loge.objects.filter(actif=True, type_loge='loge'))
+    eff_hg = sum(l.effectif_total for l in Loge.objects.filter(actif=True, type_loge='haut_grade'))
+    nb_membres_lb = _pi(request.GET.get('nb_membres_lb', '')) or eff_lb or None
+    nb_membres_hg = _pi(request.GET.get('nb_membres_hg', '')) or eff_hg or None
+    recettes_exc  = _pd(request.GET.get('recettes_exc', ''))
+    ratio_raw     = _pd(request.GET.get('ratio_hg_cas_a', ''))
+    ratio_hg_cas_a = Decimal(str(ratio_raw)) if ratio_raw is not None else Decimal('0.90')
+
+    postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
+    sim = (_simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
+                           recettes_exc=recettes_exc, params=params)
+           if postes_actifs > 0 else None)
+    if not sim:
+        return HttpResponse("Aucune donnée de simulation disponible pour cette saison.", status=400,
+                            content_type='text/plain; charset=utf-8')
+
+    # ── Tarifs d'équilibre ────────────────────────────────────────────────────
+    tarif_eq_lb = None
+    tarif_eq_hg = sim.get('tarif_eq_hg')
+    if sim.get('eff_eq_lb') and sim.get('net_lb') is not None:
+        tarif_eq_lb = (
+            sim['net_lb'] + (sim.get('hg_fixe_absorbe') or Decimal('0'))
+        ) / Decimal(str(sim['eff_eq_lb']))
+
+    charges_nettes = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
+    mt_lb = sum((l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+                for l in sim['par_loge']
+                if l.get('type_loge') == 'loge' and l.get('membre_association'))
+    mt_hg = sum((l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+                for l in sim['par_loge']
+                if l.get('type_loge') == 'haut_grade' and l.get('membre_association'))
+    mt_pond = Decimal(str(mt_lb)) + Decimal(str(mt_hg)) * ratio_hg_cas_a
+    tarif_cas_a_lb = tarif_cas_a_hg = None
+    if charges_nettes and mt_pond:
+        tarif_cas_a_lb = charges_nettes / mt_pond
+        tarif_cas_a_hg = tarif_cas_a_lb * ratio_hg_cas_a
+
+    c_lb = params.tarif_membre_loge
+    c_hg = params.tarif_membre_hg
+
+    # ── Enrichissement par loge ───────────────────────────────────────────────
+    for l in sim['par_loge']:
+        if not l.get('membre_association'):
+            l['_actuel'] = l['_cas_a'] = l['_cas_b'] = None
+            continue
+        eff = l.get('effectif') or 0
+        nb_t = l.get('nb_tenues') or 0
+        typ = l['type_loge']
+        # Actuel
+        tarif_act = c_lb if typ == 'loge' else c_hg
+        if eff and tarif_act:
+            if params.modele_cotisation == 'A' and nb_t:
+                l['_actuel'] = Decimal(str(tarif_act)) * eff * nb_t
+            else:
+                l['_actuel'] = Decimal(str(tarif_act)) * eff
+        else:
+            l['_actuel'] = None
+        # Cas A
+        tarif_a = tarif_cas_a_lb if typ == 'loge' else tarif_cas_a_hg
+        l['_cas_a'] = (tarif_a * eff * nb_t) if (tarif_a and eff and nb_t) else None
+        # Cas B
+        if typ == 'loge' and tarif_eq_lb and eff:
+            l['_cas_b'] = tarif_eq_lb * eff
+        elif typ == 'haut_grade' and tarif_eq_hg and nb_t:
+            l['_cas_b'] = tarif_eq_hg * nb_t
+        else:
+            l['_cas_b'] = None
+
+    # ── Build workbook ────────────────────────────────────────────────────────
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Simulation {saison}-{saison + 1}"
+
+    euro  = '#,##0.00\\ "€"'
+    euro0 = '#,##0\\ "€"'
+
+    W = Font(bold=True, color="FFFFFF", size=10)
+    D = Font(size=9)
+    B = Font(bold=True)
+    Bs = Font(bold=True, size=9)
+    Sm = Font(size=9, italic=True)
+    C  = Alignment(horizontal='center', wrap_text=True)
+    R  = Alignment(horizontal='right')
+
+    fill_info  = PatternFill("solid", fgColor="0F2137")
+    fill_act   = PatternFill("solid", fgColor="475569")
+    fill_cas_a = PatternFill("solid", fgColor="C2410C")
+    fill_cas_b = PatternFill("solid", fgColor="166534")
+    fill_ecart = PatternFill("solid", fgColor="78350F")
+    sub_act    = PatternFill("solid", fgColor="E2E8F0")
+    sub_a      = PatternFill("solid", fgColor="FED7AA")
+    sub_b      = PatternFill("solid", fgColor="DCFCE7")
+    sub_ec     = PatternFill("solid", fgColor="FEF9C3")
+    sub_info   = PatternFill("solid", fgColor="DBEAFE")
+    red_f      = Font(bold=True, color="B91C1C", size=10)
+    grn_f      = Font(bold=True, color="166534", size=10)
+    tot_fill   = PatternFill("solid", fgColor="0F2137")
+
+    # ── Ligne 1 : titre ───────────────────────────────────────────────────────
+    ws.append([f"Simulation budgétaire — Saison {saison}/{saison + 1}"] +
+              [None] * 14)
+    ws.merge_cells('A1:O1')
+    ws['A1'].font = Font(bold=True, size=13, color="0F2137")
+
+    # ── Ligne 2 : tarifs de référence ─────────────────────────────────────────
+    _act_lbl = (f"Barème AG actuel ({params.modele_cotisation}) — "
+                f"LB : {float(c_lb):.2f} €  HG : {float(c_hg):.2f} €")
+    _b_lbl   = (f"Cas B équilibre — LB : {float(tarif_eq_lb):.2f} €/mbr  "
+                f"HG : {float(tarif_eq_hg):.2f} €/tenue"
+                if tarif_eq_lb and tarif_eq_hg else "Cas B : données insuffisantes")
+    _a_lbl   = (f"Cas A équilibre — LB : {float(tarif_cas_a_lb):.3f} €/mbr/tenue  "
+                f"HG : {float(tarif_cas_a_hg):.3f} €/mbr/tenue  (ratio {float(ratio_hg_cas_a):.2f})"
+                if tarif_cas_a_lb else "Cas A : données insuffisantes")
+    ws.append([_act_lbl, None, None, None,
+               None, None, None,
+               _a_lbl, None, None, None,
+               _b_lbl, None, None, None])
+    ws.merge_cells('A2:G2')
+    ws.merge_cells('H2:K2')
+    ws.merge_cells('L2:O2')
+    for col_l in ['A', 'H', 'L']:
+        ws[f'{col_l}2'].font = Font(size=9, italic=True, color="475569")
+    ws.append([])
+
+    # ── Ligne 4 : en-têtes de groupes ─────────────────────────────────────────
+    ws.append([""] * 4 +
+              ["ACTUEL — barème AG voté"] + [""] * 2 +
+              ["CAS A — €/membre/tenue"] + [""] * 2 +
+              ["CAS B — LB €/membre + HG €/tenue"] + [""] * 2 +
+              ["ÉCARTS VS ACTUEL"] + [""])
+    r4 = ws.max_row
+    spans = [(1, 4, None), (5, 7, fill_act), (8, 10, fill_cas_a),
+             (11, 13, fill_cas_b), (14, 15, fill_ecart)]
+    for sc, ec, fill in spans:
+        ws.merge_cells(start_row=r4, start_column=sc, end_row=r4, end_column=ec)
+        if fill:
+            cell = ws.cell(r4, sc)
+            cell.fill = fill
+            cell.font = W
+            cell.alignment = C
+
+    # ── Ligne 5 : en-têtes de colonnes ────────────────────────────────────────
+    ws.append(["Loge", "Type", "Effectif", "Nb tenues/an",
+               "Total €", "€/frère/an", "€/frère/tenue",
+               "Total €", "€/frère/an", "€/frère/tenue",
+               "Total €", "€/frère/an", "€/frère/tenue",
+               "Cas A (€)", "Cas B (€)"])
+    r5 = ws.max_row
+    col_fills = [sub_info] * 4 + [sub_act] * 3 + [sub_a] * 3 + [sub_b] * 3 + [sub_ec] * 2
+    for ci, cf in enumerate(col_fills, 1):
+        cell = ws.cell(r5, ci)
+        cell.fill = cf
+        cell.font = Bs
+        cell.alignment = C
+
+    # ── Données par loge ──────────────────────────────────────────────────────
+    loges_data = sorted(
+        [l for l in sim['par_loge'] if l.get('membre_association')],
+        key=lambda l: (0 if l['type_loge'] == 'loge' else 1, l.get('loge_nom', ''))
+    )
+    odd_lb = PatternFill("solid", fgColor="F0F9FF")
+    odd_hg = PatternFill("solid", fgColor="FFF7ED")
+    row_idx = 0
+    for l in loges_data:
+        eff   = l.get('effectif') or 0
+        nb_t  = l.get('nb_tenues') or 0
+        typ   = l['type_loge']
+        label = "Haut Grade" if typ == 'haut_grade' else "Loge Bleue"
+        row_fill = (odd_hg if typ == 'haut_grade' else odd_lb) if row_idx % 2 else None
+        row_idx += 1
+
+        act = l.get('_actuel')
+        ca  = l.get('_cas_a')
+        cb  = l.get('_cas_b')
+
+        def _per_fr(total): return float(total) / eff if (total and eff) else None
+        def _per_fr_t(total): return float(total) / eff / nb_t if (total and eff and nb_t) else None
+        def _fv(v): return float(v) if v is not None else None
+
+        ws.append([
+            l.get('loge_nom', ''), label, eff, nb_t,
+            _fv(act), _per_fr(act), _per_fr_t(act),
+            _fv(ca),  _per_fr(ca),  _per_fr_t(ca),
+            _fv(cb),  _per_fr(cb),  _per_fr_t(cb),
+            _fv(ca - act) if (ca and act) else None,
+            _fv(cb - act) if (cb and act) else None,
+        ])
+        dr = ws.max_row
+        if row_fill:
+            for ci in range(1, 16):
+                ws.cell(dr, ci).fill = row_fill
+        # Formatage monétaire
+        for ci in [5, 6, 7, 8, 9, 10, 11, 12, 13]:
+            ws.cell(dr, ci).number_format = euro
+        # Écarts : rouge si négatif, vert si positif
+        for ci in [14, 15]:
+            cell = ws.cell(dr, ci)
+            cell.number_format = euro
+            if cell.value is not None:
+                cell.font = red_f if cell.value < 0 else grn_f
+        ws.cell(dr, 1).font = B
+        ws.cell(dr, 3).number_format = '#,##0'
+        ws.cell(dr, 4).number_format = '#,##0'
+
+    # ── Ligne de total ────────────────────────────────────────────────────────
+    ws.append([])
+    tot_act = sum(float(l['_actuel']) for l in loges_data if l.get('_actuel'))
+    tot_ca  = sum(float(l['_cas_a'])  for l in loges_data if l.get('_cas_a'))
+    tot_cb  = sum(float(l['_cas_b'])  for l in loges_data if l.get('_cas_b'))
+    ws.append(["TOTAL", None, None, None,
+               tot_act, None, None,
+               tot_ca,  None, None,
+               tot_cb,  None, None,
+               tot_ca - tot_act if (tot_ca and tot_act) else None,
+               tot_cb - tot_act if (tot_cb and tot_act) else None])
+    tr = ws.max_row
+    ws.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=4)
+    for ci in range(1, 16):
+        cell = ws.cell(tr, ci)
+        cell.fill = tot_fill
+        cell.font = Font(bold=True, color="FFFFFF", size=10)
+    for ci in [5, 8, 11, 14, 15]:
+        ws.cell(tr, ci).number_format = euro0
+    ws.cell(tr, 1).alignment = Alignment(horizontal='center')
+
+    # ── Largeurs de colonnes ──────────────────────────────────────────────────
+    widths = [28, 12, 10, 13,  13, 13, 14,  13, 13, 14,  13, 13, 14,  13, 13]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # Figer les 5 premières lignes (titres + groupes + colonnes)
+    ws.freeze_panes = 'A6'
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = (
+        f'attachment; filename="Simulation_{saison}-{saison + 1}_{date.today():%Y%m%d}.xlsx"')
+    wb.save(response)
+    return response
+
+
+@staff_required
+def budget_config(request):
+    """Saisie et gestion des postes de charges par temple et saison."""
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'ajouter':
+            from decimal import Decimal, InvalidOperation as DIO
+            try:
+                temple_id = request.POST.get('temple') or None
+                PosteCharge.objects.create(
+                    saison      = saison,
+                    temple_id   = temple_id,
+                    libelle     = request.POST['libelle'].strip(),
+                    type_charge = request.POST['type_charge'],
+                    montant     = Decimal(request.POST['montant']),
+                    unite       = request.POST['unite'],
+                )
+                messages.success(request, "Poste ajouté.")
+            except (KeyError, DIO, ValueError) as e:
+                messages.error(request, f"Erreur : {e}")
+        elif action == 'supprimer':
+            PosteCharge.objects.filter(pk=request.POST.get('pk'), saison=saison).delete()
+            messages.success(request, "Poste supprimé.")
+        elif action == 'toggle':
+            p = PosteCharge.objects.filter(pk=request.POST.get('pk'), saison=saison).first()
+            if p:
+                p.actif = not p.actif
+                p.save(update_fields=['actif'])
+        elif action == 'dupliquer_saison':
+            src = int(request.POST.get('saison_source', saison - 1))
+            dst = saison
+            if src != dst:
+                for p in PosteCharge.objects.filter(saison=src):
+                    PosteCharge.objects.get_or_create(
+                        saison=dst, temple=p.temple, libelle=p.libelle,
+                        type_charge=p.type_charge,
+                        defaults={'montant': p.montant, 'unite': p.unite, 'actif': p.actif},
+                    )
+                messages.success(request, f"Postes copiés de {src}-{src+1} vers {dst}-{dst+1}.")
+        return redirect(f"{request.path}?saison={saison}")
+
+    postes = PosteCharge.objects.filter(saison=saison).select_related('temple')
+    temples = Temple.objects.all().order_by('nom')
+    saisons_dispo = sorted(set(
+        PosteCharge.objects.values_list('saison', flat=True)
+    ) | {saison}, reverse=True)
+
+    total_fixe      = sum(p.montant_annuel_normalise for p in postes if p.type_charge == 'fixe' and p.actif)
+    total_mutualise = sum(p.montant for p in postes if p.type_charge == 'mutualise' and p.actif)
+    total_marginal  = sum(p.montant for p in postes if p.type_charge == 'marginal' and p.actif)
+    total_agapes    = sum(p.montant for p in postes if p.type_charge == 'agapes' and p.actif)
+    total_salle     = sum(p.montant for p in postes if p.type_charge == 'salle' and p.actif)
+
+    return render(request, 'administration/budget_config.html', {
+        'saison': saison,
+        'saisons_dispo': saisons_dispo,
+        'postes': postes,
+        'temples': temples,
+        'total_fixe': total_fixe,
+        'total_mutualise': total_mutualise,
+        'total_marginal': total_marginal,
+        'total_agapes': total_agapes,
+        'total_salle': total_salle,
+        'type_choices': PosteCharge.TYPE_CHOICES,
+        'unite_choices': PosteCharge.UNITE_CHOICES,
+    })
+
+
+@staff_required
+def budget_simulation(request):
+    """Simulation de répartition des charges par loge."""
+    from decimal import Decimal, InvalidOperation
+
+    # ── Action POST : fixer un tarif validé en AG ─────────────────────────────
+    if request.method == 'POST' and request.POST.get('action') == 'fixer_tarif_ag':
+        _params = Parametres.get_instance()
+        try:
+            _lb_raw = request.POST.get('tarif_lb_ag', '').strip()
+            _hg_raw = request.POST.get('tarif_hg_ag', '').strip()
+            _fields = []
+            if _lb_raw:
+                _params.tarif_membre_loge = Decimal(_lb_raw)
+                _fields.append('tarif_membre_loge')
+            if _hg_raw:
+                _params.tarif_membre_hg = Decimal(_hg_raw)
+                _fields.append('tarif_membre_hg')
+            _modele_raw = request.POST.get('modele_cotisation', '').strip()
+            if _modele_raw in ('A', 'B'):
+                _params.modele_cotisation = _modele_raw
+                _fields.append('modele_cotisation')
+            if _fields:
+                _params.save(update_fields=_fields)
+                _modele_label = "Cas A (€/mbr/tenue)" if _params.modele_cotisation == 'A' else "Cas B (€/membre)"
+                messages.success(
+                    request,
+                    f"Tarifs AG mis à jour — {_modele_label} · LB : {_params.tarif_membre_loge} € · "
+                    f"HG : {_params.tarif_membre_hg} €"
+                )
+        except InvalidOperation as e:
+            messages.error(request, f"Valeur invalide : {e}")
+        _qs = request.POST.get('redirect_qs', '')
+        from django.shortcuts import redirect
+        _url = reverse('administration:budget_simulation')
+        return redirect(f"{_url}?{_qs}" if _qs else _url)
+
+    def _parse_int_param(val, lo=1, hi=9999):
+        try:
+            v = int(str(val).strip())
+            return v if lo <= v <= hi else None
+        except (TypeError, ValueError):
+            return None
+
+    def _parse_dec_param(val):
+        if not val:
+            return None
+        try:
+            v = float(str(val).replace(',', '.').strip())
+            return v if v >= 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+
+    # Effectifs réels des loges (fiches)
+    loges_lb = list(Loge.objects.filter(actif=True, type_loge='loge').values('nom', 'effectif_total'))
+    loges_hg = list(Loge.objects.filter(actif=True, type_loge='haut_grade').values('nom', 'effectif_total'))
+    effectif_reel_lb = sum(l['effectif_total'] for l in loges_lb if l['effectif_total'])
+    effectif_reel_hg = sum(l['effectif_total'] for l in loges_hg if l['effectif_total'])
+    nb_loges_lb = len(loges_lb)
+    nb_loges_hg = len(loges_hg)
+
+    nb_membres_lb_raw = request.GET.get('nb_membres_lb', '').strip()
+    nb_membres_hg_raw = request.GET.get('nb_membres_hg', '').strip()
+    recettes_exc_raw  = request.GET.get('recettes_exc', '').strip()
+
+    # Si non spécifié, pré-remplir avec l'effectif total des fiches
+    nb_membres_lb = _parse_int_param(nb_membres_lb_raw) if nb_membres_lb_raw else (effectif_reel_lb or None)
+    nb_membres_hg = _parse_int_param(nb_membres_hg_raw) if nb_membres_hg_raw else (effectif_reel_hg or None)
+    recettes_exc  = _parse_dec_param(recettes_exc_raw)
+    pct_lb_raw    = request.GET.get('pct_lb', '').strip()
+    pct_lb_custom = _parse_dec_param(pct_lb_raw)
+
+    # Tarifs personnalisés à tester — modèle par membre
+    tarif_lb_p_raw = request.GET.get('tarif_lb_p', '').strip()
+    tarif_hg_p_raw = request.GET.get('tarif_hg_p', '').strip()
+    tarif_lb_propose_input = _parse_dec_param(tarif_lb_p_raw)
+    tarif_hg_propose_input = _parse_dec_param(tarif_hg_p_raw)
+    # Tarifs personnalisés à tester — modèle hybride
+    tarif_h_membre_p_raw = request.GET.get('tarif_h_membre_p', '').strip()
+    tarif_h_tenue_p_raw  = request.GET.get('tarif_h_tenue_p',  '').strip()
+    tarif_h_membre_propose = _parse_dec_param(tarif_h_membre_p_raw)
+    tarif_h_tenue_propose  = _parse_dec_param(tarif_h_tenue_p_raw)
+    # Ratio HG/LB pour le Cas A (membre×tenue) — défaut 0,90
+    ratio_hg_cas_a_raw = request.GET.get('ratio_hg_cas_a', '').strip()
+    _ratio_raw = _parse_dec_param(ratio_hg_cas_a_raw)
+    ratio_hg_cas_a = Decimal(str(_ratio_raw)) if _ratio_raw is not None else Decimal('0.90')
+
+    params = Parametres.get_instance()
+    postes_actifs = PosteCharge.objects.filter(saison=saison, actif=True).count()
+    sim = _simuler_budget(saison, nb_membres_lb=nb_membres_lb, nb_membres_hg=nb_membres_hg,
+                          recettes_exc=recettes_exc, params=params) if postes_actifs > 0 else None
+
+    temples = Temple.objects.all().order_by('nom')
+    saisons_dispo = sorted(set(
+        PosteCharge.objects.values_list('saison', flat=True)
+    ) | {saison}, reverse=True)
+
+    total_fixe_annuel = sum(
+        p.montant_annuel_normalise
+        for p in PosteCharge.objects.filter(saison=saison, actif=True, type_charge='fixe')
+    )
+
+    # Clé de répartition LB/HG par défaut (usage-based, issu de la simulation)
+    pct_lb_defaut = None
+    net_lb_display = sim.get('net_lb') if sim else None
+    net_hg_display = sim.get('net_hg') if sim else None
+    # Inclut hg_fixe_absorbe : les coûts fixes HG non couverts par les tenues HG
+    # sont absorbés par la cotisation LB — sans ça le "tarif d'équilibre" affiché
+    # laisse un déficit structurel de ~9 778 € (hg_fixe_absorbe).
+    if sim and sim.get('eff_eq_lb') and sim.get('net_lb') is not None:
+        tarif_eq_lb_display = (
+            sim['net_lb'] + (sim.get('hg_fixe_absorbe') or Decimal('0'))
+        ) / Decimal(str(sim['eff_eq_lb']))
+    else:
+        tarif_eq_lb_display = None
+    tarif_eq_hg_display = sim.get('tarif_eq_hg') if sim else None          # modèle B — par tenue
+    tarif_eq_hg_membre_display = sim.get('tarif_eq_hg_per_membre') if sim else None  # modèle A — par membre
+
+    pct_hg_defaut = None
+    if sim and sim.get('total_global') and sim['total_global'] > 0:
+        pct_lb_defaut = round(float(sim['charges_lb'] / sim['total_global'] * 100), 1)
+        pct_hg_defaut = round(100 - pct_lb_defaut, 1)
+
+    # Si une clé manuelle est fournie, recalculer les tarifs d'équilibre sur cette base
+    if sim and pct_lb_custom is not None:
+        total_nettes = sim['total_global'] - (sim.get('recettes_exc') or Decimal('0'))
+        pct = Decimal(str(max(0, min(100, pct_lb_custom))))
+        net_lb_display = total_nettes * pct / Decimal('100')
+        net_hg_display = total_nettes * (Decimal('100') - pct) / Decimal('100')
+        if sim.get('eff_eq_lb'):
+            tarif_eq_lb_display = net_lb_display / Decimal(str(sim['eff_eq_lb']))
+        if sim.get('eff_eq_hg'):
+            tarif_eq_hg_display = net_hg_display / Decimal(str(sim['nb_resas_hg_adherents'])) if sim.get('nb_resas_hg_adherents') else None
+            tarif_eq_hg_membre_display = net_hg_display / Decimal(str(sim['eff_eq_hg']))
+
+    # Calcul des recettes au tarif voté (multiplication décimale impossible en template)
+    # charges_nettes_total = ce que les cotisations annuelles doivent couvrir
+    # (total charges − recettes occasionnels − recettes exceptionnelles adhérents)
+    # Calculé indépendamment des effectifs pour que le scénario personnalisé fonctionne
+    # même quand les effectifs ne sont pas tous renseignés.
+    charges_nettes_total = None
+    if sim:
+        charges_nettes_total = sim['total_pour_equilibre'] - (sim.get('recettes_exc') or Decimal('0'))
+
+    recette_lb_votee = recette_hg_votee = recette_totale_votee = deficit_votee = None
+    if sim and sim.get('eff_eq_lb') and params.tarif_membre_loge:
+        recette_lb_votee = Decimal(str(params.tarif_membre_loge)) * sim['eff_eq_lb']
+    if sim and sim.get('nb_resas_hg_adherents') and params.tarif_membre_hg:
+        recette_hg_votee = Decimal(str(params.tarif_membre_hg)) * sim['nb_resas_hg_adherents']
+    if recette_lb_votee is not None and recette_hg_votee is not None:
+        recette_totale_votee = recette_lb_votee + recette_hg_votee
+        deficit_votee = charges_nettes_total - recette_totale_votee
+
+    # ── Comparaison des modèles économiques par loge ────────────────────────
+    # Modèle hybride :
+    #   • LB : cotisation fixe (charges fixes ÷ membres LB) + tarif tenue (variables ÷ tenues)
+    #   • HG : tarif tenue SEULEMENT (les membres HG sont déjà LB → le composant
+    #          "charges fixes par membre" est déjà couvert par leur cotisation LB)
+    # Modèle SOGOFIM (référence nationale) :
+    #   • LB : tarif annuel par membre (138 € GODF / 180 € autres)
+    #   • HG : tarif par tenue × par membre (7,50 € GODF / 10 € autres)
+    SOGOFIM_LB_GODF  = Decimal('138')
+    SOGOFIM_LB_AUTRE = Decimal('180')
+    SOGOFIM_HG_GODF  = Decimal('7.50')   # €/tenue/membre
+    SOGOFIM_HG_AUTRE = Decimal('10.00')  # €/tenue/membre
+    recettes_sogofim_total = Decimal('0')
+    solde_sogofim = None
+
+    tarif_hybride_membre = tarif_hybride_tenue = None
+    if sim and sim.get('nb_resas'):
+        eff_lb_eq = sim.get('eff_eq_lb') or 0
+        if eff_lb_eq:
+            # Charges fixes portées uniquement par les membres LB
+            tarif_hybride_membre = sim['total_fixe'] / Decimal(str(eff_lb_eq))
+        nb_t = sim['nb_resas']
+        if nb_t:
+            tarif_hybride_tenue = (sim['total_mutualise'] + sim['total_marginal']) / Decimal(str(nb_t))
+
+        # Obédiences pour détection GODF (SOGOFIM)
+        _obe_ids = {
+            l['loge'].obedience_id for l in sim['par_loge']
+            if l.get('loge') and l['loge'].obedience_id
+        }
+        _obe_map = {
+            o.pk: o.nom.upper()
+            for o in Obedience.objects.filter(pk__in=_obe_ids)
+        } if _obe_ids else {}
+
+        for l in sim['par_loge']:
+            l['cout_usage_pur'] = l['total_cout']
+            # Loges occasionnelles : pas de modèle cotisation/hybride
+            if not l.get('membre_association'):
+                l['cotisation_actuelle'] = None
+                l['cout_equilibre_m1']   = None
+                l['cout_equilibre']      = None
+                l['cout_hybride']        = None
+                l['cout_sogofim']        = None
+                l['ecart_m1']            = None
+                l['ecart_equilibre']     = None
+                l['ecart_hybride']       = None
+                l['ecart_sogofim']       = None
+                continue
+            eff = l.get('effectif') or 0
+            nb_t = l.get('nb_tenues') or 0
+            # Cotisation actuelle (tarif voté en AG)
+            # LB : tarif_membre_loge × effectif
+            # HG : tarif_membre_hg × effectif (système voté actuel, même si la cible est par tenue)
+            if l['type_loge'] == 'loge' and params.tarif_membre_loge and eff:
+                l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_loge)) * eff
+            elif l['type_loge'] == 'haut_grade' and params.tarif_membre_hg and eff:
+                l['cotisation_actuelle'] = Decimal(str(params.tarif_membre_hg)) * eff
+            else:
+                l['cotisation_actuelle'] = None
+            # Modèle A : tarif par MEMBRE pour LB et HG
+            if l['type_loge'] == 'loge' and tarif_eq_lb_display and eff:
+                l['cout_equilibre_m1'] = tarif_eq_lb_display * eff
+            elif l['type_loge'] == 'haut_grade' and tarif_eq_hg_membre_display and eff:
+                l['cout_equilibre_m1'] = tarif_eq_hg_membre_display * eff
+            else:
+                l['cout_equilibre_m1'] = None
+            # Modèle B : LB par membre + HG par tenue
+            if l['type_loge'] == 'loge' and tarif_eq_lb_display and eff:
+                l['cout_equilibre'] = tarif_eq_lb_display * eff
+            elif l['type_loge'] == 'haut_grade' and tarif_eq_hg_display and nb_t:
+                l['cout_equilibre'] = tarif_eq_hg_display * nb_t
+            else:
+                l['cout_equilibre'] = None
+            # Modèle hybride
+            # HG : seulement le composant variable (par tenue) — les membres HG
+            # sont déjà LB et ont déjà payé le composant fixe via leur cotisation LB.
+            if tarif_hybride_tenue and l.get('nb_tenues'):
+                if l['type_loge'] == 'haut_grade':
+                    l['cout_hybride'] = tarif_hybride_tenue * l['nb_tenues']
+                elif tarif_hybride_membre and eff:
+                    l['cout_hybride'] = (tarif_hybride_membre * eff
+                                         + tarif_hybride_tenue * l['nb_tenues'])
+                else:
+                    l['cout_hybride'] = None
+            else:
+                l['cout_hybride'] = None
+            # Écarts vs cotisation actuelle
+            if l['cotisation_actuelle']:
+                l['ecart_m1']       = l['cout_equilibre_m1'] - l['cotisation_actuelle'] if l['cout_equilibre_m1'] else None
+                l['ecart_equilibre'] = l['cout_equilibre']   - l['cotisation_actuelle'] if l['cout_equilibre']    else None
+                l['ecart_hybride']   = l['cout_hybride']     - l['cotisation_actuelle'] if l['cout_hybride']      else None
+            else:
+                l['ecart_m1'] = l['ecart_equilibre'] = l['ecart_hybride'] = None
+            # Modèle SOGOFIM
+            _obe_nom = _obe_map.get(l['loge'].obedience_id, '') if l.get('loge') and l['loge'].obedience_id else ''
+            _is_godf = 'GODF' in _obe_nom or 'GRAND ORIENT' in _obe_nom
+            _eff_s   = l.get('effectif') or 0
+            _nb_t_s  = l.get('nb_tenues') or 0
+            if l['type_loge'] == 'loge' and _eff_s:
+                l['cout_sogofim'] = (SOGOFIM_LB_GODF if _is_godf else SOGOFIM_LB_AUTRE) * _eff_s
+                l['sogofim_godf'] = _is_godf
+            elif l['type_loge'] == 'haut_grade' and _eff_s and _nb_t_s:
+                l['cout_sogofim'] = (SOGOFIM_HG_GODF if _is_godf else SOGOFIM_HG_AUTRE) * _nb_t_s * _eff_s
+                l['sogofim_godf'] = _is_godf
+            else:
+                l['cout_sogofim'] = None
+                l['sogofim_godf'] = _is_godf
+            if l['cout_sogofim'] is not None:
+                if l.get('cotisation_actuelle'):
+                    l['ecart_sogofim'] = l['cout_sogofim'] - l['cotisation_actuelle']
+                else:
+                    l['ecart_sogofim'] = None
+            else:
+                l['ecart_sogofim'] = None
+
+    # ── Cas A : tarif membre × tenue (ratio HG/LB = ratio_hg_cas_a) ─────────────
+    tarif_eq_cas_a_lb = tarif_eq_cas_a_hg = None
+    total_mt_lb = total_mt_hg = 0
+    if sim and sim.get('par_loge'):
+        total_mt_lb = sum(
+            (l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+            for l in sim['par_loge']
+            if l.get('membre_association') and l.get('type_loge') == 'loge'
+        )
+        total_mt_hg = sum(
+            (l.get('effectif') or 0) * (l.get('nb_tenues') or 0)
+            for l in sim['par_loge']
+            if l.get('membre_association') and l.get('type_loge') == 'haut_grade'
+        )
+        total_mt_pondere = (Decimal(str(total_mt_lb))
+                            + Decimal(str(total_mt_hg)) * ratio_hg_cas_a)
+        if charges_nettes_total and total_mt_pondere:
+            tarif_eq_cas_a_lb = charges_nettes_total / total_mt_pondere
+            tarif_eq_cas_a_hg = tarif_eq_cas_a_lb * ratio_hg_cas_a
+        for l in sim['par_loge']:
+            if not l.get('membre_association'):
+                l['cout_cas_a'] = None
+                l['ecart_cas_a'] = None
+                continue
+            eff  = l.get('effectif') or 0
+            nb_t = l.get('nb_tenues') or 0
+            if l.get('type_loge') == 'loge' and tarif_eq_cas_a_lb and eff and nb_t:
+                l['cout_cas_a'] = tarif_eq_cas_a_lb * eff * nb_t
+            elif l.get('type_loge') == 'haut_grade' and tarif_eq_cas_a_hg and eff and nb_t:
+                l['cout_cas_a'] = tarif_eq_cas_a_hg * eff * nb_t
+            else:
+                l['cout_cas_a'] = None
+            l['ecart_cas_a'] = (l['cout_cas_a'] - l['cotisation_actuelle']
+                                if l.get('cout_cas_a') is not None and l.get('cotisation_actuelle')
+                                else None)
+
+    # ── Totaux modèles économiques (pour affichage dans le tableau d'équilibre) ──
+    recettes_m1_total = recettes_hybride_total = recettes_eq_total = recettes_actuelles_total = None
+    solde_m1 = solde_eq_b = deficit_hybride = solde_hybride = None
+    if sim:
+        _rec_exc_adh = sim.get('recettes_exc_adherents') or Decimal('0')
+        recettes_m1_total        = sum(l['cout_equilibre_m1']   for l in sim['par_loge'] if l.get('cout_equilibre_m1')) + _rec_exc_adh
+        recettes_hybride_total   = sum(l['cout_hybride']        for l in sim['par_loge'] if l.get('cout_hybride'))       + _rec_exc_adh
+        recettes_eq_total        = sum(l['cout_equilibre']      for l in sim['par_loge'] if l.get('cout_equilibre'))     + _rec_exc_adh
+        recettes_actuelles_total = sum(l['cotisation_actuelle'] for l in sim['par_loge'] if l.get('cotisation_actuelle'))+ _rec_exc_adh
+        if charges_nettes_total is not None:
+            solde_m1        = recettes_m1_total      - charges_nettes_total
+            solde_eq_b      = recettes_eq_total      - charges_nettes_total
+            deficit_hybride = charges_nettes_total   - recettes_hybride_total
+            solde_hybride   = recettes_hybride_total - charges_nettes_total
+        _rec_exc_adh_s = sim.get('recettes_exc_adherents') or Decimal('0')
+        recettes_sogofim_total = sum(l['cout_sogofim'] for l in sim['par_loge'] if l.get('cout_sogofim') is not None) + _rec_exc_adh_s
+        if charges_nettes_total is not None:
+            solde_sogofim = recettes_sogofim_total - charges_nettes_total
+        _rec_exc_adh_ca = sim.get('recettes_exc_adherents') or Decimal('0')
+        recettes_cas_a_total = (sum(l['cout_cas_a'] for l in sim['par_loge']
+                                    if l.get('cout_cas_a') is not None)
+                                + _rec_exc_adh_ca if tarif_eq_cas_a_lb else None)
+        solde_cas_a = (recettes_cas_a_total - charges_nettes_total
+                       if recettes_cas_a_total is not None and charges_nettes_total is not None
+                       else None)
+        # Breakdown GODF vs autres pour transparence
+        _sogofim_lb_godf_eff   = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'loge'       and l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
+        _sogofim_lb_autre_eff  = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'loge'       and not l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
+        _sogofim_hg_godf_eff   = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'haut_grade' and l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
+        _sogofim_hg_autre_eff  = sum(l.get('effectif') or 0 for l in sim['par_loge'] if l.get('type_loge') == 'haut_grade' and not l.get('sogofim_godf') and l.get('cout_sogofim') is not None)
+        sogofim_breakdown = {
+            'lb_godf_effectif':  _sogofim_lb_godf_eff,
+            'lb_autre_effectif': _sogofim_lb_autre_eff,
+            'hg_godf_effectif':  _sogofim_hg_godf_eff,
+            'hg_autre_effectif': _sogofim_hg_autre_eff,
+            'lb_godf_recettes':  Decimal('138') * _sogofim_lb_godf_eff,
+            'lb_autre_recettes': Decimal('180') * _sogofim_lb_autre_eff,
+        }
+
+    # ── Scénario tarif personnalisé ─────────────────────────────────────────────
+    scenario_propose = None
+    if sim and charges_nettes_total is not None:
+        # Utiliser le tarif saisi, sinon tarif d'équilibre comme point de départ
+        tlb = Decimal(str(tarif_lb_propose_input)) if tarif_lb_propose_input is not None else tarif_eq_lb_display
+        thg = Decimal(str(tarif_hg_propose_input)) if tarif_hg_propose_input is not None else tarif_eq_hg_display
+        if tlb is not None and thg is not None:
+            eff_lb_s  = sim.get('eff_eq_lb') or 0
+            nb_t_hg_s = sim.get('nb_resas_hg_adherents') or 0
+            rec_lb_s  = tlb * Decimal(str(eff_lb_s))
+            rec_hg_s  = thg * Decimal(str(nb_t_hg_s))
+            rec_tot_s = rec_lb_s + rec_hg_s
+            solde_s   = rec_tot_s - charges_nettes_total
+            scenario_propose = {
+                'tarif_lb':      tlb,
+                'tarif_hg':      thg,
+                'recettes_lb':   rec_lb_s,
+                'recettes_hg':   rec_hg_s,
+                'recettes_total': rec_tot_s,
+                'solde':         solde_s,
+                'is_custom': tarif_lb_propose_input is not None or tarif_hg_propose_input is not None,
+            }
+            for l in sim['par_loge']:
+                if not l.get('membre_association'):
+                    l['cout_propose'] = None
+                    continue
+                eff   = l.get('effectif') or 0
+                nb_tl = l.get('nb_tenues') or 0
+                if l['type_loge'] == 'loge' and eff:
+                    l['cout_propose'] = tlb * eff
+                elif l['type_loge'] == 'haut_grade' and nb_tl:
+                    l['cout_propose'] = thg * nb_tl
+                else:
+                    l['cout_propose'] = None
+                if l['cout_propose'] is not None and l.get('cotisation_actuelle'):
+                    l['ecart_propose'] = l['cout_propose'] - l['cotisation_actuelle']
+                else:
+                    l['ecart_propose'] = None
+
+    # ── Scénario hybride personnalisé ──────────────────────────────────────────
+    # Utilise tarif_h_membre_p (€/membre LB) et tarif_h_tenue_p (€/tenue tous)
+    scenario_hybride_propose = None
+    if sim and charges_nettes_total is not None:
+        th_m = Decimal(str(tarif_h_membre_propose)) if tarif_h_membre_propose is not None else tarif_hybride_membre
+        th_t = Decimal(str(tarif_h_tenue_propose))  if tarif_h_tenue_propose  is not None else tarif_hybride_tenue
+        if th_m is not None and th_t is not None:
+            eff_lb_s = sim.get('eff_eq_lb') or 0
+            is_custom = tarif_h_membre_propose is not None or tarif_h_tenue_propose is not None
+            rec_h_lb = rec_h_hg = Decimal('0')
+            for l in sim['par_loge']:
+                if not l.get('membre_association'):
+                    l['cout_hybride_p'] = None
+                    l['ecart_hybride_p'] = None
+                    continue
+                eff   = l.get('effectif') or 0
+                nb_tl = l.get('nb_tenues') or 0
+                if l['type_loge'] == 'loge' and (eff or nb_tl):
+                    l['cout_hybride_p'] = (th_m * eff if eff else Decimal('0')) + th_t * nb_tl
+                    rec_h_lb += l['cout_hybride_p']
+                elif l['type_loge'] == 'haut_grade' and nb_tl:
+                    l['cout_hybride_p'] = th_t * nb_tl
+                    rec_h_hg += l['cout_hybride_p']
+                else:
+                    l['cout_hybride_p'] = None
+                if l['cout_hybride_p'] is not None and l.get('cotisation_actuelle'):
+                    l['ecart_hybride_p'] = l['cout_hybride_p'] - l['cotisation_actuelle']
+                else:
+                    l['ecart_hybride_p'] = None
+            rec_h_tot = rec_h_lb + rec_h_hg
+            scenario_hybride_propose = {
+                'tarif_membre': th_m, 'tarif_tenue': th_t,
+                'recettes_lb': rec_h_lb, 'recettes_hg': rec_h_hg,
+                'recettes_total': rec_h_tot,
+                'solde': rec_h_tot - charges_nettes_total,
+                'is_custom': is_custom,
+            }
+
+    # ── Stats écarts par modèle ────────────────────────────────────────────────
+    def _stats_ecarts_modele(par_loge, ecart_key):
+        loges = [(l, l[ecart_key]) for l in par_loge
+                 if l.get(ecart_key) is not None and l.get('membre_association')
+                 and l.get('cotisation_actuelle')]
+        if not loges:
+            return None
+        max_h = max(loges, key=lambda x: x[1])
+        max_b = min(loges, key=lambda x: x[1])
+        pct_changes = [float(e) / float(l['cotisation_actuelle']) * 100 for l, e in loges]
+        return {
+            'max_hausse_loge': max_h[0], 'max_hausse_val': max_h[1],
+            'max_baisse_loge': max_b[0], 'max_baisse_val': max_b[1],
+            'nb_hausse': sum(1 for _, e in loges if e > 0),
+            'nb_baisse': sum(1 for _, e in loges if e < 0),
+            'nb_neutre': sum(1 for _, e in loges if e == 0),
+            'mean_pct': sum(pct_changes) / len(pct_changes) if pct_changes else None,
+        }
+    stats_cas_a = _stats_ecarts_modele(sim['par_loge'], 'ecart_cas_a') if sim else None
+    stats_cas_b = _stats_ecarts_modele(sim['par_loge'], 'ecart_equilibre') if sim else None
+    stats_actuel_evolution = _stats_ecarts_modele(sim['par_loge'], 'ecart_m1') if sim else None
+
+    # ── Guide tarifaire : coût marginal d'une tenue exceptionnelle ─────────────
+    # Les charges fixes sont déjà couvertes par la cotisation des adhérents.
+    # Une tenue externe ne supporte que : énergie (mutualisée) + nettoyage (marginal).
+    # Scénarios : seule dans le bâtiment, 2 loges, 3 loges.
+    guide_tarif = None
+    if sim and sim.get('nb_resas') and sim['nb_resas'] > 0:
+        nb_t = Decimal(str(sim['nb_resas']))
+        cout_mutualise_par_tenue = sim['total_mutualise'] / nb_t
+        cout_marginal_par_tenue  = sim['total_marginal']  / nb_t
+        # Agapes : coût par tenue avec agapes (nb approx. = tenues avec agapes dans le détail)
+        nb_agapes = sum(1 for d in sim['detail'] if d['agapes']) or 1
+        cout_agapes_par_tenue    = sim['total_agapes'] / Decimal(str(nb_agapes))
+
+        guide_tarif = {
+            'seul':        cout_mutualise_par_tenue       + cout_marginal_par_tenue,
+            'deux':        cout_mutualise_par_tenue / 2   + cout_marginal_par_tenue,
+            'trois':       cout_mutualise_par_tenue / 3   + cout_marginal_par_tenue,
+            'supp_agapes': cout_agapes_par_tenue,
+            'seul_agapes':  cout_mutualise_par_tenue       + cout_marginal_par_tenue + cout_agapes_par_tenue,
+            'deux_agapes':  cout_mutualise_par_tenue / 2   + cout_marginal_par_tenue + cout_agapes_par_tenue,
+            # composants pour le tableau de détail
+            'energie_seul':    cout_mutualise_par_tenue,
+            'nettoyage':       cout_marginal_par_tenue,
+            'agapes_detail':   cout_agapes_par_tenue,
+            # comparaison avec tarifs votés
+            'tarif_vote_sans': params.tarif_exc_sans_agapes,
+            'tarif_vote_avec': params.tarif_exc_avec_agapes,
+            'ecart_sans':      (params.tarif_exc_sans_agapes or Decimal('0')) - (cout_mutualise_par_tenue + cout_marginal_par_tenue),
+            'ecart_avec':      (params.tarif_exc_avec_agapes or Decimal('0')) - (cout_mutualise_par_tenue + cout_marginal_par_tenue + cout_agapes_par_tenue),
+        }
+
+    # Écarts tarifs actuels (AG) → tarifs d'équilibre (pour affichage dans les cartes modèles)
+    delta_tarif_lb = delta_tarif_hg_b = delta_hybride_membre = delta_hybride_tenue = None
+    if tarif_eq_lb_display and params.tarif_membre_loge:
+        delta_tarif_lb = tarif_eq_lb_display - Decimal(str(params.tarif_membre_loge))
+    if tarif_eq_hg_display and params.tarif_membre_hg:
+        delta_tarif_hg_b = tarif_eq_hg_display - Decimal(str(params.tarif_membre_hg))
+    if tarif_hybride_membre and params.tarif_membre_loge:
+        delta_hybride_membre = tarif_hybride_membre - Decimal(str(params.tarif_membre_loge))
+    if tarif_hybride_tenue and params.tarif_exc_sans_agapes:
+        delta_hybride_tenue = tarif_hybride_tenue - Decimal(str(params.tarif_exc_sans_agapes))
+
+    # Recettes théoriques à l'équilibre (basées sur l'effectif de simulation, pas les fiches par loge)
+    # → ces valeurs atteignent exactement les charges nettes (ligne rouge du graphique)
+    recettes_eq_m1_theorique = recettes_eq_b_theorique = recettes_eq_hybride_theorique = None
+    if sim:
+        _eff_lb_t   = sim.get('eff_eq_lb') or 0
+        _eff_hg_t   = sim.get('eff_eq_hg') or 0
+        _nb_resas_hg_t = sim.get('nb_resas_hg_adherents') or 0
+        _nb_resas_t = sim.get('nb_resas') or 0
+        _rec_exc_t  = sim.get('recettes_exc_adherents') or Decimal('0')
+        if tarif_eq_lb_display and _eff_lb_t and tarif_eq_hg_membre_display and _eff_hg_t:
+            recettes_eq_m1_theorique = (tarif_eq_lb_display * Decimal(str(_eff_lb_t))
+                + tarif_eq_hg_membre_display * Decimal(str(_eff_hg_t)) + _rec_exc_t)
+        if tarif_eq_lb_display and _eff_lb_t and tarif_eq_hg_display and _nb_resas_hg_t:
+            recettes_eq_b_theorique = (tarif_eq_lb_display * Decimal(str(_eff_lb_t))
+                + tarif_eq_hg_display * Decimal(str(_nb_resas_hg_t)) + _rec_exc_t)
+        if tarif_hybride_membre and _eff_lb_t and tarif_hybride_tenue and _nb_resas_t:
+            recettes_eq_hybride_theorique = (tarif_hybride_membre * Decimal(str(_eff_lb_t))
+                + tarif_hybride_tenue * Decimal(str(_nb_resas_t)) + _rec_exc_t)
+
+    return render(request, 'administration/budget_simulation.html', {
+        'saison': saison,
+        'saisons_dispo': saisons_dispo,
+        'nb_membres_lb': nb_membres_lb or '',
+        'nb_membres_hg': nb_membres_hg or '',
+        'recettes_exc': recettes_exc_raw,
+        'pct_lb': pct_lb_raw,
+        'tarif_lb_p': tarif_lb_p_raw,
+        'tarif_hg_p': tarif_hg_p_raw,
+        'scenario_propose': scenario_propose,
+        'tarif_h_membre_p': tarif_h_membre_p_raw,
+        'tarif_h_tenue_p':  tarif_h_tenue_p_raw,
+        'scenario_hybride_propose': scenario_hybride_propose,
+        'pct_lb_defaut': pct_lb_defaut,
+        'pct_hg_defaut': pct_hg_defaut,
+        'sim': sim,
+        'postes_actifs': postes_actifs,
+        'total_fixe_annuel': total_fixe_annuel,
+        'temples': temples,
+        'params': params,
+        'effectif_reel_lb': effectif_reel_lb,
+        'effectif_reel_hg': effectif_reel_hg,
+        'nb_loges_lb': nb_loges_lb,
+        'nb_loges_hg': nb_loges_hg,
+        'net_lb_display':             net_lb_display,
+        'net_hg_display':             net_hg_display,
+        'tarif_eq_lb_display':        tarif_eq_lb_display,
+        'tarif_eq_hg_display':        tarif_eq_hg_display,
+        'tarif_eq_hg_membre_display': tarif_eq_hg_membre_display,
+        'recettes_m1_total':          recettes_m1_total,
+        'solde_m1':                   solde_m1,
+        'recette_lb_votee':      recette_lb_votee,
+        'recette_hg_votee':      recette_hg_votee,
+        'recette_totale_votee':  recette_totale_votee,
+        'deficit_votee':         deficit_votee,
+        'charges_nettes_total':  charges_nettes_total,
+        'tarif_hybride_membre':      tarif_hybride_membre,
+        'tarif_hybride_tenue':       tarif_hybride_tenue,
+        'guide_tarif':               guide_tarif,
+        'recettes_hybride_total':    recettes_hybride_total,
+        'recettes_eq_total':         recettes_eq_total,
+        'recettes_actuelles_total':  recettes_actuelles_total,
+        'solde_eq_b':                solde_eq_b,
+        'deficit_hybride':           deficit_hybride,
+        'solde_hybride':             solde_hybride,
+        'recettes_sogofim_total':    recettes_sogofim_total,
+        'solde_sogofim':             solde_sogofim,
+        'sogofim_lb_godf':           Decimal('138'),
+        'sogofim_lb_autre':          Decimal('180'),
+        'sogofim_hg_godf':           Decimal('7.50'),
+        'sogofim_hg_autre':          Decimal('10.00'),
+        'sogofim_breakdown':         sogofim_breakdown if sim else None,
+        'delta_tarif_lb':        delta_tarif_lb,
+        'delta_tarif_hg_b':      delta_tarif_hg_b,
+        'delta_hybride_membre':  delta_hybride_membre,
+        'delta_hybride_tenue':   delta_hybride_tenue,
+        'recettes_eq_m1_theorique':      recettes_eq_m1_theorique,
+        'recettes_eq_b_theorique':       recettes_eq_b_theorique,
+        'recettes_eq_hybride_theorique': recettes_eq_hybride_theorique,
+        'tarif_eq_cas_a_lb':   tarif_eq_cas_a_lb,
+        'tarif_eq_cas_a_hg':   tarif_eq_cas_a_hg,
+        'ratio_hg_cas_a':      ratio_hg_cas_a,
+        'total_mt_lb':         total_mt_lb,
+        'total_mt_hg':         total_mt_hg,
+        'recettes_cas_a_total': recettes_cas_a_total,
+        'solde_cas_a':          solde_cas_a,
+        'stats_cas_a':          stats_cas_a,
+        'stats_cas_b':          stats_cas_b,
+        'stats_actuel_evolution': stats_actuel_evolution,
+    })
+
+
 @staff_required
 def facturation(request):
     from decimal import Decimal, InvalidOperation
@@ -5099,12 +7753,20 @@ def facturation(request):
             de = (request.POST.get('tarif_date_effet') or '').strip()
             params.tarif_date_effet = date.fromisoformat(de) if de else None
             params.facturation_active = 'facturation_active' in request.POST
+            params.module_finance_actif = 'module_finance_actif' in request.POST
             params.tarif_membre_loge = Decimal(request.POST.get('tarif_membre_loge') or '0')
-            params.tarif_membre_hg = Decimal(request.POST.get('tarif_membre_hg') or '0')
-            params.save(update_fields=['tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
-                                       'tarif_congres_jour', 'tarif_funebre', 'tarif_date_effet',
-                                       'facturation_active', 'tarif_membre_loge', 'tarif_membre_hg'])
-            messages.success(request, "Tarifs mis à jour. Ils ne s'appliquent pas aux dates antérieures à leur entrée en vigueur.")
+            params.tarif_membre_hg   = Decimal(request.POST.get('tarif_membre_hg')   or '0')
+            params.tarif_loge_occasionnelle       = Decimal(request.POST.get('tarif_loge_occasionnelle')       or '0')
+            params.tarif_hg_externe               = Decimal(request.POST.get('tarif_hg_externe')               or '0')
+            params.tarif_hg_interne_non_regulier  = Decimal(request.POST.get('tarif_hg_interne_non_regulier')  or '0')
+            params.save(update_fields=[
+                'tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
+                'tarif_congres_jour', 'tarif_funebre', 'tarif_date_effet',
+                'facturation_active', 'module_finance_actif',
+                'tarif_membre_loge', 'tarif_membre_hg',
+                'tarif_loge_occasionnelle', 'tarif_hg_externe', 'tarif_hg_interne_non_regulier',
+            ])
+            messages.success(request, "Tarifs mis à jour. Si des brouillons de facturation annuelle ont déjà été générés, relancez la génération depuis Finance → Saison pour les recalculer avec les nouveaux tarifs.")
         except (InvalidOperation, ValueError):
             messages.error(request, "Valeurs invalides : vérifiez les montants et la date.")
         qs = request.META.get('QUERY_STRING', '')
@@ -5622,3 +8284,1572 @@ def valider_demande_recurrence_salle(request, pk):
     return render(request, 'administration/valider_demande_recurrence_salle.html', {
         'demande': demande,
     })
+
+
+@staff_required
+def valider_demande_recurrence_temple(request, pk):
+    """L'admin valide ou refuse une demande de règle de récurrence temple soumise depuis le portail."""
+    demande = get_object_or_404(DemandeRegleRecurrence, pk=pk)
+
+    if request.method == 'POST':
+        action            = request.POST.get('action')
+        commentaire_admin = request.POST.get('commentaire_admin', '').strip()
+
+        if action not in ('valider', 'refuser'):
+            messages.error(request, "Action invalide.")
+            return redirect('administration:tableau_de_bord')
+
+        demande.statut            = 'validee' if action == 'valider' else 'refusee'
+        demande.commentaire_admin = commentaire_admin
+        demande.save()
+
+        if action == 'valider':
+            regle = RegleRecurrence.objects.create(
+                loge=demande.loge,
+                temple=demande.temple,
+                jour_semaine=demande.jour_semaine,
+                numero_semaine=demande.numero_semaine,
+                heure_debut=demande.heure_debut,
+                heure_fin=demande.heure_fin,
+                mois_actifs=demande.mois_actifs,
+                actif=True,
+            )
+            demande.regle_creee = regle
+            demande.save(update_fields=['regle_creee'])
+
+            send_mail_kellermann(
+                subject="[Kellermann] Votre demande de récurrence temple a été validée",
+                message=(
+                    f"Bonjour {demande.nom_demandeur},\n\n"
+                    f"Votre demande de règle de récurrence pour le temple {demande.temple} a été validée.\n\n"
+                    f"Temple    : {demande.temple}\n"
+                    f"Fréquence : {regle.get_numero_semaine_display()} {regle.get_jour_semaine_display()}\n"
+                    f"Horaires  : {regle.heure_debut:%H:%M} – {regle.heure_fin:%H:%M}\n"
+                    + (f"\nCommentaire : {commentaire_admin}\n" if commentaire_admin else "")
+                    + f"\nLa règle sera appliquée lors de la prochaine génération des réservations.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[demande.email_demandeur],
+            )
+            log_evenement('validation_regle_temple',
+                f"Règle récurrence temple validée : {demande.loge} — {regle.get_numero_semaine_display()} {regle.get_jour_semaine_display()} — {demande.temple}",
+                request=request, objet=regle)
+            messages.success(request, f"Demande validée — règle de récurrence créée pour {demande.loge} au {demande.temple}.")
+        else:
+            send_mail_kellermann(
+                subject="[Kellermann] Votre demande de récurrence temple",
+                message=(
+                    f"Bonjour {demande.nom_demandeur},\n\n"
+                    f"Votre demande de règle de récurrence pour le temple {demande.temple} n'a pas pu être accordée.\n\n"
+                    + (f"Motif : {commentaire_admin}\n\n" if commentaire_admin else "")
+                    + f"Pour toute question, contactez l'administration.\n\n"
+                    f"Fraternellement,\nL'administration des Temples Kellermann"
+                ),
+                recipient_list=[demande.email_demandeur],
+            )
+            messages.warning(request, f"Demande refusée — email envoyé à {demande.email_demandeur}.")
+
+        return redirect('administration:tableau_de_bord')
+
+    return render(request, 'administration/valider_demande_recurrence_temple.html', {
+        'demande': demande,
+    })
+
+
+# ── FAQ ──────────────────────────────────────────────────────────────────────
+
+def _faq_sections(qs):
+    """Regroupe un queryset FAQ par section (liste de dicts {titre, items})."""
+    sections = []
+    current = None
+    for item in qs:
+        s = item.section or 'Général'
+        if current is None or current['titre'] != s:
+            current = {'titre': s, 'items': []}
+            sections.append(current)
+        current['items'].append(item)
+    return sections
+
+
+def faq_membres(request):
+    """Page FAQ complète pour les membres connectés."""
+    qs = FAQ.objects.filter(categorie='membres', actif=True)
+    return render(request, 'faq/membres.html', {'sections': _faq_sections(qs)})
+
+
+def faq_traiteur(request):
+    """Page FAQ pour le traiteur."""
+    qs = FAQ.objects.filter(categorie='traiteur', actif=True)
+    return render(request, 'faq/traiteur.html', {'sections': _faq_sections(qs)})
+
+
+@staff_required
+def faq_admin_liste(request):
+    items = FAQ.objects.all()
+    return render(request, 'administration/faq_liste.html', {'items': items})
+
+
+@staff_required
+def faq_admin_form(request, pk=None):
+    item = get_object_or_404(FAQ, pk=pk) if pk else None
+    CATEGORIES = FAQ.CATEGORIE_CHOICES
+    if request.method == 'POST':
+        categorie = request.POST.get('categorie', '')
+        section   = request.POST.get('section', '').strip()
+        question  = request.POST.get('question', '').strip()
+        reponse   = request.POST.get('reponse', '').strip()
+        ordre     = int(request.POST.get('ordre', 0) or 0)
+        actif     = request.POST.get('actif') == '1'
+        if not question or not reponse or not categorie:
+            messages.error(request, "Catégorie, question et réponse sont obligatoires.")
+        else:
+            if item:
+                item.categorie = categorie
+                item.section   = section
+                item.question  = question
+                item.reponse   = reponse
+                item.ordre     = ordre
+                item.actif     = actif
+                item.save()
+                messages.success(request, "Entrée FAQ modifiée.")
+            else:
+                FAQ.objects.create(
+                    categorie=categorie, section=section,
+                    question=question, reponse=reponse,
+                    ordre=ordre, actif=actif,
+                )
+                messages.success(request, "Entrée FAQ ajoutée.")
+            return redirect('administration:faq_liste')
+    return render(request, 'administration/faq_form.html',
+                  {'item': item, 'CATEGORIES': CATEGORIES})
+
+
+@staff_required
+def faq_admin_supprimer(request, pk):
+    item = get_object_or_404(FAQ, pk=pk)
+    if request.method == 'POST':
+        item.delete()
+        messages.success(request, "Entrée FAQ supprimée.")
+        return redirect('administration:faq_liste')
+    return render(request, 'administration/faq_supprimer.html', {'item': item})
+
+
+# ── Panneau loge contextuel (aide à la décision sur les demandes) ─────────────
+
+def _get_loge_panel(loge, exclude_pk=None, model='temple'):
+    """Données contextuelles d'une loge pour les pages de validation."""
+    if not loge:
+        return None
+    from datetime import date as _date
+    today = _date.today()
+    annee = today.year if today.month >= 9 else today.year - 1
+    d1 = _date(annee, 9, 1)
+    d2 = _date(annee + 1, 8, 31)
+    portail = DemandeAccesPortail.objects.filter(loge=loge, statut='validee').first()
+    resa_qs = Reservation.objects.filter(loge=loge, statut='validee', date__gte=today)
+    if model == 'temple' and exclude_pk:
+        resa_qs = resa_qs.exclude(pk=exclude_pk)
+    return {
+        'loge':           loge,
+        'portail_token':  portail.token if portail else None,
+        'prochaines':     list(resa_qs.select_related('temple').order_by('date')[:5]),
+        'en_attente_t':   Reservation.objects.filter(loge=loge, statut='attente').exclude(
+                              pk=exclude_pk if model == 'temple' else None).count(),
+        'en_attente_s':   ReservationSalle.objects.filter(loge=loge, statut='attente').exclude(
+                              pk=exclude_pk if model == 'salle' else None).count(),
+        'nb_saison':      Reservation.objects.filter(loge=loge, statut='validee',
+                              date__gte=d1, date__lte=d2).count(),
+        'annee_saison':   annee,
+    }
+
+
+# ── Activité & statistiques par loge ─────────────────────────────────────────
+
+@staff_required
+def activite_loges(request):
+    """Classement des loges par volume de réservations, messages et accès portail."""
+    from django.db.models import Count, OuterRef, Subquery, IntegerField, Value, Q
+    from django.db.models.functions import Coalesce
+    from datetime import date as _date
+    from temple_project.apps.reservations.models import MessageContact, AccessLog
+
+    tri          = request.GET.get('tri', 'saison')
+    filtre_portail = request.GET.get('portail', '')   # 'actif' | 'non' | ''
+    filtre_attente = request.GET.get('attente', '')   # '1' | ''
+
+    today = _date.today()
+    annee = today.year if today.month >= 9 else today.year - 1
+    d1 = _date(annee, 9, 1)
+    d2 = _date(annee + 1, 8, 31)
+
+    def _sq(qs):
+        return Coalesce(Subquery(qs.values('loge_id').annotate(c=Count('pk')).values('c')[:1],
+                                 output_field=IntegerField()), Value(0))
+
+    loges = Loge.objects.filter(actif=True).select_related('obedience').annotate(
+        nb_saison=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='validee',
+                                                  date__gte=d1, date__lte=d2)),
+        nb_attente_t=_sq(Reservation.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
+        nb_salle_saison=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='validee',
+                                                             date__gte=d1, date__lte=d2)),
+        nb_salle_attente=_sq(ReservationSalle.objects.filter(loge_id=OuterRef('pk'), statut='attente')),
+        nb_messages_fk=_sq(MessageContact.objects.filter(loge_id=OuterRef('pk'), emis=False)),
+    )
+
+    # Portails validés
+    portail_map = {p.loge_id: p for p in DemandeAccesPortail.objects.filter(statut='validee')}
+    portail_ids = set(portail_map.keys())
+
+    # Visites portail (30 derniers jours et total)
+    from django.utils import timezone as tz
+    depuis_30j = tz.now() - __import__('datetime').timedelta(days=30)
+    visites_total = {}
+    visites_30j   = {}
+    for row in AccessLog.objects.filter(type='portail', loge_id__isnull=False)\
+                                .values('loge_id').annotate(c=Count('pk')):
+        visites_total[row['loge_id']] = row['c']
+    for row in AccessLog.objects.filter(type='portail', loge_id__isnull=False,
+                                        created_at__gte=depuis_30j)\
+                                .values('loge_id').annotate(c=Count('pk')):
+        visites_30j[row['loge_id']] = row['c']
+
+    # Connexions calendrier générales (total + 30j)
+    nb_calendrier_total = AccessLog.objects.filter(type='calendrier').count()
+    nb_calendrier_30j   = AccessLog.objects.filter(type='calendrier', created_at__gte=depuis_30j).count()
+
+    # Messages fallback par email pour les anciens messages sans FK
+    msg_by_email = {}
+    for row in MessageContact.objects.filter(emis=False, loge__isnull=True)\
+                                     .values('email').annotate(c=Count('pk')):
+        msg_by_email[row['email'].lower()] = row['c']
+
+    # Appliquer filtres
+    if filtre_portail == 'actif':
+        loges = loges.filter(pk__in=portail_ids)
+    elif filtre_portail == 'non':
+        loges = loges.exclude(pk__in=portail_ids)
+    if filtre_attente == '1':
+        loges = loges.filter(
+            Q(nb_attente_t__gt=0) | Q(nb_salle_attente__gt=0)
+        )
+
+    # Tri ORM
+    tri_orm = {
+        'saison':   '-nb_saison',
+        'salle':    '-nb_salle_saison',
+        'attente':  '-nb_attente_t',
+    }
+    if tri in tri_orm:
+        loges = loges.order_by(tri_orm[tri], 'nom')
+    else:
+        loges = loges.order_by('nom')
+
+    loges_list = list(loges)
+    for loge in loges_list:
+        p = portail_map.get(loge.id)
+        loge.portail_token = str(p.token) if p else None
+        loge.portail_since = p.created_at if p else None
+        # Messages : FK prioritaire, fallback email pour anciens
+        email_count = msg_by_email.get(loge.email.lower(), 0) if loge.email else 0
+        loge.nb_messages = loge.nb_messages_fk + email_count
+        loge.nb_attente  = loge.nb_attente_t + loge.nb_salle_attente
+        loge.nb_visites  = visites_total.get(loge.id, 0)
+        loge.nb_visites_30j = visites_30j.get(loge.id, 0)
+
+    # Tris post-Python
+    if tri == 'messages':
+        loges_list.sort(key=lambda l: (-l.nb_messages, l.nom))
+    elif tri == 'visites':
+        loges_list.sort(key=lambda l: (-l.nb_visites, l.nom))
+
+    nb_portail_actif = len(portail_ids & {l.id for l in loges_list})
+    nb_attente_total = sum(l.nb_attente for l in loges_list)
+    nb_visites_portail_30j = sum(l.nb_visites_30j for l in loges_list)
+
+    return render(request, 'administration/activite_loges.html', {
+        'loges':                 loges_list,
+        'tri':                   tri,
+        'filtre_portail':        filtre_portail,
+        'filtre_attente':        filtre_attente,
+        'annee_saison':          annee,
+        'nb_loges':              len(loges_list),
+        'nb_portail_actif':      nb_portail_actif,
+        'nb_attente_total':      nb_attente_total,
+        'nb_calendrier_total':   nb_calendrier_total,
+        'nb_calendrier_30j':     nb_calendrier_30j,
+        'nb_visites_portail_30j': nb_visites_portail_30j,
+    })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MODULE FINANCE — Facturation annuelle par loge
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _activite_loge_saison(loge, saison):
+    """Retourne le récapitulatif d'activité d'une loge pour une saison."""
+    from datetime import date as ddate
+    debut = ddate(saison, 9, 1)
+    fin   = ddate(saison + 1, 8, 31)
+
+    resas = list(
+        Reservation.objects
+        .filter(loge=loge, date__gte=debut, date__lte=fin, statut='validee')
+        .select_related('temple')
+        .order_by('date')
+    )
+    resas_salle = list(
+        ReservationSalle.objects
+        .filter(loge=loge, date__gte=debut, date__lte=fin, statut='validee')
+        .select_related('salle')
+        .order_by('date')
+    )
+
+    tenues_regulieres    = [r for r in resas if r.type_reservation == 'reguliere']
+    tenues_exceptionnelles = [r for r in resas if r.type_reservation == 'exceptionnelle']
+    tenues_congres       = [r for r in resas if r.type_reservation == 'congres']
+    tenues_avec_agapes   = [r for r in resas if r.besoin_agapes]
+    reunions_salle       = [rs for rs in resas_salle
+                            if rs.salle.type_salle != 'cabinet_reflexion']
+    cabinets             = [rs for rs in resas_salle
+                            if rs.salle.type_salle == 'cabinet_reflexion']
+
+    return {
+        'tenues_regulieres':     tenues_regulieres,
+        'tenues_exceptionnelles': tenues_exceptionnelles,
+        'tenues_congres':        tenues_congres,
+        'tenues_avec_agapes':    tenues_avec_agapes,
+        'reunions_salle':        reunions_salle,
+        'cabinets':              cabinets,
+        'nb_regulieres':         len(tenues_regulieres),
+        'nb_exceptionnelles':    len(tenues_exceptionnelles),
+        'nb_congres':            len(tenues_congres),
+        'nb_agapes':             len(tenues_avec_agapes),
+        'nb_salles':             len(reunions_salle),
+        'nb_cabinets':           len(cabinets),
+        'nb_total':              len(resas),
+    }
+
+
+def _finance_guard(request):
+    """Retourne None si le module est actif, sinon une HttpResponse d'erreur."""
+    params = Parametres.get_instance()
+    if not params.module_finance_actif:
+        return render(request, 'administration/finance_inactif.html', {'params': params})
+    return None
+
+
+def _prochain_numero_facture(saison):
+    """Génère le prochain numéro de facture pour la saison."""
+    from .models import Facture
+    existant = (
+        Facture.objects
+        .filter(saison=saison)
+        .exclude(numero='')
+        .order_by('numero')
+        .values_list('numero', flat=True)
+    )
+    max_n = 0
+    for num in existant:
+        try:
+            max_n = max(max_n, int(num.split('-')[-1]))
+        except (ValueError, IndexError):
+            pass
+    return f"KELL-{saison}-{max_n + 1:03d}"
+
+
+@staff_required
+def finance_saison(request):
+    """Tableau de bord du module finance : liste des factures par saison."""
+    from .models import Facture
+    params = Parametres.get_instance()
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    saisons_dispo = sorted(set(
+        Facture.objects.values_list('saison', flat=True)
+    ) | {_annee_saison_courante()}, reverse=True)
+
+    factures = (
+        Facture.objects
+        .filter(saison=saison)
+        .select_related('loge')
+        .prefetch_related('lignes')
+        .order_by('loge__nom')
+    ) if params.module_finance_actif else []
+
+    total_emis      = sum(f.total_ht for f in factures if f.statut in ('emise', 'payee'))
+    total_paye      = sum(f.total_ht for f in factures if f.statut == 'payee')
+    total_brouillon = sum(f.total_ht for f in factures if f.statut == 'brouillon')
+    nb_brouillon    = sum(1 for f in factures if f.statut == 'brouillon')
+    nb_emises       = sum(1 for f in factures if f.statut == 'emise')
+    nb_payees       = sum(1 for f in factures if f.statut == 'payee')
+
+    return render(request, 'administration/finance_saison.html', {
+        'saison':         saison,
+        'saisons_dispo':  saisons_dispo,
+        'factures':       factures,
+        'total_emis':      total_emis,
+        'total_paye':      total_paye,
+        'total_brouillon': total_brouillon,
+        'nb_brouillon':    nb_brouillon,
+        'nb_emises':       nb_emises,
+        'nb_payees':       nb_payees,
+        'params':          params,
+    })
+
+
+@staff_required
+def finance_export_excel(request):
+    """Export Excel de toutes les factures d'une saison (une ligne par ligne de facture)."""
+    from .models import Facture, LigneFacture
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    saison = int(request.GET.get('saison') or _annee_saison_courante())
+    factures = (
+        Facture.objects.filter(saison=saison)
+        .select_related('loge')
+        .prefetch_related('lignes')
+        .order_by('loge__nom')
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Factures {saison}-{saison+1}"
+
+    BLEU   = "0F2137"
+    OR     = "C8A84B"
+    HEADER = PatternFill("solid", fgColor=BLEU)
+    HDR_F  = Font(color="FFFFFF", bold=True, size=10)
+    ALT    = PatternFill("solid", fgColor="EBF1FA")
+    BORDER = Border(
+        bottom=Side(style='thin', color='CCCCCC'),
+    )
+
+    headers = [
+        "Loge", "Type loge", "Statut facture", "N° facture",
+        "Type ligne", "Libellé", "Qté", "Unité", "P.U. (€)", "Total (€)",
+        "Incluse", "Note correction",
+    ]
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill   = HEADER
+        cell.font   = HDR_F
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    row_n = 2
+    for facture in factures:
+        lignes = list(facture.lignes.all())
+        if not lignes:
+            ws.append([
+                facture.loge.nom,
+                facture.loge.get_type_loge_display(),
+                facture.get_statut_display(),
+                facture.numero or "—",
+                "", "Aucune ligne", "", "", "", "", "", "",
+            ])
+            row_n += 1
+            continue
+        fill = ALT if row_n % 2 == 0 else None
+        for ligne in lignes:
+            row_data = [
+                facture.loge.nom,
+                facture.loge.get_type_loge_display(),
+                facture.get_statut_display(),
+                facture.numero or "Brouillon",
+                ligne.get_type_ligne_display(),
+                ligne.libelle,
+                float(ligne.quantite),
+                ligne.unite,
+                float(ligne.montant_unitaire),
+                float(ligne.montant_total) if ligne.facturable else 0,
+                "Oui" if ligne.facturable else "Non",
+                ligne.note_override or "",
+            ]
+            ws.append(row_data)
+            if fill:
+                for col_idx in range(1, len(headers) + 1):
+                    ws.cell(row=row_n, column=col_idx).fill = fill
+            row_n += 1
+
+    # ── Ligne de total par facture en bas ──────────────────────────────────
+    ws.append([])
+    ws.append(["", "", "", "", "", "TOTAL PAR FACTURE", "", "", "", "", "", ""])
+    header_row2 = row_n + 2
+    ws.cell(row=header_row2, column=1).value = "Loge"
+    ws.cell(row=header_row2, column=3).value = "Statut"
+    ws.cell(row=header_row2, column=4).value = "N° facture"
+    ws.cell(row=header_row2, column=10).value = "Total HT (€)"
+    for col_idx in range(1, len(headers) + 1):
+        ws.cell(row=header_row2, column=col_idx).fill   = HEADER
+        ws.cell(row=header_row2, column=col_idx).font   = HDR_F
+    row_n = header_row2 + 1
+    for facture in factures:
+        ws.append([
+            facture.loge.nom, "",
+            facture.get_statut_display(),
+            facture.numero or "Brouillon",
+            "", "", "", "", "",
+            float(facture.total_ht), "", "",
+        ])
+        row_n += 1
+
+    # ── Mise en forme colonnes ─────────────────────────────────────────────
+    col_widths = [32, 14, 12, 16, 22, 55, 6, 9, 10, 10, 8, 30]
+    for idx, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(idx)].width = w
+
+    ws.freeze_panes = "A2"
+
+    from io import BytesIO
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"Factures_{saison}-{saison+1}.xlsx"
+    resp = HttpResponse(
+        buf.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    resp['Content-Disposition'] = f'attachment; filename="{fname}"'
+    return resp
+
+
+@staff_required
+def finance_generer_brouillons(request):
+    """Génère (ou régénère) les brouillons de factures annuelles par loge.
+
+    Modèle : effectif_total × tarif_membre voté en AG.
+    Les tenues exceptionnelles/congrès sont ajoutées en lignes séparées.
+    """
+    from .models import Facture, LigneFacture
+    from decimal import Decimal as D
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    saison = int(request.POST.get('saison') or _annee_saison_courante())
+    params = Parametres.get_instance()
+
+    # Toutes les loges actives qui ont eu des réservations validées cette saison
+    from temple_project.apps.loges.models import Loge
+    from datetime import date as ddate
+
+    loges_actives = Loge.objects.filter(actif=True).order_by('nom')
+
+    nb_crees = nb_maj = nb_ignores = 0
+    loges_estimation = []
+    date_effet = params.tarif_date_effet
+
+    def _p(n):
+        """Pluriel simple."""
+        return 's' if n > 1 else ''
+
+    def _filtre_date(lst):
+        if not date_effet:
+            return lst
+        return [r for r in lst if r.date >= date_effet]
+
+    for loge in loges_actives:
+        activite = _activite_loge_saison(loge, saison)
+
+        # Seules les loges adhérentes ont une facture annuelle.
+        # Les loges extérieures/occasionnelles sont facturées à la tenue via le module facturation.
+        if not loge.membre_association:
+            continue
+
+        # Une loge sans aucune réservation cette saison n'a pas de facture
+        if activite['nb_total'] == 0:
+            continue
+
+        facture, created = Facture.objects.get_or_create(
+            loge=loge, saison=saison,
+            defaults={'statut': 'brouillon'}
+        )
+        if facture.statut not in ('brouillon',):
+            nb_ignores += 1
+            continue
+
+        facture.lignes.all().delete()
+        ordre = 0
+        type_loge = loge.type_loge  # 'loge' ou 'haut_grade'
+        effectif_reel = loge.effectif_total
+        effectif_est  = effectif_reel == 0  # estimation = pas de valeur saisie
+        effectif      = effectif_reel if effectif_reel > 0 else params.effectif_par_defaut
+        loge_reguliere = activite['nb_regulieres'] > 0
+
+        # ── Ligne principale : cotisation annuelle ─────────────────────────────
+        if loge_reguliere and loge.membre_association:
+            tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
+            if tarif > 0:
+                type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
+                cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
+                suffix = " — estimation, effectif à renseigner" if effectif_est else ""
+                if params.modele_cotisation == 'A':
+                    nb_t = activite['nb_regulieres']
+                    quantite = D(str(effectif)) * D(str(nb_t))
+                    libelle = (f"Cotisation annuelle — {cat} "
+                               f"({effectif} mbr × {nb_t} tenue{_p(nb_t)} × {tarif} €){suffix}")
+                    unite = 'mbr×tenue'
+                else:
+                    quantite = D(str(effectif))
+                    libelle = f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €){suffix}"
+                    unite = 'membre'
+                LigneFacture.objects.create(
+                    facture=facture, type_ligne=type_l,
+                    libelle=libelle,
+                    quantite=quantite, unite=unite,
+                    montant_unitaire=tarif,
+                    montant_total=(tarif * quantite).quantize(D('0.01')),
+                    ordre=ordre,
+                    note_override="Effectif estimé (par défaut)" if effectif_est else "",
+                )
+                ordre += 1
+                if effectif_est:
+                    loges_estimation.append(loge.nom)
+
+        # ── Tenues exceptionnelles (toutes loges, après date d'effet) ─────────
+        t_exc_f    = _filtre_date(activite['tenues_exceptionnelles'])
+        t_congres_f = _filtre_date(activite['tenues_congres'])
+
+        # regle_source : les tenues générées par règle récurrente sont des régulières
+        # et ne doivent pas gonfler les exceptionnelles si elles ont été reclassées par erreur
+        exc_sans    = [r for r in t_exc_f if not r.besoin_agapes and r.sous_type != 'funebre']
+        exc_agapes  = [r for r in t_exc_f if r.besoin_agapes and r.sous_type != 'funebre']
+        exc_funebres = [r for r in t_exc_f if r.sous_type == 'funebre']
+
+        if exc_sans:
+            n = len(exc_sans)
+            LigneFacture.objects.create(
+                facture=facture, type_ligne='tenue_exc',
+                libelle=f"Tenue{_p(n)} exceptionnelle{_p(n)} sans agapes ({n} tenue{_p(n)})",
+                quantite=D(str(n)), unite='tenue',
+                montant_unitaire=params.tarif_exc_sans_agapes,
+                montant_total=(params.tarif_exc_sans_agapes * D(str(n))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
+
+        if exc_agapes:
+            n = len(exc_agapes)
+            LigneFacture.objects.create(
+                facture=facture, type_ligne='tenue_exc',
+                libelle=f"Tenue{_p(n)} exceptionnelle{_p(n)} avec agapes ({n} tenue{_p(n)})",
+                quantite=D(str(n)), unite='tenue',
+                montant_unitaire=params.tarif_exc_avec_agapes,
+                montant_total=(params.tarif_exc_avec_agapes * D(str(n))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
+
+        if exc_funebres:
+            n = len(exc_funebres)
+            LigneFacture.objects.create(
+                facture=facture, type_ligne='tenue_exc',
+                libelle=f"Tenue{_p(n)} funèbre{_p(n)} ({n})",
+                quantite=D(str(n)), unite='tenue',
+                montant_unitaire=params.tarif_funebre,
+                montant_total=(params.tarif_funebre * D(str(n))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
+
+        if t_congres_f:
+            nb_jours = sum(
+                (r.date_fin - r.date).days if r.date_fin and r.date_fin > r.date else 1
+                for r in t_congres_f
+            )
+            n = len(t_congres_f)
+            LigneFacture.objects.create(
+                facture=facture, type_ligne='tenue_exc',
+                libelle=f"Congrès / session{_p(n)} ({n} événement{_p(n)}, {nb_jours} jour{_p(nb_jours)})",
+                quantite=D(str(nb_jours)), unite='jour',
+                montant_unitaire=params.tarif_congres_jour,
+                montant_total=(params.tarif_congres_jour * D(str(nb_jours))).quantize(D('0.01')),
+                ordre=ordre,
+            )
+            ordre += 1
+
+        facture.recalculer_total()
+        if created:
+            nb_crees += 1
+        else:
+            nb_maj += 1
+
+    parts = [f"{nb_crees} créé{'s' if nb_crees > 1 else ''}",
+             f"{nb_maj} mis à jour"]
+    if nb_ignores:
+        parts.append(f"{nb_ignores} ignoré{'s' if nb_ignores > 1 else ''} (déjà émis/payé)")
+    messages.success(request, f"Brouillons générés — {', '.join(parts)}.")
+    if loges_estimation:
+        noms = ', '.join(loges_estimation)
+        messages.warning(
+            request,
+            f"Effectif estimé à {params.effectif_par_defaut} membres (valeur par défaut) pour : {noms}. "
+            "Corrigez l'effectif dans chaque fiche loge et régénérez pour actualiser les montants."
+        )
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_saison') + f'?saison={saison}')
+
+
+@staff_required
+def finance_facture_detail(request, pk):
+    """Vue détail d'une facture : lignes, notes, actions."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    facture  = get_object_or_404(Facture.objects.select_related('loge').prefetch_related('lignes'), pk=pk)
+    params   = Parametres.get_instance()
+    activite = _activite_loge_saison(facture.loge, facture.saison)
+
+    # Toutes les réservations temple de la saison pour permettre le reclassement
+    from datetime import date as ddate
+    debut_s = ddate(facture.saison, 9, 1)
+    fin_s   = ddate(facture.saison + 1, 8, 31)
+    resas_saison = list(
+        Reservation.objects
+        .filter(loge=facture.loge, date__gte=debut_s, date__lte=fin_s, statut='validee')
+        .select_related('temple')
+        .order_by('date')
+    )
+
+    return render(request, 'administration/finance_facture.html', {
+        'facture':      facture,
+        'params':       params,
+        'lignes':       facture.lignes.all(),
+        'activite':     activite,
+        'resas_saison': resas_saison,
+    })
+
+
+@staff_required
+def finance_ligne_ajouter(request, pk):
+    """Ajoute une ligne libre à un brouillon (remise, ajustement, poste divers…)."""
+    from .models import Facture, LigneFacture
+    from decimal import Decimal, InvalidOperation
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'brouillon':
+        messages.error(request, "Seul un brouillon peut être modifié.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+    libelle   = request.POST.get('libelle', '').strip()
+    raw_pu    = request.POST.get('montant_unitaire', '0').strip().replace(',', '.')
+    raw_qty   = request.POST.get('quantite', '1').strip().replace(',', '.')
+    unite     = request.POST.get('unite', '').strip()
+    motif     = request.POST.get('note_override', '').strip()
+
+    if not libelle:
+        messages.error(request, "Le libellé est obligatoire.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+    try:
+        pu  = Decimal(raw_pu)
+        qty = Decimal(raw_qty)
+        if qty <= 0:
+            raise ValueError
+    except (InvalidOperation, ValueError):
+        messages.error(request, "Montant ou quantité invalide.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+    ordre_max = facture.lignes.aggregate(m=dj_models.Max('ordre'))['m'] or 0
+    LigneFacture.objects.create(
+        facture=facture, type_ligne='autre',
+        libelle=libelle, quantite=qty, unite=unite,
+        montant_unitaire=pu,
+        montant_total=(pu * qty).quantize(Decimal('0.01')),
+        facturable=True, ordre=ordre_max + 1,
+        note_override=motif,
+    )
+    facture.recalculer_total()
+    messages.success(request, f"Ligne ajoutée : {libelle}.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_ligne_supprimer(request, pk, ligne_pk):
+    """Supprime définitivement une ligne libre (type='autre') d'un brouillon."""
+    from .models import Facture, LigneFacture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    ligne   = get_object_or_404(LigneFacture, pk=ligne_pk, facture=facture)
+
+    if facture.statut != 'brouillon':
+        messages.error(request, "Seul un brouillon peut être modifié.")
+    elif ligne.type_ligne != 'autre':
+        messages.error(request, "Seules les lignes ajoutées manuellement peuvent être supprimées. Utilisez le toggle pour les autres.")
+    else:
+        ligne.delete()
+        facture.recalculer_total()
+        messages.success(request, "Ligne supprimée.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_ligne_edit(request, pk, ligne_pk):
+    """Modifie le prix unitaire d'une ligne de brouillon (correction manuelle avec motif)."""
+    from .models import Facture, LigneFacture
+    from decimal import Decimal, InvalidOperation
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    ligne   = get_object_or_404(LigneFacture, pk=ligne_pk, facture=facture)
+
+    if facture.statut != 'brouillon':
+        messages.error(request, "Seul un brouillon peut être modifié.")
+    else:
+        raw = request.POST.get('montant_unitaire', '').strip().replace(',', '.')
+        motif = request.POST.get('note_override', '').strip()
+        try:
+            nouveau_pu = Decimal(raw)
+            if nouveau_pu < 0:
+                raise ValueError
+        except (InvalidOperation, ValueError):
+            messages.error(request, "Montant invalide.")
+        else:
+            ligne.montant_unitaire = nouveau_pu
+            ligne.montant_total    = (ligne.quantite * nouveau_pu).quantize(Decimal('0.01'))
+            ligne.note_override    = motif
+            ligne.save(update_fields=['montant_unitaire', 'montant_total', 'note_override'])
+            facture.recalculer_total()
+            messages.success(request, f"Ligne mise à jour : {nouveau_pu} € / unité.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_ligne_toggle(request, pk, ligne_pk):
+    """Bascule facturable/non-facturable sur une ligne, recalcule le total."""
+    from .models import Facture, LigneFacture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    ligne   = get_object_or_404(LigneFacture, pk=ligne_pk, facture=facture)
+
+    if facture.statut not in ('brouillon',):
+        messages.error(request, "Seul un brouillon peut être modifié.")
+    else:
+        ligne.facturable = not ligne.facturable
+        ligne.save(update_fields=['facturable'])
+        facture.recalculer_total()
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_resa_reclasser(request, pk, resa_pk):
+    """Change le type d'une réservation (reguliere/exceptionnelle/congres) depuis une facture brouillon."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_facture_detail', pk=pk)
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'brouillon':
+        messages.error(request, "Le reclassement n'est possible que sur un brouillon.")
+        return redirect('administration:finance_facture_detail', pk=pk)
+
+    resa = get_object_or_404(Reservation, pk=resa_pk, loge=facture.loge)
+    nouveau_type = request.POST.get('type_reservation') or request.POST.get('nouveau_type')
+    types_valides = ('reguliere', 'exceptionnelle', 'congres')
+    if nouveau_type not in types_valides:
+        messages.error(request, "Type de réservation invalide.")
+        return redirect('administration:finance_facture_detail', pk=pk)
+
+    ancien_type = resa.type_reservation
+    resa.type_reservation = nouveau_type
+    resa.save(update_fields=['type_reservation'])
+
+    # Régénère les lignes du brouillon pour refléter le changement
+    from .models import LigneFacture
+    from decimal import Decimal as D
+
+    def _p(n):
+        return 's' if n > 1 else ''
+
+    params = Parametres.get_instance()
+    activite = _activite_loge_saison(facture.loge, facture.saison)
+
+    debut_params = params.tarif_date_effet
+    def _filtre_date(lst):
+        if not debut_params:
+            return lst
+        return [r for r in lst if r.date >= debut_params]
+
+    facture.lignes.all().delete()
+    ordre = 0
+    type_loge    = facture.loge.type_loge
+    effectif_reel = facture.loge.effectif_total
+    effectif_est  = effectif_reel == 0
+    effectif      = effectif_reel if effectif_reel > 0 else params.effectif_par_defaut
+    loge_reguliere = activite['nb_regulieres'] > 0
+
+    if loge_reguliere and facture.loge.membre_association:
+        tarif = params.tarif_membre_loge if type_loge == 'loge' else params.tarif_membre_hg
+        if tarif > 0:
+            type_l = 'cotisation_lb' if type_loge == 'loge' else 'cotisation_hg'
+            cat    = 'loge bleue' if type_loge == 'loge' else 'haut grade'
+            suffix = " — estimation, effectif à renseigner" if effectif_est else ""
+            if params.modele_cotisation == 'A':
+                nb_t = activite['nb_regulieres']
+                quantite = D(str(effectif)) * D(str(nb_t))
+                libelle = (f"Cotisation annuelle — {cat} "
+                           f"({effectif} mbr × {nb_t} tenue{_p(nb_t)} × {tarif} €){suffix}")
+                unite = 'mbr×tenue'
+            else:
+                quantite = D(str(effectif))
+                libelle = f"Cotisation annuelle — {cat} ({effectif} membre{_p(effectif)} × {tarif} €){suffix}"
+                unite = 'membre'
+            LigneFacture.objects.create(
+                facture=facture, type_ligne=type_l,
+                libelle=libelle,
+                quantite=quantite, unite=unite,
+                montant_unitaire=tarif,
+                montant_total=(tarif * quantite).quantize(D('0.01')),
+                ordre=ordre,
+                note_override="Effectif estimé (par défaut)" if effectif_est else "",
+            )
+            ordre += 1
+
+    t_exc_f     = _filtre_date(activite['tenues_exceptionnelles'])
+    t_congres_f = _filtre_date(activite['tenues_congres'])
+    exc_sans    = [r for r in t_exc_f if not r.besoin_agapes and r.sous_type != 'funebre']
+    exc_agapes  = [r for r in t_exc_f if r.besoin_agapes and r.sous_type != 'funebre']
+    exc_funebres = [r for r in t_exc_f if r.sous_type == 'funebre']
+
+    if exc_sans:
+        n = len(exc_sans)
+        LigneFacture.objects.create(
+            facture=facture, type_ligne='tenue_exc',
+            libelle=f"Tenue{_p(n)} exceptionnelle{_p(n)} sans agapes ({n} tenue{_p(n)})",
+            quantite=D(str(n)), unite='tenue',
+            montant_unitaire=params.tarif_exc_sans_agapes,
+            montant_total=(params.tarif_exc_sans_agapes * D(str(n))).quantize(D('0.01')),
+            ordre=ordre,
+        )
+        ordre += 1
+    if exc_agapes:
+        n = len(exc_agapes)
+        LigneFacture.objects.create(
+            facture=facture, type_ligne='tenue_exc',
+            libelle=f"Tenue{_p(n)} exceptionnelle{_p(n)} avec agapes ({n} tenue{_p(n)})",
+            quantite=D(str(n)), unite='tenue',
+            montant_unitaire=params.tarif_exc_avec_agapes,
+            montant_total=(params.tarif_exc_avec_agapes * D(str(n))).quantize(D('0.01')),
+            ordre=ordre,
+        )
+        ordre += 1
+    if exc_funebres:
+        n = len(exc_funebres)
+        LigneFacture.objects.create(
+            facture=facture, type_ligne='tenue_exc',
+            libelle=f"Tenue{_p(n)} funèbre{_p(n)} ({n})",
+            quantite=D(str(n)), unite='tenue',
+            montant_unitaire=params.tarif_funebre,
+            montant_total=(params.tarif_funebre * D(str(n))).quantize(D('0.01')),
+            ordre=ordre,
+        )
+        ordre += 1
+    if t_congres_f:
+        nb_jours = sum(
+            (r.date_fin - r.date).days if r.date_fin and r.date_fin > r.date else 1
+            for r in t_congres_f
+        )
+        n = len(t_congres_f)
+        LigneFacture.objects.create(
+            facture=facture, type_ligne='tenue_exc',
+            libelle=f"Congrès / session{_p(n)} ({n} événement{_p(n)}, {nb_jours} jour{_p(nb_jours)})",
+            quantite=D(str(nb_jours)), unite='jour',
+            montant_unitaire=params.tarif_congres_jour,
+            montant_total=(params.tarif_congres_jour * D(str(nb_jours))).quantize(D('0.01')),
+            ordre=ordre,
+        )
+
+    facture.recalculer_total()
+    messages.success(request, f"Tenue du {resa.date.strftime('%d/%m/%Y')} reclassée : {ancien_type} → {nouveau_type}. Facture recalculée.")
+    return redirect('administration:finance_facture_detail', pk=pk)
+
+
+@staff_required
+def finance_facture_notes(request, pk):
+    """Sauvegarde les notes libres d'une facture brouillon."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'brouillon':
+        messages.error(request, "Seul un brouillon peut être modifié.")
+    else:
+        facture.notes = request.POST.get('notes', '')
+        facture.save(update_fields=['notes', 'updated_at'])
+        messages.success(request, "Notes enregistrées.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_emettre(request, pk):
+    """Émet une facture brouillon : numérotation + date."""
+    from .models import Facture
+    from datetime import date as ddate
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'brouillon':
+        messages.error(request, "Cette facture n'est pas à l'état brouillon.")
+    else:
+        facture.numero        = _prochain_numero_facture(facture.saison)
+        facture.statut        = 'emise'
+        facture.date_emission = ddate.today()
+        facture.save(update_fields=['numero', 'statut', 'date_emission', 'updated_at'])
+        messages.success(request, f"Facture {facture.numero} émise.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_annuler(request, pk):
+    """Annule une facture émise (non payée)."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut == 'payee':
+        messages.error(request, "Une facture payée ne peut pas être annulée.")
+    elif facture.statut == 'annulee':
+        messages.error(request, "Cette facture est déjà annulée.")
+    else:
+        facture.statut = 'annulee'
+        facture.save(update_fields=['statut', 'updated_at'])
+        messages.success(request, f"Facture {facture.numero or pk} annulée.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_reactiver(request, pk):
+    """Remet une facture annulée en brouillon."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'annulee':
+        messages.error(request, "Seules les factures annulées peuvent être réactivées.")
+    else:
+        facture.statut = 'brouillon'
+        facture.save(update_fields=['statut', 'updated_at'])
+        messages.success(request, "Facture remise en brouillon. Vous pouvez la régénérer ou l'émettre.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_paiement(request, pk):
+    """Marque une facture comme payée."""
+    from .models import Facture
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture, pk=pk)
+    if facture.statut != 'emise':
+        messages.error(request, "Seule une facture émise peut être marquée payée.")
+    else:
+        facture.statut = 'payee'
+        facture.save(update_fields=['statut', 'updated_at'])
+        messages.success(request, f"Facture {facture.numero} marquée comme payée.")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+@staff_required
+def finance_facture_pdf(request, pk):
+    """Génère le PDF d'une facture."""
+    from .models import Facture
+    from io import BytesIO
+    from decimal import Decimal as D
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable)
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    facture = get_object_or_404(Facture.objects.select_related('loge').prefetch_related('lignes'), pk=pk)
+    params  = Parametres.get_instance()
+    lignes  = list(facture.lignes.filter(facturable=True).order_by('ordre', 'type_ligne'))
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=2*cm, rightMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+
+    BLEU  = colors.HexColor('#0F2137')
+    GRIS  = colors.HexColor('#6B7280')
+    LIGNE = colors.HexColor('#E5E7EB')
+    VERT  = colors.HexColor('#065F46')
+
+    styles = getSampleStyleSheet()
+    h1  = ParagraphStyle('h1',  fontName='Helvetica-Bold', fontSize=18, textColor=BLEU, spaceAfter=4)
+    h2  = ParagraphStyle('h2',  fontName='Helvetica-Bold', fontSize=11, textColor=BLEU, spaceBefore=10, spaceAfter=4)
+    sub = ParagraphStyle('sub', fontName='Helvetica',      fontSize=9,  textColor=GRIS, spaceAfter=2)
+    nor = ParagraphStyle('nor', fontName='Helvetica',      fontSize=9,  spaceAfter=3)
+    rig = ParagraphStyle('rig', fontName='Helvetica-Bold', fontSize=11, alignment=TA_RIGHT, textColor=BLEU)
+
+    story = []
+
+    # ── En-tête ───────────────────────────────────────────────────────────────
+    header_data = [[
+        Paragraph("<b>Association Kellermann</b><br/>Temple des loges réunies<br/>Strasbourg", styles['Normal']),
+        Paragraph(
+            f"<b>FACTURE</b><br/>"
+            f"N° {facture.numero or '(brouillon)'}<br/>"
+            f"Saison {facture.saison}–{facture.saison + 1}",
+            ParagraphStyle('fac', fontName='Helvetica-Bold', fontSize=13, alignment=TA_RIGHT, textColor=BLEU)
+        ),
+    ]]
+    header_tbl = Table(header_data, colWidths=[9*cm, 8*cm])
+    header_tbl.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+    ]))
+    story.append(header_tbl)
+    story.append(HRFlowable(width='100%', thickness=1, color=BLEU))
+    story.append(Spacer(1, 0.4*cm))
+
+    # ── Destinataire ──────────────────────────────────────────────────────────
+    loge = facture.loge
+    story.append(Paragraph("<b>Destinataire</b>", h2))
+    story.append(Paragraph(f"<b>{loge.nom}</b>", nor))
+    if loge.obedience:
+        story.append(Paragraph(str(loge.obedience), sub))
+    story.append(Paragraph(
+        f"Type : {'Loge bleue' if loge.type_loge == 'loge' else 'Haut grade'}",
+        sub))
+    story.append(Spacer(1, 0.3*cm))
+
+    # ── Dates ─────────────────────────────────────────────────────────────────
+    from datetime import date as ddate
+    em = facture.date_emission.strftime('%d/%m/%Y') if facture.date_emission else '—'
+    ec = facture.date_echeance.strftime('%d/%m/%Y') if facture.date_echeance else '—'
+    dates_data = [
+        ['Date d\'émission', em, 'Saison', f"{facture.saison}–{facture.saison + 1}"],
+        ['Échéance',        ec, 'Statut',  facture.get_statut_display()],
+    ]
+    dates_tbl = Table(dates_data, colWidths=[4*cm, 4.5*cm, 3*cm, 5.5*cm])
+    dates_tbl.setStyle(TableStyle([
+        ('FONTNAME',  (0,0), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME',  (2,0), (2,-1), 'Helvetica-Bold'),
+        ('FONTSIZE',  (0,0), (-1,-1), 9),
+        ('TEXTCOLOR', (0,0), (0,-1), GRIS),
+        ('TEXTCOLOR', (2,0), (2,-1), GRIS),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+    ]))
+    story.append(dates_tbl)
+    story.append(Spacer(1, 0.5*cm))
+
+    # ── Lignes ────────────────────────────────────────────────────────────────
+    story.append(Paragraph("Détail", h2))
+    tbl_data = [['Libellé', 'Qté', 'Unité', 'P.U. (€)', 'Total (€)']]
+    for l in lignes:
+        tbl_data.append([
+            l.libelle,
+            f"{l.quantite:g}",
+            l.unite,
+            f"{l.montant_unitaire:,.2f}",
+            f"{l.montant_total:,.2f}",
+        ])
+
+    col_w = [9*cm, 1.5*cm, 2*cm, 2.5*cm, 2*cm]
+    tbl = Table(tbl_data, colWidths=col_w, repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND',   (0,0), (-1,0),  BLEU),
+        ('TEXTCOLOR',    (0,0), (-1,0),  colors.white),
+        ('FONTNAME',     (0,0), (-1,0),  'Helvetica-Bold'),
+        ('FONTSIZE',     (0,0), (-1,-1), 9),
+        ('ALIGN',        (1,0), (-1,-1), 'RIGHT'),
+        ('ALIGN',        (0,0), (0,-1),  'LEFT'),
+        ('ROWBACKGROUNDS',(0,1),(-1,-1), [colors.white, colors.HexColor('#F9FAFB')]),
+        ('GRID',         (0,0), (-1,-1), 0.3, LIGNE),
+        ('TOPPADDING',   (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING',(0,0), (-1,-1), 5),
+    ]))
+    story.append(tbl)
+    story.append(Spacer(1, 0.4*cm))
+
+    # ── Total ─────────────────────────────────────────────────────────────────
+    total_data = [['', '', '', 'TOTAL TTC', f"{facture.total_ht:,.2f} €"]]
+    total_tbl  = Table(total_data, colWidths=col_w)
+    total_tbl.setStyle(TableStyle([
+        ('FONTNAME',     (0,0), (-1,-1), 'Helvetica-Bold'),
+        ('FONTSIZE',     (0,0), (-1,-1), 11),
+        ('TEXTCOLOR',    (3,0), (-1,-1), BLEU),
+        ('ALIGN',        (3,0), (-1,-1), 'RIGHT'),
+        ('TOPPADDING',   (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING',(0,0), (-1,-1), 6),
+        ('LINEABOVE',    (3,0), (-1,0),  1, BLEU),
+    ]))
+    story.append(total_tbl)
+
+    # ── Notes ─────────────────────────────────────────────────────────────────
+    if facture.notes:
+        story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph("<b>Notes</b>", h2))
+        story.append(Paragraph(facture.notes.replace('\n', '<br/>'), nor))
+
+    # ── Pied de page ──────────────────────────────────────────────────────────
+    story.append(Spacer(1, 1*cm))
+    story.append(HRFlowable(width='100%', thickness=0.5, color=LIGNE))
+    story.append(Spacer(1, 0.2*cm))
+    story.append(Paragraph(
+        "Association Kellermann · Strasbourg · SIRET XXXXX · "
+        "Tout règlement par virement à IBAN FRXX XXXX XXXX XXXX XXXX XXXX XXX",
+        ParagraphStyle('footer', fontName='Helvetica', fontSize=7.5, textColor=GRIS, alignment=TA_CENTER)
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    num = facture.numero or f'brouillon-{facture.pk}'
+    fname = f"Facture_{num}_{loge.nom.replace(' ','_')}.pdf"
+    resp = HttpResponse(buf.read(), content_type='application/pdf')
+    resp['Content-Disposition'] = f'inline; filename="{fname}"'
+    return resp
+
+
+@staff_required
+def finance_facture_envoyer(request, pk):
+    """Envoie la facture PDF par email au contact de la loge."""
+    from .models import Facture
+    from io import BytesIO
+
+    guard = _finance_guard(request)
+    if guard:
+        return guard
+
+    if request.method != 'POST':
+        return redirect('administration:finance_saison')
+
+    facture = get_object_or_404(Facture.objects.select_related('loge').prefetch_related('lignes'), pk=pk)
+    if facture.statut == 'brouillon':
+        messages.error(request, "Veuillez émettre la facture avant de l'envoyer.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+    loge   = facture.loge
+    params = Parametres.get_instance()
+
+    # Générer le PDF en mémoire via la vue existante (appel interne)
+    pdf_request = request
+    pdf_response = finance_facture_pdf(pdf_request, pk)
+    pdf_bytes = pdf_response.content
+
+    destinataire = loge.email
+    if not destinataire:
+        messages.error(request, f"Aucune adresse email pour {loge.nom}.")
+        from django.urls import reverse
+        return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+    sujet = f"Facture {facture.numero} — Saison {facture.saison}–{facture.saison + 1} — Association Kellermann"
+    corps = (
+        f"Bonjour,\n\n"
+        f"Veuillez trouver ci-joint la facture {facture.numero} "
+        f"pour la saison {facture.saison}–{facture.saison + 1}.\n\n"
+        f"Montant total : {facture.total_ht} €\n\n"
+        f"Cordialement,\n"
+        f"Association Kellermann"
+    )
+    fname = f"Facture_{facture.numero}_{loge.nom.replace(' ','_')}.pdf"
+
+    try:
+        from django.core.mail import EmailMessage as DjEmailMessage
+        from temple_project.apps.administration.email_utils import get_email_connection, _load_params
+        p = _load_params()
+        from_email = (p.email_from if p and p.email_from else settings.DEFAULT_FROM_EMAIL)
+        if from_email and '<' not in from_email:
+            from_email = f"Kellermann Réservations <{from_email}>"
+        conn = get_email_connection()
+        mail = DjEmailMessage(
+            subject=sujet, body=corps,
+            from_email=from_email, to=[destinataire],
+            connection=conn,
+        )
+        mail.attach(fname, pdf_bytes, 'application/pdf')
+        mail.send()
+        messages.success(request, f"Facture envoyée à {destinataire}.")
+    except Exception as exc:
+        messages.error(request, f"Erreur d'envoi : {exc}")
+
+    from django.urls import reverse
+    return redirect(reverse('administration:finance_facture_detail', args=[pk]))
+
+
+# ── Module AG : Schémas de tarification & Décisions d'AG ──────────────────────
+
+def _parse_decimal(val, default=None):
+    from decimal import Decimal, InvalidOperation
+    try:
+        return Decimal(str(val).replace(',', '.'))
+    except (InvalidOperation, TypeError, ValueError):
+        return default
+
+
+@staff_required
+def ag_decisions_liste(request):
+    """Liste toutes les décisions d'AG, triées par saison décroissante."""
+    decisions = DecisionAG.objects.select_related('schema', 'cree_par').order_by('-saison', '-date_ag')
+    return render(request, 'administration/ag_decisions_liste.html', {
+        'decisions': decisions,
+        'saison_courante': _annee_saison_courante(),
+    })
+
+
+@staff_required
+def ag_decision_form(request, pk=None):
+    """Crée ou modifie une décision d'AG + son schéma de tarification inline."""
+    from decimal import Decimal as D
+    decision = get_object_or_404(DecisionAG, pk=pk) if pk else None
+
+    if request.method == 'POST':
+        saison  = int(request.POST.get('saison') or _annee_saison_courante())
+        date_ag_raw = request.POST.get('date_ag', '')
+        libelle = request.POST.get('libelle_resolution', '').strip()
+        notes   = request.POST.get('notes', '').strip()
+
+        from datetime import date as ddate
+        try:
+            date_ag = ddate.fromisoformat(date_ag_raw)
+        except (ValueError, TypeError):
+            date_ag = ddate.today()
+
+        schema_pk = request.POST.get('schema_pk')
+        if schema_pk:
+            schema = get_object_or_404(SchemaTarification, pk=schema_pk)
+        else:
+            schema = SchemaTarification()
+
+        schema.nom    = request.POST.get('schema_nom', '').strip() or f"AG {date_ag.strftime('%d/%m/%Y')}"
+        schema.saison = saison
+        schema.mode   = request.POST.get('schema_mode', 'membre')
+        schema.statut = 'simule'
+
+        for champ in [
+            'tarif_membre_loge', 'tarif_membre_hg',
+            'tarif_tenue_lb', 'tarif_tenue_hg',
+            'tarif_exc_sans_agapes', 'tarif_exc_avec_agapes',
+            'tarif_congres_jour', 'tarif_funebre',
+        ]:
+            v = _parse_decimal(request.POST.get(champ, '0'), D('0'))
+            setattr(schema, champ, v)
+
+        schema.tarif_minimum      = _parse_decimal(request.POST.get('tarif_minimum', ''))
+        schema.plafond_hausse_pct = _parse_decimal(request.POST.get('plafond_hausse_pct', ''))
+        schema.notes   = request.POST.get('schema_notes', '')
+        schema.cree_par = request.user
+        schema.save()
+
+        if decision is None:
+            decision = DecisionAG()
+        decision.saison             = saison
+        decision.date_ag            = date_ag
+        decision.libelle_resolution = libelle
+        decision.notes              = notes
+        decision.schema             = schema
+        decision.cree_par           = request.user
+
+        for champ, _ in POSTES_BUDGET:
+            v = _parse_decimal(request.POST.get(champ, '0'), D('0'))
+            setattr(decision, champ, v)
+
+        if 'pv' in request.FILES:
+            decision.pv = request.FILES['pv']
+
+        decision.save()
+        messages.success(request, f"Décision enregistrée : {decision.libelle_resolution[:60]}")
+        from django.urls import reverse as _rev
+        return redirect(_rev('administration:ag_decision_detail', args=[decision.pk]))
+
+    params = Parametres.get_instance()
+    if decision and decision.schema:
+        schema_init = decision.schema
+    else:
+        schema_init = SchemaTarification(
+            saison=_annee_saison_courante(),
+            tarif_membre_loge=params.tarif_membre_loge,
+            tarif_membre_hg=params.tarif_membre_hg,
+            tarif_exc_sans_agapes=params.tarif_exc_sans_agapes,
+            tarif_exc_avec_agapes=params.tarif_exc_avec_agapes,
+            tarif_congres_jour=params.tarif_congres_jour,
+            tarif_funebre=params.tarif_funebre,
+        )
+
+    budget_rows = [
+        {
+            'champ': champ,
+            'label': label,
+            'valeur': getattr(decision, champ, 0) if decision else 0,
+        }
+        for champ, label in POSTES_BUDGET
+    ]
+
+    return render(request, 'administration/ag_decision_form.html', {
+        'decision':        decision,
+        'schema':          schema_init,
+        'postes':          POSTES_BUDGET,
+        'budget_rows':     budget_rows,
+        'saison_courante': _annee_saison_courante(),
+    })
+
+
+@staff_required
+def ag_decision_detail(request, pk):
+    """Affiche le détail d'une décision d'AG avec budget ventilé."""
+    decision     = get_object_or_404(DecisionAG.objects.select_related('schema', 'cree_par'), pk=pk)
+    params       = Parametres.get_instance()
+    schema_actif = params.schema_actif
+
+    budget_rows = [
+        {'champ': champ, 'label': label, 'valeur': getattr(decision, champ, 0)}
+        for champ, label in POSTES_BUDGET
+    ]
+
+    return render(request, 'administration/ag_decision_detail.html', {
+        'decision':     decision,
+        'postes':       POSTES_BUDGET,
+        'budget_rows':  budget_rows,
+        'schema_actif': schema_actif,
+    })
+
+
+@staff_required
+def ag_decision_voter(request, pk):
+    """Passe une décision brouillon à l'état 'votée en AG'."""
+    if request.method != 'POST':
+        return redirect('administration:ag_decisions_liste')
+
+    decision = get_object_or_404(DecisionAG, pk=pk, statut='brouillon')
+    decision.statut = 'votee'
+    decision.save(update_fields=['statut', 'modifie_le'])
+    if decision.schema:
+        decision.schema.statut = 'vote'
+        decision.schema.save(update_fields=['statut', 'modifie_le'])
+    messages.success(request, "Décision marquée comme votée en AG.")
+    from django.urls import reverse as _rev
+    return redirect(_rev('administration:ag_decision_detail', args=[pk]))
+
+
+@staff_required
+def ag_activer_schema(request, pk):
+    """Active le schéma d'une décision votée dans les Paramètres (applique les tarifs)."""
+    if request.method != 'POST':
+        return redirect('administration:ag_decisions_liste')
+
+    decision = get_object_or_404(DecisionAG, pk=pk, statut='votee')
+    if not decision.schema:
+        messages.error(request, "Cette décision n'a pas de schéma de tarification attaché.")
+        from django.urls import reverse as _rev
+        return redirect(_rev('administration:ag_decision_detail', args=[pk]))
+
+    params = Parametres.get_instance()
+    params.schema_actif          = decision.schema
+    params.tarif_membre_loge     = decision.schema.tarif_membre_loge
+    params.tarif_membre_hg       = decision.schema.tarif_membre_hg
+    params.tarif_exc_sans_agapes = decision.schema.tarif_exc_sans_agapes
+    params.tarif_exc_avec_agapes = decision.schema.tarif_exc_avec_agapes
+    params.tarif_congres_jour    = decision.schema.tarif_congres_jour
+    params.tarif_funebre         = decision.schema.tarif_funebre
+    if decision.schema.date_effet:
+        params.tarif_date_effet = decision.schema.date_effet
+    params.save()
+    messages.success(
+        request,
+        f"Schéma « {decision.schema.nom} » activé — tarifs mis à jour dans les Paramètres."
+    )
+    from django.urls import reverse as _rev
+    return redirect(_rev('administration:ag_decision_detail', args=[pk]))

@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Décision AG — {{ decision.date_ag|date:"d/m/Y" }}{% endblock %}
+{% block content %}
+
+{% load humanize %}
+
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1" style="color:#0F2137;">{{ decision.libelle_resolution|truncatechars:80 }}</h1>
+    <p class="text-muted small mb-0">
+      AG du {{ decision.date_ag|date:"d F Y" }} · Saison {{ decision.saison }}-{{ decision.saison|add:1 }}
+    </p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if decision.statut == 'brouillon' %}
+    <a href="{% url 'administration:ag_decision_modifier' decision.pk %}" class="btn btn-sm btn-outline-secondary">✏ Modifier</a>
+    <form method="post" action="{% url 'administration:ag_decision_voter' decision.pk %}"
+          onsubmit="return confirm('Marquer cette décision comme votée en AG ? Cette action ne peut pas être annulée.')">
+      {% csrf_token %}
+      <button class="btn btn-sm btn-success">✓ Marquer comme votée</button>
+    </form>
+    {% endif %}
+    {% if decision.statut == 'votee' and decision.schema %}
+    <form method="post" action="{% url 'administration:ag_activer_schema' decision.pk %}"
+          onsubmit="return confirm('Activer ce schéma ? Les tarifs des Paramètres seront mis à jour immédiatement.')">
+      {% csrf_token %}
+      <button class="btn btn-sm {% if schema_actif and schema_actif.pk == decision.schema.pk %}btn-outline-success{% else %}btn-warning{% endif %}">
+        {% if schema_actif and schema_actif.pk == decision.schema.pk %}
+          ✓ Schéma actif
+        {% else %}
+          ⚡ Appliquer ce schéma
+        {% endif %}
+      </button>
+    </form>
+    {% endif %}
+    <a href="{% url 'administration:ag_decisions_liste' %}" class="btn btn-sm btn-outline-secondary">← Retour</a>
+  </div>
+</div>
+
+{% if messages %}{% for msg in messages %}
+<div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %} py-2">{{ msg }}</div>
+{% endfor %}{% endif %}
+
+{% if decision.statut == 'brouillon' %}
+<div class="alert alert-warning py-2 mb-3" style="font-size:13px;">
+  Cette décision est en <strong>brouillon</strong>. Cliquez « Marquer comme votée » après l'AG pour la cristalliser.
+</div>
+{% endif %}
+
+<div class="row g-4">
+
+  {# ── Colonne gauche : infos + budget ── #}
+  <div class="col-md-5">
+
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header" style="background:#0F2137;color:#fff;font-size:13px;font-weight:600;">Informations</div>
+      <div class="card-body p-3" style="font-size:13px;">
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Statut</span>
+          {% if decision.statut == 'votee' %}
+          <span class="badge" style="background:#D1FAE5;color:#065F46;">✓ Votée en AG</span>
+          {% else %}
+          <span class="badge" style="background:#FEF3C7;color:#92400E;">Brouillon</span>
+          {% endif %}
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Date AG</span>
+          <span>{{ decision.date_ag|date:"d F Y" }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Saison</span>
+          <span>{{ decision.saison }}-{{ decision.saison|add:1 }}</span>
+        </div>
+        {% if decision.pv %}
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">PV</span>
+          <a href="{{ decision.pv.url }}" target="_blank" class="text-primary small">📄 Télécharger</a>
+        </div>
+        {% endif %}
+        {% if decision.notes %}
+        <div class="mt-2 pt-2" style="border-top:1px solid #eee;">
+          <div class="text-muted small mb-1">Notes</div>
+          <div style="white-space:pre-line;font-size:12px;">{{ decision.notes }}</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center"
+           style="background:#0F2137;color:#fff;font-size:13px;font-weight:600;">
+        <span>Budget voté</span>
+        <span style="font-variant-numeric:tabular-nums;">{{ decision.budget_total|floatformat:2 }} €</span>
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0" style="font-size:12px;">
+          <tbody>
+            {% for row in budget_rows %}
+            <tr {% if row.valeur == 0 %}style="opacity:.5;"{% endif %}>
+              <td class="ps-3 text-muted">{{ row.label }}</td>
+              <td class="text-end pe-3 fw-semibold" style="font-variant-numeric:tabular-nums;">
+                {% if row.valeur %}{{ row.valeur|floatformat:2 }} €{% else %}—{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr style="border-top:2px solid #0F2137;background:#EBF1FA;">
+              <td class="ps-3 fw-bold" style="color:#0F2137;">TOTAL</td>
+              <td class="text-end pe-3 fw-bold" style="color:#0F2137;font-variant-numeric:tabular-nums;">
+                {{ decision.budget_total|floatformat:2 }} €
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  {# ── Colonne droite : schéma de tarification ── #}
+  <div class="col-md-7">
+    {% if decision.schema %}
+    {% with s=decision.schema %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center"
+           style="background:#C8A84B;color:#fff;font-size:13px;font-weight:600;">
+        <span>Schéma de tarification</span>
+        {% if schema_actif and schema_actif.pk == s.pk %}
+        <span class="badge" style="background:rgba(255,255,255,.25);">Actif</span>
+        {% endif %}
+      </div>
+      <div class="card-body p-3" style="font-size:13px;">
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Nom</span>
+          <span class="fw-semibold">{{ s.nom }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Mode</span>
+          <span>{{ s.get_mode_display }}</span>
+        </div>
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Statut</span>
+          <span>{% if s.statut == 'vote' %}<span style="color:#065F46;font-weight:600;">Voté en AG</span>{% else %}Simulé{% endif %}</span>
+        </div>
+        {% if s.date_effet %}
+        <div class="d-flex justify-content-between mb-2">
+          <span class="text-muted">Date d'effet</span>
+          <span>{{ s.date_effet|date:"d/m/Y" }}</span>
+        </div>
+        {% endif %}
+        <hr class="my-2">
+        <div class="fw-semibold mb-2">Cotisations annuelles</div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <div class="p-2 rounded" style="background:#EBF1FA;">
+              <div class="text-muted" style="font-size:11px;">Loge bleue</div>
+              <div class="fw-bold" style="font-variant-numeric:tabular-nums;">{{ s.tarif_membre_loge|floatformat:2 }} € / mbr</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 rounded" style="background:#EBF1FA;">
+              <div class="text-muted" style="font-size:11px;">Haut grade</div>
+              <div class="fw-bold" style="font-variant-numeric:tabular-nums;">{{ s.tarif_membre_hg|floatformat:2 }} € / mbr</div>
+            </div>
+          </div>
+        </div>
+        {% if s.mode == 'hybride' %}
+        <div class="fw-semibold mb-2">Part par tenue</div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <div class="p-2 rounded" style="background:#FEF9EC;">
+              <div class="text-muted" style="font-size:11px;">Loge bleue</div>
+              <div class="fw-bold" style="font-variant-numeric:tabular-nums;">{{ s.tarif_tenue_lb|floatformat:2 }} € / tenue</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-2 rounded" style="background:#FEF9EC;">
+              <div class="text-muted" style="font-size:11px;">Haut grade</div>
+              <div class="fw-bold" style="font-variant-numeric:tabular-nums;">{{ s.tarif_tenue_hg|floatformat:2 }} € / tenue</div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        <div class="fw-semibold mb-2">Tenues exceptionnelles</div>
+        <div class="row g-2">
+          <div class="col-6">
+            <div class="text-muted" style="font-size:11px;">Sans agapes</div>
+            <div class="fw-semibold" style="font-variant-numeric:tabular-nums;">{{ s.tarif_exc_sans_agapes|floatformat:2 }} €</div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted" style="font-size:11px;">Avec agapes</div>
+            <div class="fw-semibold" style="font-variant-numeric:tabular-nums;">{{ s.tarif_exc_avec_agapes|floatformat:2 }} €</div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted" style="font-size:11px;">Congrès (par jour)</div>
+            <div class="fw-semibold" style="font-variant-numeric:tabular-nums;">{{ s.tarif_congres_jour|floatformat:2 }} €</div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted" style="font-size:11px;">Funèbre</div>
+            <div class="fw-semibold" style="font-variant-numeric:tabular-nums;">{{ s.tarif_funebre|floatformat:2 }} €</div>
+          </div>
+        </div>
+        {% if s.tarif_minimum or s.plafond_hausse_pct %}
+        <hr class="my-2">
+        {% if s.tarif_minimum %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted small">Minimum cotisation</span>
+          <span class="small">{{ s.tarif_minimum|floatformat:2 }} €</span>
+        </div>
+        {% endif %}
+        {% if s.plafond_hausse_pct %}
+        <div class="d-flex justify-content-between mb-1">
+          <span class="text-muted small">Plafond de hausse</span>
+          <span class="small">{{ s.plafond_hausse_pct|floatformat:1 }} %</span>
+        </div>
+        {% endif %}
+        {% endif %}
+        {% if s.notes %}
+        <hr class="my-2">
+        <div class="text-muted small" style="white-space:pre-line;">{{ s.notes }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endwith %}
+    {% else %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body text-muted text-center py-4">
+        Aucun schéma de tarification attaché à cette décision.
+        {% if decision.statut == 'brouillon' %}
+        <br><a href="{% url 'administration:ag_decision_modifier' decision.pk %}" class="btn btn-sm btn-outline-primary mt-2">Ajouter un schéma</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endblock %}

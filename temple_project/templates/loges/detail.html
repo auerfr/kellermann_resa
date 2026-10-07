@@ -33,6 +33,7 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
       <span>·</span>
       <span>{% if loge.type_loge == 'haut_grade' %}Haut grade{% else %}Loge bleue{% endif %}</span>
       {% if user.is_staff and loge.statut == 'a_reconfirmer' %}<span>·</span><span class="badge badge-soft-warning">À reconfirmer</span>{% endif %}
+      {% if user.is_staff and not loge.membre_association %}<span>·</span><span class="badge" style="background:#FEF3C7;color:#B45309;">Occasionnelle</span>{% endif %}
       {% if user.is_staff and loge.email %}<span>·</span><a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>{% endif %}
     </div>
   </div>
@@ -42,16 +43,35 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
     <a href="{% url 'loges:modifier' loge.pk %}" class="btn btn-outline-primary btn-sm">✏️ Modifier</a>
     <a href="{% url 'loges:supprimer' loge.pk %}" class="btn btn-outline-danger btn-sm">🗑 Désactiver</a>
     {% endif %}
-    {% if portail_token %}
-    <a href="/reservations/portail/{{ portail_token }}/"
-       class="btn btn-outline-secondary btn-sm" target="_blank">
-      👁 Voir le portail loge
-    </a>
+    {% if user.is_staff %}
+      {% if portail_token %}
+      <a href="/reservations/portail/{{ portail_token }}/"
+         class="btn btn-outline-secondary btn-sm" target="_blank">
+        👁 Voir le portail loge
+      </a>
+      {% endif %}
+      {# Admin : renvoyer le lien (avec ou sans portail existant) #}
+      <form method="post" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="renvoyer_lien_portail">
+        <button type="submit" class="btn btn-outline-secondary btn-sm"
+                onclick="return confirm('Renvoyer le lien portail à cette loge ?')"
+                {% if not loge.email %}disabled title="Pas d'email renseigné"{% endif %}>
+          📧 Renvoyer le lien (admin)
+        </button>
+      </form>
     {% else %}
-    <button type="button" class="btn btn-outline-secondary btn-sm" disabled
-            data-bs-toggle="tooltip" title="Aucun accès portail actif">
-      👁 Voir le portail loge
-    </button>
+      {# Membre non-admin : demander l'envoi du lien sur l'email de contact de la loge #}
+      {% if loge.email %}
+      <form method="post" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="envoyer_lien_portail">
+        <button type="submit" class="btn btn-outline-secondary btn-sm"
+                onclick="return confirm('Envoyer le lien portail sur l\'adresse email de cette loge ?')">
+          📧 Recevoir le lien portail
+        </button>
+      </form>
+      {% endif %}
     {% endif %}
     <a href="{% url 'loges:liste' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
   </div>
@@ -163,7 +183,11 @@ document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
                   {% else %}<span class="badge bg-light text-dark">{{ e.type_resa }}</span>{% endif %}
                   {% if e.sous_type %}<span class="badge" style="background:#0ea5e9;color:#fff;" title="Nature de la tenue">{{ e.sous_type }}</span>{% endif %}
                 {% elif e.type_code == 'agapes' %}
-                  <span class="badge" style="background:#92400E;color:white;">Agapes</span>
+                  {% if e.type_reunion == 'banquet' %}
+                  <span class="badge" style="background:#92400E;color:white;">Banquet</span>
+                  {% else %}
+                  <span class="badge bg-secondary">{{ e.type_reunion_display }}</span>
+                  {% endif %}
                 {% elif e.type_code == 'cabinet_reflexion' %}
                   <span class="badge bg-secondary">Cabinet</span>
                 {% else %}
