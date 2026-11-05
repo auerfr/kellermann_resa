@@ -4164,7 +4164,6 @@ def tester_smtp(request):
 
 # ── Gestion des salles ────────────────────────────────────────────────────────
 
-@login_required
 def planning_mensuel_global(request):
     """Planning mensuel toutes salles sur une seule feuille A4 imprimable."""
     from calendar import monthrange
@@ -4237,7 +4236,6 @@ def planning_mensuel_global(request):
     })
 
 
-@login_required
 def planning_mensuel_salle(request, pk):
     """Planning mensuel imprimable d'une salle (format A4, à coller sur la porte)."""
     from calendar import monthrange
