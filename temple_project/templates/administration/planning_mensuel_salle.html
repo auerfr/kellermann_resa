@@ -1,287 +1,195 @@
-{% load static %}<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Planning {{ salle.nom }} — {{ mois_nom }} {{ annee }}</title>
 <style>
-/* ─── Variables ─────────────────────────────────────────────────── */
 :root {
   --noir: #111;
-  --gris-fort: #374151;
-  --gris-moyen: #6b7280;
-  --gris-leger: #e5e7eb;
-  --gris-tres-leger: #f9fafb;
   --accent: #1e3a5f;
-  --rouge: #b91c1c;
-  --bg: #fff;
+  --gris: #6b7280;
+  --gris-leger: #e5e7eb;
+  --bg-date: #f0f4ff;
+  --bordure: #c7d2e8;
   --font: "Helvetica Neue", Arial, sans-serif;
 }
-
-/* ─── Reset écran ───────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: 15px; }
-body {
-  font-family: var(--font);
-  color: var(--noir);
-  background: var(--bg);
-  padding: 1.5rem;
-  max-width: 820px;
-  margin: 0 auto;
-}
+body { font-family: var(--font); color: var(--noir); background: #fff; padding: 1.4rem; max-width: 680px; margin: 0 auto; }
 a { color: var(--accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
 
-/* ─── Barre de navigation (masquée à l'impression) ─────────────── */
+/* ── Navigation écran ─────────────────────────────────────────── */
 .nav-bar {
-  display: flex;
-  align-items: center;
-  gap: .75rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  margin-bottom: 1.2rem; padding-bottom: .9rem;
   border-bottom: 1px solid var(--gris-leger);
 }
-.nav-bar .btn {
-  display: inline-flex; align-items: center; gap: .3rem;
-  padding: .35rem .75rem;
-  border: 1px solid var(--gris-leger);
-  border-radius: 6px;
-  font-size: .82rem;
-  background: var(--gris-tres-leger);
-  color: var(--gris-fort);
-  cursor: pointer;
-  text-decoration: none;
+.nav-bar a, .nav-bar button {
+  padding: .3rem .7rem; border: 1px solid var(--gris-leger);
+  border-radius: 5px; font-size: .8rem; background: #f9fafb;
+  color: var(--accent); cursor: pointer; text-decoration: none;
 }
-.nav-bar .btn:hover { background: var(--gris-leger); }
-.nav-bar .btn-primary {
-  background: var(--accent); color: #fff; border-color: var(--accent);
-}
-.nav-bar .btn-primary:hover { background: #15304e; }
+.nav-bar a:hover, .nav-bar button:hover { background: var(--gris-leger); }
+.nav-bar .btn-print { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
 .nav-bar .sep { flex: 1; }
 
 .salle-nav {
-  display: flex; gap: .5rem; flex-wrap: wrap;
-  margin-bottom: 1rem;
+  display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1rem;
 }
 .salle-nav a {
-  padding: .3rem .7rem;
-  border: 1px solid var(--gris-leger);
-  border-radius: 20px;
-  font-size: .8rem;
-  color: var(--gris-fort);
+  padding: .25rem .65rem; border: 1px solid var(--gris-leger);
+  border-radius: 20px; font-size: .78rem; color: var(--gris);
 }
-.salle-nav a.active {
-  background: var(--accent); color: #fff; border-color: var(--accent);
-}
+.salle-nav a.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* ─── En-tête du document ───────────────────────────────────────── */
+/* ── En-tête document ─────────────────────────────────────────── */
 .doc-header {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
+  margin-bottom: 1.2rem; padding-bottom: .8rem;
   border-bottom: 3px solid var(--accent);
 }
-.doc-header h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: .02em;
-  margin-bottom: .2rem;
-}
-.doc-header .periode {
-  font-size: 1.15rem;
-  font-weight: 600;
-  color: var(--gris-fort);
-}
-.doc-header .meta {
-  margin-top: .4rem;
-  font-size: .78rem;
-  color: var(--gris-moyen);
-}
+.doc-header .etiquette { font-size: .72rem; color: var(--gris); margin-bottom: .15rem; }
+.doc-header h1 { font-size: 1.6rem; font-weight: 800; color: var(--accent); }
+.doc-header .periode { font-size: 1.1rem; font-weight: 600; color: var(--gris); margin-top: .1rem; }
+.doc-header .meta { font-size: .75rem; color: var(--gris); margin-top: .3rem; }
 
-/* ─── Tableau des jours ─────────────────────────────────────────── */
-.jours-list { margin-top: .5rem; }
+/* ── Liste des jours occupés ─────────────────────────────────── */
+.jours-list { border: 1px solid var(--bordure); border-radius: 6px; overflow: hidden; }
 
-.jour-row {
-  display: grid;
-  grid-template-columns: 100px 1fr;
-  gap: 0;
+.ligne-jour {
+  display: flex;
   border-bottom: 1px solid var(--gris-leger);
-  min-height: 2rem;
 }
-.jour-row:first-child { border-top: 1px solid var(--gris-leger); }
-.jour-row.has-resa { background: #fff; }
-.jour-row.no-resa  { background: var(--gris-tres-leger); }
-.jour-row.weekend  { background: #f0f4ff; }
+.ligne-jour:last-child { border-bottom: none; }
 
-.jour-label {
-  padding: .55rem .6rem .55rem .4rem;
-  font-size: .82rem;
-  font-weight: 700;
-  color: var(--gris-fort);
-  border-right: 2px solid var(--gris-leger);
-  line-height: 1.2;
+.date-cell {
+  min-width: 60px; padding: .55rem .5rem;
+  background: var(--bg-date);
+  border-right: 2px solid var(--bordure);
+  text-align: center; flex-shrink: 0;
 }
-.jour-label .num { font-size: 1.2rem; color: var(--accent); font-weight: 800; }
-.jour-label .nom { font-size: .72rem; color: var(--gris-moyen); font-weight: 500; }
-.jour-row.weekend .jour-label .num { color: var(--gris-moyen); }
+.date-cell .num { font-size: 1.3rem; font-weight: 800; color: var(--accent); line-height: 1; }
+.date-cell .dow { font-size: .68rem; color: var(--gris); font-weight: 600; text-transform: uppercase; margin-top: .1rem; }
 
-.jour-content {
-  padding: .4rem .6rem;
-  display: flex;
-  flex-direction: column;
-  gap: .3rem;
-}
-.libre-label {
-  font-size: .78rem;
-  color: var(--gris-moyen);
-  align-self: center;
-  font-style: italic;
+.resas-cell { padding: .45rem .6rem; flex: 1; display: flex; flex-direction: column; gap: .35rem; }
+
+.resa-item { padding: .3rem .4rem; border-left: 3px solid var(--accent); background: #f8faff; border-radius: 0 3px 3px 0; }
+.resa-horaire { font-size: .82rem; font-weight: 700; color: var(--accent); }
+.resa-objet   { font-size: .9rem; font-weight: 600; margin-top: .05rem; }
+.resa-qui     { font-size: .78rem; color: var(--gris); margin-top: .05rem; }
+.resa-nb      { font-size: .72rem; color: var(--gris); }
+
+/* ── Message aucune réservation ─────────────────────────────── */
+.rien { padding: 1.5rem; text-align: center; color: var(--gris); font-style: italic; font-size: .88rem; }
+
+/* ── Note pied ─────────────────────────────────────────────── */
+.note-libre {
+  margin-top: .6rem; padding: .4rem .7rem;
+  background: var(--bg-date); border-radius: 4px;
+  font-size: .78rem; color: var(--gris);
 }
 
-/* ─── Bloc réservation ──────────────────────────────────────────── */
-.resa-block {
-  display: flex;
-  align-items: flex-start;
-  gap: .6rem;
-  padding: .3rem .4rem;
-  border-left: 3px solid var(--accent);
-  background: #f0f7ff;
-  border-radius: 0 4px 4px 0;
-}
-.resa-block .horaire {
-  font-size: .82rem;
-  font-weight: 700;
-  color: var(--accent);
-  white-space: nowrap;
-  min-width: 90px;
-}
-.resa-block .details { flex: 1; }
-.resa-block .objet {
-  font-size: .88rem;
-  font-weight: 600;
-  color: var(--noir);
-  margin-bottom: .05rem;
-}
-.resa-block .who {
-  font-size: .78rem;
-  color: var(--gris-fort);
-}
-.resa-block .who strong { color: var(--accent); }
-.resa-block .participants {
-  font-size: .75rem;
-  color: var(--gris-moyen);
-}
-
-/* ─── Pied de page ──────────────────────────────────────────────── */
+/* ── Pied de page ──────────────────────────────────────────── */
 .doc-footer {
-  margin-top: 1.5rem;
-  padding-top: .75rem;
+  margin-top: 1.2rem; padding-top: .6rem;
   border-top: 1px solid var(--gris-leger);
-  font-size: .75rem;
-  color: var(--gris-moyen);
-  display: flex;
-  justify-content: space-between;
+  font-size: .72rem; color: var(--gris);
+  display: flex; justify-content: space-between;
 }
 
-/* ─── Impression A4 ─────────────────────────────────────────────── */
+/* ── Impression A4 ─────────────────────────────────────────── */
 @media print {
-  @page {
-    size: A4 portrait;
-    margin: 1.4cm 1.4cm 2cm 1.4cm;
-  }
+  @page { size: A4 portrait; margin: 1.3cm 1.3cm 1.8cm 1.3cm; }
 
-  html { font-size: 12px; }
+  html { font-size: 10px; }
   body { padding: 0; max-width: none; }
 
-  .nav-bar,
-  .salle-nav,
-  .no-print { display: none !important; }
+  .nav-bar, .salle-nav { display: none !important; }
 
-  .doc-header { margin-bottom: 1rem; padding-bottom: .6rem; }
-  .doc-header h1 { font-size: 1.2rem; }
-  .doc-header .periode { font-size: 1rem; }
+  .doc-header { margin-bottom: .7rem; padding-bottom: .5rem; border-bottom-width: 2px; }
+  .doc-header h1 { font-size: 1.3rem; }
+  .doc-header .periode { font-size: .9rem; }
 
-  .jour-row { break-inside: avoid; }
+  .date-cell { min-width: 48px; padding: .35rem .3rem; }
+  .date-cell .num { font-size: 1.05rem; }
+  .resas-cell { padding: .3rem .45rem; gap: .25rem; }
+  .resa-item { padding: .2rem .35rem; }
+  .resa-horaire { font-size: .72rem; }
+  .resa-objet   { font-size: .8rem; }
+  .resa-qui     { font-size: .68rem; }
 
-  .resa-block { background: #f5f5f5 !important; }
+  .note-libre { font-size: .68rem; }
 
-  .doc-footer { position: fixed; bottom: 0; left: 0; right: 0;
-                font-size: .65rem; border-top: 1px solid #ccc;
-                padding: .3cm 1.4cm 0; background: #fff; }
+  .ligne-jour { break-inside: avoid; }
+
+  .doc-footer {
+    position: fixed; bottom: 0; left: 0; right: 0; background: #fff;
+    padding: .2cm 1.3cm 0; font-size: .62rem; border-top: 1px solid #ccc;
+  }
 }
 </style>
 </head>
 <body>
 
-{# ── Barre de navigation (masquée à l'impression) ───────────────── #}
-<nav class="nav-bar no-print">
-  <a href="{% url 'administration:planning_mensuel_salle' pk=salle.pk %}?annee={{ prev_annee }}&mois={{ prev_mois }}" class="btn">← {{ prev_mois }}/{{ prev_annee }}</a>
+{# ── Navigation écran ──────────────────────────────────────────── #}
+<nav class="nav-bar">
+  <a href="?annee={{ prev_annee }}&mois={{ prev_mois }}">← {{ prev_mois }}/{{ prev_annee }}</a>
   <strong>{{ mois_nom }} {{ annee }}</strong>
-  <a href="{% url 'administration:planning_mensuel_salle' pk=salle.pk %}?annee={{ next_annee }}&mois={{ next_mois }}" class="btn">{{ next_mois }}/{{ next_annee }} →</a>
+  <a href="?annee={{ next_annee }}&mois={{ next_mois }}">{{ next_mois }}/{{ next_annee }} →</a>
   <span class="sep"></span>
-  <a href="{% url 'administration:planning_mensuel_salle' pk=salle.pk %}?annee={{ today.year }}&mois={{ today.month }}" class="btn">Ce mois-ci</a>
-  <a href="#" onclick="window.print(); return false;" class="btn btn-primary">🖨️ Imprimer</a>
-  <a href="{% url 'administration:salles_liste' %}" class="btn">← Salles</a>
+  <a href="{% url 'administration:planning_mensuel_global' %}?annee={{ annee }}&mois={{ mois }}">📋 Toutes les salles</a>
+  <a href="?annee={{ today.year }}&mois={{ today.month }}">Ce mois-ci</a>
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer</button>
+  <a href="{% url 'administration:salles_liste' %}">← Salles</a>
 </nav>
 
-{# ── Sélecteur de salle ──────────────────────────────────────────── #}
-<div class="salle-nav no-print">
+<div class="salle-nav">
   {% for s in salles_actives %}
   <a href="{% url 'administration:planning_mensuel_salle' pk=s.pk %}?annee={{ annee }}&mois={{ mois }}"
      class="{% if s.pk == salle.pk %}active{% endif %}">{{ s.nom }}</a>
   {% endfor %}
 </div>
 
-{# ── En-tête du document ─────────────────────────────────────────── #}
+{# ── En-tête document ──────────────────────────────────────────── #}
 <header class="doc-header">
-  <div class="meta">Temple Kellermann — Salle de réunion</div>
+  <div class="etiquette">Temple Kellermann — Salle de réunion</div>
   <h1>{{ salle.nom }}</h1>
-  <div class="periode">{{ mois_nom }} {{ annee }}</div>
+  <div class="periode">{{ mois_nom }} {{ annee }}{% if nb_resas %} · {{ nb_resas }} réservation{{ nb_resas|pluralize }}{% endif %}</div>
   <div class="meta">Capacité : {{ salle.capacite }} personnes{% if salle.description %} · {{ salle.description }}{% endif %}</div>
 </header>
 
-{# ── Liste des jours ─────────────────────────────────────────────── #}
+{# ── Jours occupés ─────────────────────────────────────────────── #}
+{% if jours_occupes %}
 <div class="jours-list">
-{% for j in jours %}
-{% with wd=j.date.weekday %}
-<div class="jour-row {% if j.resas %}has-resa{% else %}no-resa{% endif %} {% if wd >= 5 %}weekend{% endif %}">
-
-  <div class="jour-label">
-    <div class="num">{{ j.date|date:"j" }}</div>
-    <div class="nom">{{ j.date|date:"l"|slice:":3"|upper }}</div>
-  </div>
-
-  <div class="jour-content">
-    {% if j.resas %}
-      {% for r in j.resas %}
-      <div class="resa-block">
-        <div class="horaire">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</div>
-        <div class="details">
-          <div class="objet">{{ r.objet }}</div>
-          <div class="who">
-            <strong>{% if r.loge %}{{ r.loge.nom }}{% elif r.organisation %}{{ r.organisation }}{% else %}{{ r.nom_demandeur }}{% endif %}</strong>
-            {% if r.loge and r.nom_demandeur %} · {{ r.nom_demandeur }}{% endif %}
-          </div>
-          {% if r.nombre_participants > 1 %}
-          <div class="participants">{{ r.nombre_participants }} participant{{ r.nombre_participants|pluralize }}</div>
-          {% endif %}
-        </div>
+  {% for dt, resas in jours_occupes %}
+  <div class="ligne-jour">
+    <div class="date-cell">
+      <div class="num">{{ dt|date:"j" }}</div>
+      <div class="dow">{{ dt|date:"D"|slice:":3"|upper }}</div>
+    </div>
+    <div class="resas-cell">
+      {% for r in resas %}
+      <div class="resa-item">
+        <div class="resa-horaire">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</div>
+        <div class="resa-objet">{{ r.objet }}</div>
+        <div class="resa-qui">{% if r.loge %}{{ r.loge.nom }}{% elif r.organisation %}{{ r.organisation }}{% else %}{{ r.nom_demandeur }}{% endif %}{% if r.nom_demandeur and r.loge %} · {{ r.nom_demandeur }}{% endif %}</div>
+        {% if r.nombre_participants > 1 %}<div class="resa-nb">{{ r.nombre_participants }} participants</div>{% endif %}
       </div>
       {% endfor %}
-    {% else %}
-      <span class="libre-label">libre</span>
-    {% endif %}
+    </div>
   </div>
-
+  {% endfor %}
 </div>
-{% endwith %}
-{% endfor %}
+<p class="note-libre">Tous les autres jours du mois ({{ nb_jours }} jours) : salle libre.</p>
+{% else %}
+<div class="jours-list">
+  <div class="rien">Aucune réservation validée pour {{ mois_nom }} {{ annee }}.</div>
 </div>
+{% endif %}
 
-{# ── Pied de page ────────────────────────────────────────────────── #}
+{# ── Pied de page ──────────────────────────────────────────────── #}
 <footer class="doc-footer">
-  <span>Salle {{ salle.nom }} — {{ mois_nom }} {{ annee }}</span>
+  <span>{{ salle.nom }} — {{ mois_nom }} {{ annee }}</span>
   <span>Imprimé le {% now "j F Y" %} — Toute réservation doit être validée par l'administration.</span>
 </footer>
 

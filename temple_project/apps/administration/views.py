@@ -4164,7 +4164,65 @@ def tester_smtp(request):
 
 # ── Gestion des salles ────────────────────────────────────────────────────────
 
-@staff_required
+@login_required
+def planning_mensuel_global(request):
+    """Planning mensuel toutes salles sur une seule feuille A4 imprimable."""
+    from calendar import monthrange
+    from collections import defaultdict
+
+    today = date.today()
+    try:
+        annee = int(request.GET.get('annee') or today.year)
+        mois  = int(request.GET.get('mois')  or today.month)
+        if not (1 <= mois <= 12) or not (2010 <= annee <= 2060):
+            raise ValueError
+    except (ValueError, TypeError):
+        annee, mois = today.year, today.month
+
+    salles = SalleReunion.objects.filter(actif=True).order_by('nom')
+    nb_jours = monthrange(annee, mois)[1]
+
+    salles_data = []
+    for salle in salles:
+        resas = (ReservationSalle.objects
+                 .filter(salle=salle, statut='validee',
+                         date__year=annee, date__month=mois)
+                 .select_related('loge')
+                 .order_by('date', 'heure_debut'))
+        par_jour = defaultdict(list)
+        for r in resas:
+            par_jour[r.date].append(r)
+        # Jours occupés seulement (pour la compacité)
+        jours_occupes = sorted(par_jour.items())
+        salles_data.append({
+            'salle': salle,
+            'jours_occupes': jours_occupes,
+            'nb_resas': sum(len(v) for v in par_jour.values()),
+        })
+
+    if mois == 1:
+        prev_a, prev_m = annee - 1, 12
+    else:
+        prev_a, prev_m = annee, mois - 1
+    if mois == 12:
+        next_a, next_m = annee + 1, 1
+    else:
+        next_a, next_m = annee, mois + 1
+
+    MOIS_FR = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+               'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+
+    return render(request, 'administration/planning_mensuel_global.html', {
+        'salles_data': salles_data,
+        'annee': annee, 'mois': mois, 'mois_nom': MOIS_FR[mois],
+        'nb_jours': nb_jours,
+        'prev_a': prev_a, 'prev_m': prev_m,
+        'next_a': next_a, 'next_m': next_m,
+        'today': today,
+    })
+
+
+@login_required
 def planning_mensuel_salle(request, pk):
     """Planning mensuel imprimable d'une salle (format A4, à coller sur la porte)."""
     from calendar import monthrange
@@ -4193,9 +4251,9 @@ def planning_mensuel_salle(request, pk):
     for r in resas:
         par_jour[r.date].append(r)
 
+    # Jours occupés uniquement (pour tenir sur une page A4)
+    jours_occupes = sorted(par_jour.items())
     nb_jours = monthrange(annee, mois)[1]
-    jours = [{'date': date(annee, mois, d), 'resas': par_jour.get(date(annee, mois, d), [])}
-             for d in range(1, nb_jours + 1)]
 
     if mois == 1:
         prev_annee, prev_mois = annee - 1, 12
@@ -4212,10 +4270,10 @@ def planning_mensuel_salle(request, pk):
     return render(request, 'administration/planning_mensuel_salle.html', {
         'salle': salle,
         'salles_actives': salles_actives,
-        'annee': annee,
-        'mois': mois,
-        'mois_nom': MOIS_FR[mois],
-        'jours': jours,
+        'annee': annee, 'mois': mois, 'mois_nom': MOIS_FR[mois],
+        'jours_occupes': jours_occupes,
+        'nb_jours': nb_jours,
+        'nb_resas': sum(len(v) for _, v in jours_occupes),
         'prev_annee': prev_annee, 'prev_mois': prev_mois,
         'next_annee': next_annee, 'next_mois': next_mois,
         'today': today,
