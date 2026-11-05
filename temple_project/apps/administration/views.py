@@ -4181,38 +4181,37 @@ def planning_mensuel_global(request):
     salles = SalleReunion.objects.filter(actif=True).order_by('nom')
     nb_jours = monthrange(annee, mois)[1]
 
-    def _salle_data(salle):
+    def _groupe_tableau(type_salle, titre):
+        """Construit un tableau (lignes=dates, colonnes=salles) pour un groupe."""
+        groupe_salles = list(salles.filter(type_salle=type_salle))
+        if not groupe_salles:
+            return None
+        # Récupérer toutes les réservations du groupe en une seule requête
         resas = (ReservationSalle.objects
-                 .filter(salle=salle, statut='validee',
+                 .filter(salle__in=groupe_salles, statut='validee',
                          date__year=annee, date__month=mois)
-                 .select_related('loge')
+                 .select_related('loge', 'salle')
                  .order_by('date', 'heure_debut'))
-        par_jour = defaultdict(list)
+        # Indexer par (date, salle_pk)
+        par_date_salle = defaultdict(lambda: defaultdict(list))
         for r in resas:
-            par_jour[r.date].append(r)
-        return {
-            'salle': salle,
-            'jours_occupes': sorted(par_jour.items()),
-            'nb_resas': sum(len(v) for v in par_jour.values()),
-        }
+            par_date_salle[r.date][r.salle_id].append(r)
+        # Dates occupées (au moins une salle ce jour-là)
+        dates_occupees = sorted(par_date_salle.keys())
+        # Construire les lignes du tableau
+        lignes = []
+        for dt in dates_occupees:
+            cells = [par_date_salle[dt].get(s.pk, []) for s in groupe_salles]
+            lignes.append({'date': dt, 'cells': cells})
+        nb_resas = sum(len(v) for d in par_date_salle.values() for v in d.values())
+        return {'titre': titre, 'salles': groupe_salles, 'lignes': lignes, 'nb_resas': nb_resas}
 
-    # 3 groupes affichés séparément sur la feuille
-    groupes = [
-        {
-            'titre': 'Salles de réunion',
-            'salles_data': [_salle_data(s) for s in salles.filter(type_salle='reunion')],
-        },
-        {
-            'titre': 'Cabinets de réflexion',
-            'salles_data': [_salle_data(s) for s in salles.filter(type_salle='cabinet_reflexion')],
-        },
-        {
-            'titre': 'Agapes',
-            'salles_data': [_salle_data(s) for s in salles.filter(type_salle='agapes')],
-        },
+    groupes_def = [
+        ('reunion',          'Salles de réunion'),
+        ('cabinet_reflexion','Cabinets de réflexion'),
+        ('agapes',           'Agapes'),
     ]
-    # Supprimer les groupes vides
-    groupes = [g for g in groupes if g['salles_data']]
+    groupes = [g for g in (_groupe_tableau(t, ti) for t, ti in groupes_def) if g]
 
     if mois == 1:
         prev_a, prev_m = annee - 1, 12
