@@ -43,31 +43,45 @@ body {
 
 /* ── En-tête document ──────────────────────────────────────────── */
 .doc-header {
-  margin-bottom: 1rem;
-  padding-bottom: .7rem;
+  margin-bottom: .8rem;
+  padding-bottom: .6rem;
   border-bottom: 3px solid var(--accent);
   display: flex; justify-content: space-between; align-items: flex-end;
 }
-.doc-header h1 { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
-.doc-header .periode { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
-.doc-header .meta { font-size: .72rem; color: var(--gris); margin-top: .15rem; }
+.doc-header h1 { font-size: 1rem; font-weight: 700; color: var(--accent); }
+.doc-header .periode { font-size: 1.25rem; font-weight: 800; color: var(--accent); }
+.doc-header .meta { font-size: .7rem; color: var(--gris); margin-top: .1rem; }
 
-/* ── Grille 3 colonnes ─────────────────────────────────────────── */
-.grille {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: .9rem;
-  align-items: start;
+/* ── Groupe de salles ──────────────────────────────────────────── */
+.groupe {
+  margin-bottom: .8rem;
+}
+.groupe-titre {
+  font-size: .75rem;
+  font-weight: 700;
+  color: var(--gris);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: .35rem;
+  padding-bottom: .2rem;
+  border-bottom: 1px solid var(--bordure);
 }
 
+/* ── Grille adaptée par groupe ─────────────────────────────────── */
+.grille {
+  display: grid;
+  gap: .6rem;
+  align-items: start;
+}
+/* colonne-count défini inline via style= */
+
 /* ── Colonne salle ─────────────────────────────────────────────── */
-.col-salle {}
 .salle-titre {
   background: var(--accent);
   color: #fff;
-  font-size: .82rem;
+  font-size: .75rem;
   font-weight: 700;
-  padding: .35rem .55rem;
+  padding: .3rem .45rem;
   letter-spacing: .03em;
   text-transform: uppercase;
   border-radius: 4px 4px 0 0;
@@ -83,75 +97,78 @@ body {
 .ligne-jour {
   border-bottom: 1px solid var(--gris-leger);
   display: flex;
-  gap: 0;
 }
 .ligne-jour:last-child { border-bottom: none; }
 
 .date-cell {
-  min-width: 46px;
-  padding: .35rem .4rem;
+  min-width: 40px;
+  padding: .3rem .35rem;
   background: var(--bg-salle);
   border-right: 1px solid var(--bordure);
   text-align: center;
   flex-shrink: 0;
 }
-.date-cell .num { font-size: .95rem; font-weight: 800; color: var(--accent); line-height: 1; }
-.date-cell .dow { font-size: .62rem; color: var(--gris); font-weight: 500; text-transform: uppercase; }
+.date-cell .num { font-size: .88rem; font-weight: 800; color: var(--accent); line-height: 1; }
+.date-cell .dow { font-size: .58rem; color: var(--gris); font-weight: 500; text-transform: uppercase; }
 
-.resas-cell { padding: .3rem .4rem; flex: 1; display: flex; flex-direction: column; gap: .25rem; }
+.resas-cell { padding: .28rem .35rem; flex: 1; display: flex; flex-direction: column; gap: .2rem; }
 
 .resa-item {}
-.resa-horaire { font-size: .72rem; font-weight: 700; color: var(--accent); }
-.resa-objet   { font-size: .78rem; font-weight: 600; color: var(--noir); line-height: 1.25; }
-.resa-qui     { font-size: .72rem; color: var(--gris); line-height: 1.2; }
+.resa-horaire { font-size: .66rem; font-weight: 700; color: var(--accent); }
+.resa-objet   { font-size: .72rem; font-weight: 600; color: var(--noir); line-height: 1.2; }
+.resa-qui     { font-size: .66rem; color: var(--gris); line-height: 1.1; }
 
 .rien {
-  padding: .5rem .6rem;
-  font-size: .75rem; color: var(--gris); font-style: italic; text-align: center;
+  padding: .4rem .5rem;
+  font-size: .68rem; color: var(--gris); font-style: italic; text-align: center;
 }
 
 /* ── Pied de page ──────────────────────────────────────────────── */
 .doc-footer {
-  margin-top: 1rem; padding-top: .6rem;
+  margin-top: .8rem; padding-top: .5rem;
   border-top: 1px solid var(--gris-leger);
-  font-size: .7rem; color: var(--gris);
+  font-size: .68rem; color: var(--gris);
   display: flex; justify-content: space-between;
 }
 
-/* ── Impression A4 ─────────────────────────────────────────────── */
+/* ── Impression A4 portrait ─────────────────────────────────────── */
 @media print {
-  @page { size: A4 portrait; margin: 1.2cm 1.2cm 1.8cm 1.2cm; }
+  @page { size: A4 portrait; margin: 1cm 1.1cm 1.6cm 1.1cm; }
 
-  html { font-size: 9.5px; }
+  html { font-size: 8.5px; }
   body { padding: 0; }
 
   .nav-bar { display: none !important; }
 
-  .doc-header { margin-bottom: .6rem; padding-bottom: .4rem; border-bottom-width: 2px; }
-  .doc-header h1 { font-size: .9rem; }
-  .doc-header .periode { font-size: 1.05rem; }
+  .doc-header { margin-bottom: .5rem; padding-bottom: .3rem; border-bottom-width: 2px; }
+  .doc-header h1 { font-size: .82rem; }
+  .doc-header .periode { font-size: .95rem; }
 
-  .grille { gap: .5rem; }
+  .groupe { margin-bottom: .6rem; }
+  .groupe-titre { font-size: .64rem; margin-bottom: .25rem; }
+  .grille { gap: .4rem; }
 
-  .salle-titre { font-size: .72rem; padding: .2rem .4rem; }
+  .salle-titre { font-size: .64rem; padding: .18rem .35rem; }
 
-  .date-cell { min-width: 38px; padding: .2rem .25rem; }
-  .date-cell .num { font-size: .82rem; }
+  .date-cell { min-width: 32px; padding: .18rem .2rem; }
+  .date-cell .num { font-size: .75rem; }
+  .date-cell .dow { font-size: .5rem; }
 
-  .resas-cell { padding: .18rem .3rem; gap: .15rem; }
-  .resa-horaire { font-size: .62rem; }
-  .resa-objet   { font-size: .68rem; }
-  .resa-qui     { font-size: .62rem; }
-  .rien { font-size: .62rem; padding: .3rem; }
+  .resas-cell { padding: .15rem .25rem; gap: .12rem; }
+  .resa-horaire { font-size: .56rem; }
+  .resa-objet   { font-size: .62rem; }
+  .resa-qui     { font-size: .55rem; }
+  .rien { font-size: .55rem; padding: .25rem; }
 
   .doc-footer {
     position: fixed; bottom: 0; left: 0; right: 0;
-    background: #fff; padding: .2cm 1.2cm 0;
-    font-size: .6rem; border-top: 1px solid #ccc;
+    background: #fff; padding: .2cm 1.1cm 0;
+    font-size: .56rem; border-top: 1px solid #ccc;
   }
 
   .col-salle { break-inside: avoid; }
   .ligne-jour { break-inside: avoid; }
+  .groupe { break-inside: avoid; }
 }
 </style>
 </head>
@@ -164,7 +181,7 @@ body {
   <a href="?annee={{ next_a }}&mois={{ next_m }}">{{ next_m }}/{{ next_a }} →</a>
   <span class="sep"></span>
   <a href="?annee={{ today.year }}&mois={{ today.month }}">Ce mois-ci</a>
-  <button class="btn-print" onclick="window.print()">🖨️ Imprimer (1 page A4)</button>
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer (A4 portrait)</button>
   <a href="{% url 'administration:salles_liste' %}">← Salles</a>
 </nav>
 
@@ -177,37 +194,42 @@ body {
   <div class="periode">{{ mois_nom }} {{ annee }}</div>
 </header>
 
-{# ── Grille des salles ─────────────────────────────────────────── #}
-<div class="grille">
-{% for sd in salles_data %}
-<div class="col-salle">
-  <div class="salle-titre">{{ sd.salle.nom }}{% if sd.nb_resas %} · {{ sd.nb_resas }} résa{% endif %}</div>
-  <div class="salle-corps">
-    {% if sd.jours_occupes %}
-      {% for dt, resas in sd.jours_occupes %}
-      <div class="ligne-jour">
-        <div class="date-cell">
-          <div class="num">{{ dt|date:"j" }}</div>
-          <div class="dow">{{ dt|date:"D"|slice:":3"|upper }}</div>
-        </div>
-        <div class="resas-cell">
-          {% for r in resas %}
-          <div class="resa-item">
-            <div class="resa-horaire">{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</div>
-            <div class="resa-objet">{{ r.objet }}</div>
-            <div class="resa-qui">{% if r.loge %}{{ r.loge.nom }}{% elif r.organisation %}{{ r.organisation }}{% else %}{{ r.nom_demandeur }}{% endif %}</div>
+{# ── Groupes de salles ─────────────────────────────────────────── #}
+{% for groupe in groupes %}
+<div class="groupe">
+  <div class="groupe-titre">{{ groupe.titre }}</div>
+  <div class="grille" style="grid-template-columns: repeat({{ groupe.salles_data|length }}, 1fr);">
+    {% for sd in groupe.salles_data %}
+    <div class="col-salle">
+      <div class="salle-titre">{{ sd.salle.nom }}{% if sd.nb_resas %} · {{ sd.nb_resas }} résa{% endif %}</div>
+      <div class="salle-corps">
+        {% if sd.jours_occupes %}
+          {% for dt, resas in sd.jours_occupes %}
+          <div class="ligne-jour">
+            <div class="date-cell">
+              <div class="num">{{ dt|date:"j" }}</div>
+              <div class="dow">{{ dt|date:"D"|slice:":3"|upper }}</div>
+            </div>
+            <div class="resas-cell">
+              {% for r in resas %}
+              <div class="resa-item">
+                <div class="resa-horaire">{{ r.heure_debut|time:"H\hi" }}–{{ r.heure_fin|time:"H\hi" }}</div>
+                <div class="resa-objet">{{ r.objet }}</div>
+                <div class="resa-qui">{% if r.loge %}{{ r.loge.nom }}{% elif r.organisation %}{{ r.organisation }}{% else %}{{ r.nom_demandeur }}{% endif %}</div>
+              </div>
+              {% endfor %}
+            </div>
           </div>
           {% endfor %}
-        </div>
+        {% else %}
+          <div class="rien">Libre ce mois-ci</div>
+        {% endif %}
       </div>
-      {% endfor %}
-    {% else %}
-      <div class="rien">Aucune réservation ce mois-ci</div>
-    {% endif %}
+    </div>
+    {% endfor %}
   </div>
 </div>
 {% endfor %}
-</div>
 
 {# ── Pied de page ──────────────────────────────────────────────── #}
 <footer class="doc-footer">

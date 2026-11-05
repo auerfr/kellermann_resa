@@ -4182,8 +4182,7 @@ def planning_mensuel_global(request):
     salles = SalleReunion.objects.filter(actif=True).order_by('nom')
     nb_jours = monthrange(annee, mois)[1]
 
-    salles_data = []
-    for salle in salles:
+    def _salle_data(salle):
         resas = (ReservationSalle.objects
                  .filter(salle=salle, statut='validee',
                          date__year=annee, date__month=mois)
@@ -4192,13 +4191,29 @@ def planning_mensuel_global(request):
         par_jour = defaultdict(list)
         for r in resas:
             par_jour[r.date].append(r)
-        # Jours occupés seulement (pour la compacité)
-        jours_occupes = sorted(par_jour.items())
-        salles_data.append({
+        return {
             'salle': salle,
-            'jours_occupes': jours_occupes,
+            'jours_occupes': sorted(par_jour.items()),
             'nb_resas': sum(len(v) for v in par_jour.values()),
-        })
+        }
+
+    # 3 groupes affichés séparément sur la feuille
+    groupes = [
+        {
+            'titre': 'Salles de réunion',
+            'salles_data': [_salle_data(s) for s in salles.filter(type_salle='reunion')],
+        },
+        {
+            'titre': 'Cabinets de réflexion',
+            'salles_data': [_salle_data(s) for s in salles.filter(type_salle='cabinet_reflexion')],
+        },
+        {
+            'titre': 'Agapes',
+            'salles_data': [_salle_data(s) for s in salles.filter(type_salle='agapes')],
+        },
+    ]
+    # Supprimer les groupes vides
+    groupes = [g for g in groupes if g['salles_data']]
 
     if mois == 1:
         prev_a, prev_m = annee - 1, 12
@@ -4213,7 +4228,7 @@ def planning_mensuel_global(request):
                'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
 
     return render(request, 'administration/planning_mensuel_global.html', {
-        'salles_data': salles_data,
+        'groupes': groupes,
         'annee': annee, 'mois': mois, 'mois_nom': MOIS_FR[mois],
         'nb_jours': nb_jours,
         'prev_a': prev_a, 'prev_m': prev_m,
