@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Demande de modification{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+
+    <div class="mb-4">
+      <a href="{% url 'reservations:portail_loge' token=token %}" class="text-muted small">← Retour au portail</a>
+      <h1 class="h3 mt-2 mb-1" style="color:#0F2137;">✏️ Demande de modification</h1>
+      <p class="text-muted small">Cette demande sera soumise à validation par l'administration.</p>
+    </div>
+
+    {% if messages %}{% for msg in messages %}
+    <div class="alert alert-{% if msg.tags == 'error' %}danger{% else %}{{ msg.tags }}{% endif %}">{{ msg }}</div>
+    {% endfor %}{% endif %}
+
+    {# Résumé réservation #}
+    <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #C8A84B!important;">
+      <div class="card-body py-3 px-4">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#C8A84B;" class="mb-2">
+          Réservation concernée
+        </div>
+        <div class="fw-bold" style="color:#0F2137;font-size:1.05rem;">{{ resa.date|date:"l d F Y" }}</div>
+        <div class="text-muted small mt-1">
+          {{ resa.heure_debut|time:"H:i" }} – {{ resa.heure_fin|time:"H:i" }}
+          {% if resa_type == 'temple' %} &middot; {{ resa.temple }}{% else %} &middot; {{ resa.salle }}{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="resa_pk" value="{{ resa.pk }}">
+      <input type="hidden" name="resa_type" value="{{ resa_type }}">
+
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">
+          Type de demande
+        </div>
+        <div class="card-body">
+
+          <div class="mb-4">
+            <div class="d-flex gap-3 flex-wrap">
+              <div class="form-check form-check-inline p-0">
+                <input class="d-none" type="radio" name="type_demande" id="td_annulation" value="annulation" checked>
+                <label class="btn btn-outline-danger" for="td_annulation" style="cursor:pointer;font-size:13px;">
+                  🗑️ Annulation
+                </label>
+              </div>
+              <div class="form-check form-check-inline p-0">
+                <input class="d-none" type="radio" name="type_demande" id="td_deplacement" value="deplacement">
+                <label class="btn btn-outline-primary" for="td_deplacement" style="cursor:pointer;font-size:13px;">
+                  📅 Déplacement de date
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div id="bloc-nouvelle-date" style="display:none;" class="mb-4"
+               data-heure-debut="{{ resa.heure_debut|time:'H:i' }}"
+               data-heure-fin="{{ resa.heure_fin|time:'H:i' }}"
+               {% if resa_type == 'temple' %}data-temple="{{ resa.temple_id }}"{% else %}data-salle="{{ resa.salle_id }}"{% endif %}>
+            <label class="form-label fw-semibold">Nouvelle date souhaitée <span class="text-danger">*</span></label>
+            <input type="date" id="nouvelle-date-input" name="nouvelle_date" class="form-control" style="max-width:220px;"
+                   min="{{ today|date:'Y-m-d' }}">
+            <div id="dispo-feedback" class="mt-2" style="font-size:13px;display:none;"></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Motif <span class="text-muted fw-normal">(recommandé)</span></label>
+            <textarea name="motif" class="form-control" rows="3"
+                      placeholder="Expliquez brièvement la raison de cette demande…"></textarea>
+          </div>
+
+          <div class="alert alert-warning py-2" style="font-size:13px;">
+            ⚠️ Les demandes ne peuvent concerner que des <strong>réservations futures</strong>.
+            Toute demande est soumise à validation — la réservation reste active jusqu'à décision de l'administration.
+          </div>
+
+        </div>
+      </div>
+
+      <div class="d-flex gap-3">
+        <button type="submit" class="btn fw-semibold px-4"
+                style="background:#0F2137;color:#C8A84B;border:none;">
+          Envoyer la demande →
+        </button>
+        <a href="{% url 'reservations:portail_loge' token=token %}" class="btn btn-outline-secondary">Annuler</a>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<script>
+const radios   = document.querySelectorAll('input[name="type_demande"]');
+const blocDate = document.getElementById('bloc-nouvelle-date');
+const dateInput = document.getElementById('nouvelle-date-input');
+const feedback  = document.getElementById('dispo-feedback');
+
+// Show/hide date block + radio visual feedback
+radios.forEach(r => {
+  r.addEventListener('change', () => {
+    blocDate.style.display = r.value === 'deplacement' ? 'block' : 'none';
+    radios.forEach(rb => rb.nextElementSibling.classList.remove('active'));
+    r.nextElementSibling.classList.add('active');
+    if (r.value !== 'deplacement') { feedback.style.display = 'none'; }
+  });
+  if (r.checked) r.dispatchEvent(new Event('change'));
+});
+
+// Real-time availability check
+let checkTimer = null;
+dateInput.addEventListener('change', function () {
+  const date = this.value;
+  if (!date) { feedback.style.display = 'none'; return; }
+
+  feedback.style.display = 'block';
+  feedback.innerHTML = '<span style="color:#64748B;">⏳ Vérification en cours…</span>';
+
+  const bd = blocDate.dataset;
+  const params = new URLSearchParams({
+    date,
+    heure_debut: bd.heureDebut,
+    heure_fin:   bd.heureFin,
+  });
+  if (bd.temple) params.append('temple', bd.temple);
+  if (bd.salle)  params.append('salle',  bd.salle);
+
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(() => {
+    fetch('{% url "reservations:api_verifier_conflit" %}?' + params)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.conflit) {
+          feedback.innerHTML = '<span style="color:#16A34A;font-weight:600;">✓ Créneau disponible</span>';
+        } else if (data.niveau === 'avertissement') {
+          feedback.innerHTML = '<span style="color:#D97706;font-weight:600;">⚠ ' + data.message + '</span>';
+        } else {
+          let html = '<span style="color:#DC2626;font-weight:600;">✗ ' + data.message + '</span>';
+          if (data.prochaine_dispo) {
+            html += '<br><span style="color:#64748B;font-size:12px;">Prochaine disponibilité à ce créneau : <strong>' + data.prochaine_dispo + '</strong></span>';
+          }
+          feedback.innerHTML = html;
+        }
+      })
+      .catch(() => {
+        feedback.innerHTML = '<span style="color:#64748B;">Impossible de vérifier la disponibilité.</span>';
+      });
+  }, 300);
+});
+</script>
+{% endblock %}

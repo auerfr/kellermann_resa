@@ -540,6 +540,9 @@ class MessageContact(models.Model):
     ]
     nom          = models.CharField(max_length=200)
     email        = models.EmailField()
+    loge         = models.ForeignKey(
+        Loge, null=True, blank=True, on_delete=models.SET_NULL, related_name='messages_contact'
+    )
     sujet        = models.CharField(max_length=200, blank=True)
     message      = models.TextField()
     created_at   = models.DateTimeField(auto_now_add=True)
@@ -547,6 +550,7 @@ class MessageContact(models.Model):
     reponse      = models.TextField(blank=True)
     date_reponse = models.DateTimeField(null=True, blank=True)
     repondu_par  = models.CharField(max_length=150, blank=True)
+    emis         = models.BooleanField(default=False, help_text="Message émis par l'admin (sortant)")
 
     class Meta:
         verbose_name = "Message de contact"
@@ -559,3 +563,59 @@ class MessageContact(models.Model):
     @property
     def repondu(self):
         return bool(self.reponse)
+
+
+class AccessLog(models.Model):
+    """Trace les accès au site : connexions calendrier (visiteur) et accès portails loges."""
+    TYPE_CHOICES = [
+        ('portail',    'Accès portail loge'),
+        ('calendrier', 'Connexion calendrier'),
+    ]
+    type       = models.CharField(max_length=20, choices=TYPE_CHOICES, db_index=True)
+    loge       = models.ForeignKey(
+        Loge, null=True, blank=True, on_delete=models.SET_NULL, related_name='access_logs'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Log d'accès"
+        verbose_name_plural = "Logs d'accès"
+        ordering = ['-created_at']
+
+
+class DemandeModificationReservation(models.Model):
+    TYPE_CHOICES = [
+        ('annulation',  'Annulation'),
+        ('deplacement', 'Déplacement de date'),
+    ]
+    STATUT_CHOICES = [
+        ('attente',  'En attente'),
+        ('acceptee', 'Acceptée'),
+        ('refusee',  'Refusée'),
+    ]
+    reservation       = models.ForeignKey(
+        'Reservation', null=True, blank=True,
+        on_delete=models.CASCADE, related_name='demandes_modif'
+    )
+    reservation_salle = models.ForeignKey(
+        'ReservationSalle', null=True, blank=True,
+        on_delete=models.CASCADE, related_name='demandes_modif'
+    )
+    loge              = models.ForeignKey(
+        Loge, null=True, blank=True, on_delete=models.SET_NULL, related_name='demandes_modif'
+    )
+    type_demande      = models.CharField(max_length=15, choices=TYPE_CHOICES)
+    nouvelle_date     = models.DateField(null=True, blank=True)
+    motif             = models.TextField(blank=True)
+    statut            = models.CharField(max_length=10, choices=STATUT_CHOICES, default='attente')
+    commentaire_admin = models.TextField(blank=True)
+    created_at        = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "Demande de modification"
+        verbose_name_plural = "Demandes de modification"
+
+    def __str__(self):
+        resa = self.reservation or self.reservation_salle
+        return f"{self.get_type_demande_display()} — {resa} [{self.get_statut_display()}]"

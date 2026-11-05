@@ -31,6 +31,13 @@
     <div class="stx-h mb-2">{% if m.repondu %}Répondre à nouveau{% else %}Répondre{% endif %}</div>
     <form method="post">
       {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label small fw-semibold mb-1">Destinataire</label>
+        <input type="email" name="email_dest" class="form-control form-control-sm font-monospace"
+               value="{{ m.email }}" required
+               title="Corrigez l'adresse si nécessaire avant d'envoyer">
+        <div class="form-text" style="font-size:11px;">Modifiez l'adresse si elle contient une faute de frappe.</div>
+      </div>
       <textarea name="reponse" class="form-control mb-3" rows="6" placeholder="Votre réponse à {{ m.nom }}…" required></textarea>
       <div class="d-flex gap-2 flex-wrap align-items-center">
         <button type="submit" name="action" value="repondre" class="btn btn-sm fw-semibold" style="background:#0F2137;color:#C8A84B;border:none;padding:7px 16px;border-radius:9px;">✉️ Envoyer la réponse</button>
@@ -41,7 +48,7 @@
         {% endif %}
         <button type="submit" name="action" value="supprimer" class="btn btn-sm btn-outline-danger ms-auto" onclick="return confirm('Supprimer définitivement ce message ?');">Supprimer</button>
       </div>
-      <div style="font-size:12px;color:#94A3B8;margin-top:8px;">La réponse part par email à {{ m.email }} depuis l'adresse « ne pas répondre » ; le pied de page invite à repasser par le formulaire pour toute suite.</div>
+      <div style="font-size:12px;color:#94A3B8;margin-top:8px;">La réponse part par email depuis l'adresse « ne pas répondre » ; le pied de page invite à repasser par le formulaire pour toute suite.</div>
     </form>
   </div>
 

@@ -1,0 +1,59 @@
+{% if loge_panel %}
+{% with p=loge_panel %}
+<div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #C8A84B!important;border-radius:10px;overflow:hidden;">
+  <div class="card-body py-3 px-3">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+      <div>
+        <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#C8A84B;">Contexte loge</span>
+        <div style="font-size:15px;font-weight:700;color:#0F2137;">{{ p.loge.nom }}</div>
+        {% if p.loge.nom_contact %}
+        <div style="font-size:12px;color:#64748B;">Contact : {{ p.loge.nom_contact }}{% if p.loge.email %} · <a href="mailto:{{ p.loge.email }}" style="color:#2563EB;">{{ p.loge.email }}</a>{% endif %}</div>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-2 flex-wrap">
+        {% if p.portail_token %}
+        <a href="{% url 'reservations:portail_loge' token=p.portail_token %}" target="_blank"
+           class="btn btn-sm fw-semibold"
+           style="background:#0F2137;color:#C8A84B;border:none;font-size:12px;padding:4px 12px;border-radius:8px;">
+          Portail loge ↗
+        </a>
+        {% endif %}
+        <a href="{% url 'administration:annuaire' %}?q={{ p.loge.nom|urlencode }}"
+           class="btn btn-sm btn-outline-secondary" style="font-size:12px;padding:4px 10px;border-radius:8px;">
+          Fiche loge
+        </a>
+      </div>
+    </div>
+
+    {# Mini stats #}
+    <div class="d-flex flex-wrap gap-3 mb-2" style="font-size:12px;">
+      <span>📅 <strong>{{ p.nb_saison }}</strong> tenue{{ p.nb_saison|pluralize }} validée{{ p.nb_saison|pluralize }} saison {{ p.annee_saison }}-{{ p.annee_saison|add:1 }}</span>
+      {% if p.en_attente_t > 0 %}
+      <span style="color:#D97706;">⏳ <strong>{{ p.en_attente_t }}</strong> demande{{ p.en_attente_t|pluralize }} temple en attente</span>
+      {% endif %}
+      {% if p.en_attente_s > 0 %}
+      <span style="color:#D97706;">⏳ <strong>{{ p.en_attente_s }}</strong> demande{{ p.en_attente_s|pluralize }} salle en attente</span>
+      {% endif %}
+    </div>
+
+    {# Prochaines tenues #}
+    {% if p.prochaines %}
+    <div style="font-size:12px;">
+      <div style="font-weight:600;color:#334155;margin-bottom:4px;">Prochaines tenues validées :</div>
+      {% for r in p.prochaines %}
+      <div style="padding:2px 0;color:#475569;">
+        {{ r.date|date:"d/m/Y" }}
+        <span style="color:#94A3B8;">·</span>
+        {{ r.heure_debut|time:"H:i" }}–{{ r.heure_fin|time:"H:i" }}
+        <span style="color:#94A3B8;">·</span>
+        {{ r.temple }}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="font-size:12px;color:#94A3B8;">Aucune tenue à venir.</div>
+    {% endif %}
+  </div>
+</div>
+{% endwith %}
+{% endif %}

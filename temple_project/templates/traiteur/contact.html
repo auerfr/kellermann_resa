@@ -5,99 +5,92 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
   <div>
-    <h1 class="h3 mb-0">📬 Contacts</h1>
-    <p class="text-muted mb-0 small">Coordonnées utiles — administration et loges</p>
+    <h1 class="h3 mb-0">📬 Envoyer un message</h1>
+    <p class="text-muted mb-0 small">Contactez une loge ou l'administrateur directement depuis cette page</p>
   </div>
   <a href="{% url 'traiteur:tableau_de_bord' %}" class="btn btn-outline-secondary btn-sm">← Retour</a>
 </div>
 
-<!-- ══ ADMINISTRATION ══ -->
+{% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+<!-- ══ CONTACTER UNE LOGE ══ -->
 <div class="card shadow-sm mb-4">
   <div class="card-header" style="background:#0F2137;color:white;">
-    <strong>🛠 Besoin d'aide ? Contacter l'administrateur</strong>
+    <strong>🏛 Envoyer un message à une loge</strong>
+    <span class="small opacity-75 ms-2">tenues prévues dans les 60 prochains jours</span>
   </div>
   <div class="card-body">
-    {% if admins %}
-      <div class="row g-3">
-        {% for admin in admins %}
-        <div class="col-md-6">
-          <div class="d-flex align-items-center gap-3 p-3 rounded" style="background:#F8FAFC;border:1px solid #E2E8F0;">
-            <div style="font-size:2rem;">👤</div>
-            <div>
-              <div class="fw-bold">{{ admin.first_name }} {{ admin.last_name }}</div>
-              <div>
-                <a href="mailto:{{ admin.email }}" class="btn btn-sm btn-outline-primary mt-1">
-                  ✉ {{ admin.email }}
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-        {% endfor %}
+    {% if loges_choices %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="cible" value="loge">
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Loge destinataire <span class="text-danger">*</span></label>
+        <select name="loge_pk" class="form-select no-select2" required>
+          <option value="">— Choisir une loge —</option>
+          {% for loge in loges_choices %}
+          <option value="{{ loge.pk }}" {% if not loge.has_email %}disabled{% endif %}>
+            {{ loge.nom }} (prochaine : {{ loge.prochaine|date:"d/m" }}){% if not loge.has_email %} — pas d'email enregistré{% endif %}
+          </option>
+          {% endfor %}
+        </select>
       </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Objet</label>
+        <input type="text" name="sujet" class="form-control" placeholder="Ex : Confirmation du nombre de couverts" maxlength="200">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Message <span class="text-danger">*</span></label>
+        <textarea name="message" class="form-control" rows="5" required
+          placeholder="Saisissez votre message ici…"></textarea>
+        <div class="form-text">Le message sera envoyé depuis l'adresse du site. La loge ne verra pas vos coordonnées personnelles.</div>
+      </div>
+
+      <button type="submit" class="btn btn-primary">📨 Envoyer le message à la loge</button>
+    </form>
     {% else %}
-      <p class="text-muted mb-0">Aucun contact administrateur renseigné.</p>
+    <p class="text-muted mb-0">Aucune tenue avec repas prévue dans les 60 prochains jours.</p>
     {% endif %}
-    <div class="alert alert-light border mt-3 mb-0" style="font-size:.88rem;">
-      Contactez l'administrateur pour toute question sur le logiciel, une erreur dans les données, ou une demande d'ajout/modification.
-    </div>
   </div>
 </div>
 
-<!-- ══ LOGES À VENIR ══ -->
+<!-- ══ CONTACTER L'ADMINISTRATEUR ══ -->
 <div class="card shadow-sm mb-4">
-  <div class="card-header d-flex justify-content-between align-items-center" style="background:#0F2137;color:white;">
-    <strong>🏛 Contacts des loges — tenues à venir (60 jours)</strong>
-    <span class="small opacity-75">{{ contacts_loges|length }} loge{{ contacts_loges|length|pluralize }}</span>
+  <div class="card-header" style="background:#0F2137;color:white;">
+    <strong>🛠 Contacter l'administrateur du site</strong>
   </div>
-  <div class="card-body p-0">
-    {% if contacts_loges %}
-    <div class="table-responsive">
-      <table class="table table-hover table-sm mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>Loge</th>
-            <th>Contact</th>
-            <th>E-mail</th>
-            <th>Téléphone</th>
-            <th style="width:90px;">Prochaine tenue</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for loge in contacts_loges %}
-          <tr>
-            <td class="fw-semibold">{{ loge.nom }}</td>
-            <td>{{ loge.contact_nom|default:"—" }}</td>
-            <td>
-              {% if loge.email %}
-                <a href="mailto:{{ loge.email }}" class="text-muted">{{ loge.email }}</a>
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if loge.telephone %}
-                <a href="tel:{{ loge.telephone }}" class="text-muted">{{ loge.telephone }}</a>
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-            <td class="small">
-              {{ loge.prochaine|date:"D d/m" }}
-              {% if loge.agapes == 'confirme' %}
-                <span class="badge" style="background:#22C55E;font-size:8px;">✓</span>
-              {% elif loge.agapes == 'probable_classique' %}
-                <span class="badge" style="background:#7C3AED;font-size:8px;">~</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <div class="card-body">
+    <div class="alert alert-light border mb-3" style="font-size:.88rem;">
+      Utilisez ce formulaire pour signaler une erreur dans les données, demander une modification ou poser une question sur le logiciel. Votre message arrivera directement dans la messagerie interne de l'administrateur.
     </div>
-    {% else %}
-    <p class="text-muted p-3 mb-0">Aucune tenue avec agapes prévue dans les 60 prochains jours.</p>
-    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="cible" value="admin">
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Objet</label>
+        <input type="text" name="sujet" class="form-control" placeholder="Ex : Erreur sur la date du 15 octobre" maxlength="200">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Message <span class="text-danger">*</span></label>
+        <textarea name="message" class="form-control" rows="5" required
+          placeholder="Décrivez votre demande ou signalement…"></textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary">📨 Envoyer le message à l'administrateur</button>
+    </form>
   </div>
 </div>
 

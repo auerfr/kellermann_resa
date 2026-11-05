@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Planning salles — {{ mois_nom }} {{ annee }}</title>
+<style>
+:root {
+  --noir: #111;
+  --accent: #1e3a5f;
+  --gris: #6b7280;
+  --gris-leger: #e5e7eb;
+  --bg-date: #f0f4ff;
+  --bg-entete: #1e3a5f;
+  --bordure: #c7d2e8;
+  --font: "Helvetica Neue", Arial, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: var(--font);
+  color: var(--noir);
+  background: #fff;
+  padding: 1.2rem 1.4rem;
+}
+
+/* ── Barre écran ───────────────────────────────────────────────── */
+.nav-bar {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  margin-bottom: 1.2rem; padding-bottom: .9rem;
+  border-bottom: 1px solid var(--gris-leger);
+}
+.nav-bar a, .nav-bar button {
+  padding: .3rem .7rem; border: 1px solid var(--gris-leger);
+  border-radius: 5px; font-size: .8rem; background: #f9fafb;
+  color: var(--accent); cursor: pointer; text-decoration: none;
+}
+.nav-bar a:hover, .nav-bar button:hover { background: var(--gris-leger); }
+.nav-bar .btn-print { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+.nav-bar .sep { flex: 1; }
+
+/* ── En-tête document ──────────────────────────────────────────── */
+.doc-header {
+  margin-bottom: 1rem; padding-bottom: .6rem;
+  border-bottom: 3px solid var(--accent);
+  display: flex; justify-content: space-between; align-items: flex-end;
+}
+.doc-header h1 { font-size: 1rem; font-weight: 700; color: var(--accent); }
+.doc-header .periode { font-size: 1.3rem; font-weight: 800; color: var(--accent); }
+.doc-header .meta { font-size: .7rem; color: var(--gris); margin-top: .1rem; }
+
+/* ── Groupe ────────────────────────────────────────────────────── */
+.groupe {
+  margin-bottom: 1.2rem;
+}
+.groupe-titre {
+  font-size: .78rem; font-weight: 700; color: var(--accent);
+  text-transform: uppercase; letter-spacing: .07em;
+  margin-bottom: .4rem;
+  display: flex; align-items: center; gap: .5rem;
+}
+.groupe-titre::after {
+  content: ''; flex: 1; height: 1px; background: var(--bordure);
+}
+
+/* ── Tableau planning ──────────────────────────────────────────── */
+.planning-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .88rem;
+}
+.planning-table th {
+  background: var(--bg-entete);
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: .4rem .6rem;
+  text-align: left;
+  border: 1px solid var(--accent);
+}
+.planning-table th.th-date {
+  width: 60px;
+  text-align: center;
+}
+.planning-table td {
+  padding: .35rem .5rem;
+  vertical-align: top;
+  border: 1px solid var(--gris-leger);
+  min-width: 100px;
+}
+.planning-table tr:nth-child(even) td { background: #fafbff; }
+.planning-table tr:hover td { background: #f0f4ff; }
+
+/* ── Cellule date ──────────────────────────────────────────────── */
+.td-date {
+  background: var(--bg-date) !important;
+  text-align: center;
+  border-right: 2px solid var(--bordure) !important;
+  white-space: nowrap;
+}
+.date-num { font-size: 1.1rem; font-weight: 800; color: var(--accent); line-height: 1; }
+.date-dow { font-size: .65rem; color: var(--gris); font-weight: 600; text-transform: uppercase; }
+
+/* ── Cellule réservation ───────────────────────────────────────── */
+.td-libre { color: var(--gris); font-style: italic; font-size: .78rem; }
+
+.resa-item + .resa-item { margin-top: .3rem; padding-top: .3rem; border-top: 1px dashed var(--gris-leger); }
+.resa-horaire { font-size: .75rem; font-weight: 700; color: var(--accent); }
+.resa-objet   { font-size: .85rem; font-weight: 600; line-height: 1.25; }
+.resa-qui     { font-size: .75rem; color: var(--gris); }
+
+/* ── Message aucune réservation ────────────────────────────────── */
+.rien {
+  padding: .6rem 1rem;
+  font-size: .82rem; color: var(--gris); font-style: italic; text-align: center;
+  border: 1px solid var(--gris-leger); border-radius: 4px;
+}
+
+/* ── Pied de page ──────────────────────────────────────────────── */
+.doc-footer {
+  margin-top: 1rem; padding-top: .6rem;
+  border-top: 1px solid var(--gris-leger);
+  font-size: .68rem; color: var(--gris);
+  display: flex; justify-content: space-between;
+}
+
+/* ── Impression A4 paysage ──────────────────────────────────────── */
+@media print {
+  @page { size: A4 landscape; margin: 1cm 1.2cm 1.5cm 1.2cm; }
+
+  html { font-size: 14px; }
+  body { padding: 0; }
+  .nav-bar { display: none !important; }
+
+  .doc-header { margin-bottom: .6rem; padding-bottom: .3rem; }
+  .doc-header h1 { font-size: .85rem; }
+  .doc-header .periode { font-size: 1rem; }
+
+  .groupe { margin-bottom: .8rem; }
+  .groupe-titre { font-size: .68rem; margin-bottom: .3rem; }
+
+  .planning-table { font-size: .86rem; }
+  .planning-table th { font-size: .78rem; padding: .35rem .5rem; }
+  .planning-table th.th-date { width: 54px; }
+  .planning-table td { padding: .32rem .5rem; }
+
+  .date-num { font-size: 1.1rem; }
+  .date-dow { font-size: .66rem; }
+
+  .resa-horaire { font-size: .76rem; }
+  .resa-objet   { font-size: .86rem; }
+  .resa-qui     { font-size: .74rem; }
+  .rien { font-size: .7rem; padding: .4rem; }
+
+  .doc-footer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; padding: .15cm 1.2cm 0;
+    font-size: .58rem; border-top: 1px solid #ccc;
+  }
+
+  .groupe { break-inside: avoid; }
+  .groupe-nouvelle-page { break-before: page; }
+  tr { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+{# ── Navigation écran ──────────────────────────────────────────── #}
+<nav class="nav-bar">
+  <a href="?annee={{ prev_a }}&mois={{ prev_m }}">← {{ prev_m }}/{{ prev_a }}</a>
+  <strong>{{ mois_nom }} {{ annee }}</strong>
+  <a href="?annee={{ next_a }}&mois={{ next_m }}">{{ next_m }}/{{ next_a }} →</a>
+  <span class="sep"></span>
+  <a href="?annee={{ today.year }}&mois={{ today.month }}">Ce mois-ci</a>
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer (A4 paysage)</button>
+  <a href="{% url 'administration:salles_liste' %}">← Salles</a>
+</nav>
+
+{# ── En-tête ───────────────────────────────────────────────────── #}
+<header class="doc-header">
+  <div>
+    <div class="meta">Temple Kellermann — Réservations des salles</div>
+    <h1>Planning mensuel des salles</h1>
+  </div>
+  <div class="periode">{{ mois_nom }} {{ annee }}</div>
+</header>
+
+{# ── Groupes en tableau ────────────────────────────────────────── #}
+{% for groupe in groupes %}
+<div class="groupe{% if forloop.counter == 2 %} groupe-nouvelle-page{% endif %}">
+  <div class="groupe-titre">{{ groupe.titre }}{% if groupe.nb_resas %} · {{ groupe.nb_resas }} réservation{{ groupe.nb_resas|pluralize }}{% endif %}</div>
+
+  {% if groupe.lignes %}
+  <table class="planning-table">
+    <thead>
+      <tr>
+        <th class="th-date">Date</th>
+        {% for s in groupe.salles %}<th>{{ s.nom }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for ligne in groupe.lignes %}
+      <tr>
+        <td class="td-date">
+          <div class="date-num">{{ ligne.date|date:"j" }}</div>
+          <div class="date-dow">{{ ligne.date|date:"D"|slice:":3"|upper }}</div>
+        </td>
+        {% for resas in ligne.cells %}
+        <td>
+          {% if resas %}
+            {% for r in resas %}
+            <div class="resa-item">
+              <div class="resa-horaire">{{ r.heure_debut|time:"H\hi" }} – {{ r.heure_fin|time:"H\hi" }}</div>
+              <div class="resa-objet">{{ r.objet }}</div>
+              <div class="resa-qui">{% if r.loge %}{{ r.loge.nom }}{% elif r.organisation %}{{ r.organisation }}{% else %}{{ r.nom_demandeur }}{% endif %}</div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <span class="td-libre">—</span>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="rien">Aucune réservation pour {{ mois_nom }} {{ annee }}</div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{# ── Pied de page ──────────────────────────────────────────────── #}
+<footer class="doc-footer">
+  <span>Temple Kellermann — Salles de réunion — {{ mois_nom }} {{ annee }}</span>
+  <span>Imprimé le {% now "j F Y" %}</span>
+</footer>
+
+</body>
+</html>

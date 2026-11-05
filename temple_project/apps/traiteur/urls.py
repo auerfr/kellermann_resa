@@ -16,6 +16,7 @@ urlpatterns = [
     path("export-agapes/",       views.export_agapes_excel,      name="export_agapes_excel"),
     path("etat-des-lieux/",      views.etat_des_lieux,           name="etat_des_lieux"),
     path("guide/",               views.guide_traiteur,           name="guide"),
+    path("calendrier-annuel/",   views.calendrier_annuel,        name="calendrier_annuel"),
     path("contact/",             views.contact_traiteur,         name="contact"),
 
     # ── Accessible aux membres (cookie) ──

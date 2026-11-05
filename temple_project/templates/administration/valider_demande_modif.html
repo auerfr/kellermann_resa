@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Valider demande de modification{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="mb-4">
+      <a href="{% url 'administration:tableau_de_bord' %}" class="text-muted small">← Tableau de bord</a>
+      <h1 class="h3 mt-2 mb-1" style="color:#0F2137;">
+        {% if dmr.type_demande == 'annulation' %}🗑️ Demande d'annulation{% else %}📅 Demande de déplacement{% endif %}
+      </h1>
+      <p class="text-muted small">Reçue le {{ dmr.created_at|date:"d/m/Y à H:i" }}</p>
+    </div>
+
+    {# Info réservation #}
+    <div class="card border-0 shadow-sm mb-4" style="border-left:4px solid #C8A84B!important;">
+      <div class="card-body py-3 px-4">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Loge</div>
+            <div class="fw-semibold">{{ dmr.loge }}</div>
+          </div>
+          <div class="col-md-6">
+            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Type</div>
+            <div class="fw-semibold">{{ dmr.get_type_demande_display }}</div>
+          </div>
+          <div class="col-md-6">
+            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Réservation actuelle</div>
+            <div class="fw-semibold">{{ resa.date|date:"l d F Y" }}</div>
+            <div class="text-muted small">{{ resa.heure_debut|time:"H:i" }} – {{ resa.heure_fin|time:"H:i" }}
+            {% if is_temple %} · {{ resa.temple }}{% else %} · {{ resa.salle }}{% endif %}</div>
+          </div>
+          {% if dmr.nouvelle_date %}
+          <div class="col-md-6">
+            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Nouvelle date souhaitée</div>
+            <div class="fw-semibold text-primary">{{ dmr.nouvelle_date|date:"l d F Y" }}</div>
+          </div>
+          {% endif %}
+          {% if dmr.motif %}
+          <div class="col-12">
+            <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em;">Motif</div>
+            <div class="text-muted">{{ dmr.motif }}</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header" style="background:#0F2137;color:#C8A84B;font-size:11px;letter-spacing:.08em;text-transform:uppercase;">
+          Décision
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Commentaire <span class="text-muted fw-normal">(optionnel)</span></label>
+            <textarea name="commentaire" class="form-control" rows="3"
+                      placeholder="Message transmis à la loge par email…"></textarea>
+          </div>
+          <div class="d-flex gap-3 flex-wrap">
+            <button type="submit" name="decision" value="accepter" class="btn fw-semibold px-4"
+                    style="background:#16A34A;color:white;border:none;">
+              ✓ Accepter la demande
+            </button>
+            <button type="submit" name="decision" value="refuser" class="btn btn-outline-danger fw-semibold px-4">
+              ✕ Refuser
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Nouveau message{% endblock %}
+{% block extra_css %}{% include "_stx_styles.html" %}{% endblock %}
+{% block content %}
+<div class="stx-wrap">
+
+  <div class="mb-3"><a href="{% url 'administration:messagerie' %}" class="text-decoration-none" style="color:#64748B;font-size:13px;">← Retour à la messagerie</a></div>
+
+  <div class="mb-4">
+    <h1 class="mb-1" style="font-size:22px;font-weight:600;letter-spacing:-.01em;color:#0F2137;">✉️ Nouveau message</h1>
+    <div style="font-size:13px;color:#64748B;">Écrire directement à un contact de loge ou à toute adresse email.</div>
+  </div>
+
+  <div class="stx-card" style="padding:20px 24px;">
+    <form method="post" id="form-nouveau">
+      {% csrf_token %}
+
+      {# ── Destinataire ── #}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Destinataire</label>
+        <select class="form-select form-select-sm mb-2" id="select-loge"
+                onchange="remplirContact(this)">
+          <option value="">— Sélectionner une loge —</option>
+          {% for loge in loges %}
+          <option value="{{ loge.email }}"
+                  data-nom="{{ loge.nom_contact|default:loge.nom }}">
+            {{ loge.nom }}{% if loge.nom_contact %} ({{ loge.nom_contact }}){% endif %} — {{ loge.email }}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="row g-2">
+          <div class="col-md-5">
+            <input type="text" name="nom_dest" id="nom-dest" class="form-control form-control-sm"
+                   placeholder="Nom du destinataire" maxlength="200">
+          </div>
+          <div class="col-md-7">
+            <input type="email" name="email_dest" id="email-dest" class="form-control form-control-sm"
+                   placeholder="adresse@email.com" required>
+          </div>
+        </div>
+      </div>
+
+      {# ── Sujet ── #}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Objet</label>
+        <input type="text" name="sujet" class="form-control form-control-sm"
+               placeholder="Objet du message" maxlength="200">
+      </div>
+
+      {# ── Corps ── #}
+      <div class="mb-3">
+        <label class="form-label fw-semibold small">Message</label>
+        <textarea name="corps" class="form-control" rows="10" required
+                  placeholder="Votre message…"></textarea>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        <button type="submit" class="btn btn-sm fw-semibold"
+                style="background:#0F2137;color:#C8A84B;border:none;padding:7px 18px;border-radius:9px;">
+          ✉️ Envoyer
+        </button>
+        <a href="{% url 'administration:messagerie' %}" class="btn btn-sm btn-outline-secondary">Annuler</a>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script>
+function remplirContact(sel) {
+  const email = sel.value;
+  const nom   = sel.selectedOptions[0]?.dataset.nom || '';
+  document.getElementById('email-dest').value = email;
+  if (nom) document.getElementById('nom-dest').value = nom;
+}
+</script>
+{% endblock %}

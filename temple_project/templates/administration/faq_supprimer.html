@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Supprimer entrée FAQ{% endblock %}
+{% block extra_css %}{% include "_stx_styles.html" %}{% endblock %}
+{% block content %}
+<div class="stx-wrap" style="max-width:540px;">
+  <div class="mb-3"><a href="{% url 'administration:faq_liste' %}" class="text-decoration-none" style="color:#64748B;font-size:13px;">← Retour à la FAQ</a></div>
+  <div class="stx-card" style="padding:24px;">
+    <h1 class="mb-3" style="font-size:20px;font-weight:600;color:#DC2626;">Supprimer cette entrée FAQ ?</h1>
+    <p style="font-size:14px;color:#334155;"><strong>{{ item.question }}</strong></p>
+    <p class="text-muted small">Cette action est irréversible.</p>
+    <form method="post" class="d-flex gap-2 mt-3">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-sm btn-danger fw-semibold">Supprimer définitivement</button>
+      <a href="{% url 'administration:faq_liste' %}" class="btn btn-sm btn-outline-secondary">Annuler</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

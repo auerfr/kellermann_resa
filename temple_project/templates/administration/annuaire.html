@@ -74,7 +74,10 @@
           <a href="{% url 'loges:supprimer' x.loge.pk %}" class="text-muted" title="Supprimer">🗑️</a>
         </td>
         <td class="small" data-val="{{ x.loge.association }}">{{ x.loge.association|default:"—" }}</td>
-        <td class="small" data-val="{% if x.loge.type_loge == 'haut_grade' %}Haut grade{% else %}Bleue{% endif %}">{% if x.loge.type_loge == 'haut_grade' %}Haut grade{% else %}Bleue{% endif %}</td>
+        <td class="small" data-val="{% if x.loge.type_loge == 'haut_grade' %}Haut grade{% else %}Bleue{% endif %}">
+          {% if x.loge.type_loge == 'haut_grade' %}Haut grade{% else %}Bleue{% endif %}
+          {% if not x.loge.membre_association %}<span class="badge ms-1" style="background:#FEF3C7;color:#B45309;font-size:9px;">Occas.</span>{% endif %}
+        </td>
         <td class="small" data-val="{{ x.loge.obedience.nom }}">{{ x.loge.obedience.nom }}</td>
         <td class="small" data-val="{{ x.loge.effectif_total }}">{{ x.loge.effectif_total|default:"—" }}{% if x.loge.effectif_moyen_agapes %} <span class="text-muted">(🍽 {{ x.loge.effectif_moyen_agapes }})</span>{% endif %}</td>
         <td class="small" data-val="{{ x.loge.nom_contact }}">{{ x.loge.nom_contact|default:"—" }}</td>

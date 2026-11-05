@@ -1,6 +1,6 @@
 from django.shortcuts import redirect
 
-URLS_PUBLIQUES = ["/auth/", "/static/", "/media/", "/django-admin/"]
+URLS_PUBLIQUES = ["/auth/", "/static/", "/media/", "/django-admin/", "/ics/"]
 
 
 class AuthMiddleware:
@@ -17,6 +17,17 @@ class AuthMiddleware:
             return self.get_response(request)
 
         if path.startswith("/admin/"):
+            # Planning des salles : accessible à tous les membres connectés
+            est_admin  = request.user.is_authenticated and request.user.is_staff
+            est_membre = request.COOKIES.get("kellermann_membre") == "1"
+            is_planning = (
+                path == "/admin/salles/planning/"
+                or (path.startswith("/admin/salles/") and path.endswith("/planning/"))
+            )
+            if is_planning:
+                if est_admin or est_membre:
+                    return self.get_response(request)
+                return redirect(f"/auth/login/?next={path}")
             if request.user.is_authenticated and request.user.is_staff:
                 return self.get_response(request)
             return redirect(f"/auth/admin/?next={path}")

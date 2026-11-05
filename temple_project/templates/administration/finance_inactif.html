@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Module finance désactivé{% endblock %}
+{% block content %}
+<div class="text-center py-5">
+  <div style="font-size:3rem;">🔒</div>
+  <h2 class="mt-3 mb-2" style="color:#0F2137;">Module finance désactivé</h2>
+  <p class="text-muted mb-4">
+    Ce module génère les factures annuelles par loge (cotisations + tenues exceptionnelles).<br>
+    Il doit être activé après validation des tarifs en assemblée générale.
+  </p>
+  <a href="{% url 'administration:facturation' %}#module_finance_actif" class="btn btn-primary">
+    ⚙️ Activer dans la page Facturation
+  </a>
+  <a href="{% url 'administration:tableau_de_bord' %}" class="btn btn-outline-secondary ms-2">
+    Retour au tableau de bord
+  </a>
+</div>
+{% endblock %}

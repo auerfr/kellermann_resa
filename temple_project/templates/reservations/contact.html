@@ -102,6 +102,19 @@
             <form method="post">
               {% csrf_token %}
               <input type="hidden" name="onglet" value="message">
+              {% if loge_id_prefill %}
+              <input type="hidden" name="loge_id_message" value="{{ loge_id_prefill }}">
+              {% endif %}
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Votre loge <span class="text-muted fw-normal">(optionnel)</span></label>
+                <select name="loge_id_message" class="form-select{% if loge_id_prefill %} d-none{% endif %}">
+                  <option value="">— Sélectionner si vous êtes membre d'une loge —</option>
+                  {% for l in loges %}
+                  <option value="{{ l.pk }}" {% if loge_id_prefill == l.pk|stringformat:"s" %}selected{% endif %}>{{ l.nom }}</option>
+                  {% endfor %}
+                </select>
+              </div>
 
               <div class="mb-3">
                 <label class="form-label fw-semibold">Votre nom <span class="text-danger">*</span></label>
