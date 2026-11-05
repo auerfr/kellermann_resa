@@ -161,7 +161,7 @@ body {
   }
 
   .groupe { break-inside: avoid; }
-  .groupe:nth-child(2) { break-before: page; }
+  .groupe-nouvelle-page { break-before: page; }
   tr { break-inside: avoid; }
 }
 </style>
@@ -190,7 +190,7 @@ body {
 
 {# ── Groupes en tableau ────────────────────────────────────────── #}
 {% for groupe in groupes %}
-<div class="groupe">
+<div class="groupe{% if forloop.counter == 2 %} groupe-nouvelle-page{% endif %}">
   <div class="groupe-titre">{{ groupe.titre }}{% if groupe.nb_resas %} · {{ groupe.nb_resas }} réservation{{ groupe.nb_resas|pluralize }}{% endif %}</div>
 
   {% if groupe.lignes %}
