@@ -131,39 +131,39 @@ body {
   display: flex; justify-content: space-between;
 }
 
-/* ── Impression A4 portrait ─────────────────────────────────────── */
+/* ── Impression A4 paysage ──────────────────────────────────────── */
 @media print {
-  @page { size: A4 portrait; margin: 1cm 1.1cm 1.6cm 1.1cm; }
+  @page { size: A4 landscape; margin: 1cm 1.2cm 1.6cm 1.2cm; }
 
-  html { font-size: 8.5px; }
+  html { font-size: 10px; }
   body { padding: 0; }
 
   .nav-bar { display: none !important; }
 
   .doc-header { margin-bottom: .5rem; padding-bottom: .3rem; border-bottom-width: 2px; }
-  .doc-header h1 { font-size: .82rem; }
-  .doc-header .periode { font-size: .95rem; }
+  .doc-header h1 { font-size: .9rem; }
+  .doc-header .periode { font-size: 1.05rem; }
 
-  .groupe { margin-bottom: .6rem; }
-  .groupe-titre { font-size: .64rem; margin-bottom: .25rem; }
-  .grille { gap: .4rem; }
+  .groupe { margin-bottom: .7rem; }
+  .groupe-titre { font-size: .7rem; margin-bottom: .28rem; }
+  .grille { gap: .5rem; }
 
-  .salle-titre { font-size: .64rem; padding: .18rem .35rem; }
+  .salle-titre { font-size: .72rem; padding: .22rem .4rem; }
 
-  .date-cell { min-width: 32px; padding: .18rem .2rem; }
-  .date-cell .num { font-size: .75rem; }
-  .date-cell .dow { font-size: .5rem; }
+  .date-cell { min-width: 36px; padding: .22rem .25rem; }
+  .date-cell .num { font-size: .85rem; }
+  .date-cell .dow { font-size: .56rem; }
 
-  .resas-cell { padding: .15rem .25rem; gap: .12rem; }
-  .resa-horaire { font-size: .56rem; }
-  .resa-objet   { font-size: .62rem; }
-  .resa-qui     { font-size: .55rem; }
-  .rien { font-size: .55rem; padding: .25rem; }
+  .resas-cell { padding: .18rem .3rem; gap: .15rem; }
+  .resa-horaire { font-size: .64rem; }
+  .resa-objet   { font-size: .7rem; }
+  .resa-qui     { font-size: .62rem; }
+  .rien { font-size: .62rem; padding: .3rem; }
 
   .doc-footer {
     position: fixed; bottom: 0; left: 0; right: 0;
-    background: #fff; padding: .2cm 1.1cm 0;
-    font-size: .56rem; border-top: 1px solid #ccc;
+    background: #fff; padding: .2cm 1.2cm 0;
+    font-size: .6rem; border-top: 1px solid #ccc;
   }
 
   .col-salle { break-inside: avoid; }
@@ -181,7 +181,7 @@ body {
   <a href="?annee={{ next_a }}&mois={{ next_m }}">{{ next_m }}/{{ next_a }} →</a>
   <span class="sep"></span>
   <a href="?annee={{ today.year }}&mois={{ today.month }}">Ce mois-ci</a>
-  <button class="btn-print" onclick="window.print()">🖨️ Imprimer (A4 portrait)</button>
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer (A4 paysage)</button>
   <a href="{% url 'administration:salles_liste' %}">← Salles</a>
 </nav>
 
