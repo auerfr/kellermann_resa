@@ -40,6 +40,7 @@ urlpatterns = [
     path("activite-loges/", views.activite_loges, name="activite_loges"),
     path("reset/", views.reset_calendrier, name="reset_calendrier"),
     path("salles/", views.salles_liste, name="salles_liste"),
+    path("salles/<int:pk>/planning/", views.planning_mensuel_salle, name="planning_mensuel_salle"),
     path("salles/ajouter/", views.salle_form, name="salle_ajouter"),
     path("salles/<int:pk>/modifier/", views.salle_form, name="salle_modifier"),
     path("salles/<int:pk>/supprimer/", views.salle_supprimer, name="salle_supprimer"),

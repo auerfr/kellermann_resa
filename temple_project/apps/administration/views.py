@@ -4165,6 +4165,64 @@ def tester_smtp(request):
 # ── Gestion des salles ────────────────────────────────────────────────────────
 
 @staff_required
+def planning_mensuel_salle(request, pk):
+    """Planning mensuel imprimable d'une salle (format A4, à coller sur la porte)."""
+    from calendar import monthrange
+    from collections import defaultdict
+
+    salle = get_object_or_404(SalleReunion, pk=pk)
+    today = date.today()
+
+    try:
+        annee = int(request.GET.get('annee') or today.year)
+        mois  = int(request.GET.get('mois')  or today.month)
+        if not (1 <= mois <= 12) or not (2010 <= annee <= 2060):
+            raise ValueError
+    except (ValueError, TypeError):
+        annee, mois = today.year, today.month
+
+    salles_actives = SalleReunion.objects.filter(actif=True).order_by('nom')
+
+    resas = (ReservationSalle.objects
+             .filter(salle=salle, statut='validee',
+                     date__year=annee, date__month=mois)
+             .select_related('loge')
+             .order_by('date', 'heure_debut'))
+
+    par_jour = defaultdict(list)
+    for r in resas:
+        par_jour[r.date].append(r)
+
+    nb_jours = monthrange(annee, mois)[1]
+    jours = [{'date': date(annee, mois, d), 'resas': par_jour.get(date(annee, mois, d), [])}
+             for d in range(1, nb_jours + 1)]
+
+    if mois == 1:
+        prev_annee, prev_mois = annee - 1, 12
+    else:
+        prev_annee, prev_mois = annee, mois - 1
+    if mois == 12:
+        next_annee, next_mois = annee + 1, 1
+    else:
+        next_annee, next_mois = annee, mois + 1
+
+    MOIS_FR = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+               'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
+
+    return render(request, 'administration/planning_mensuel_salle.html', {
+        'salle': salle,
+        'salles_actives': salles_actives,
+        'annee': annee,
+        'mois': mois,
+        'mois_nom': MOIS_FR[mois],
+        'jours': jours,
+        'prev_annee': prev_annee, 'prev_mois': prev_mois,
+        'next_annee': next_annee, 'next_mois': next_mois,
+        'today': today,
+    })
+
+
+@staff_required
 def salles_liste(request):
     salles = SalleReunion.objects.all().order_by('nom')
     return render(request, 'administration/salles_liste.html', {
